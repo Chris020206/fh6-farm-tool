@@ -1,0 +1,36 @@
+{
+  "profile_id": "auto3_skill_tree_default",
+  "profile_name": "Auto3 Skill Tree Default",
+  "profile_type": "auto3_skill_tree",
+  "profile_version": "1.0.0",
+  "is_official": true,
+  "description": "Official default profile for one Auto3 skill-tree unlock sequence definition.",
+  "keys": {
+    "confirm_key": "enter",
+    "back_key": "backspace",
+    "down_key": "down",
+    "enter_key": "enter",
+    "escape_key": "esc",
+    "left_key": "left",
+    "right_key": "right",
+    "sort_menu_key": "x",
+    "up_key": "up"
+  },
+  "navigation_counts": {
+    "sort_down_presses": 6,
+    "down_to_upgrades": 1,
+    "down_to_car_mastery": 7,
+    "post_get_in_up_reset_presses": 6,
+    "return_up_to_my_cars": 7
+  },
+  "timings": {
+    "startup_delay": 1.0,
+    "menu_key_delay": 1.0,
+    "skill_tree_key_delay": 1.5,
+    "wait_after_get_in": 3.0,
+    "wait_after_get_in_next_car": 12.0,
+    "wait_after_menu_open": 1.0,
+    "wait_after_unlock": 2.0,
+    "post_cycle_delay": 1.0
+  }
+}

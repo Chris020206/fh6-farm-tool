@@ -1,0 +1,20 @@
+{
+  "profile_id": "auto1_race_default",
+  "profile_name": "Auto1 Race Default",
+  "profile_type": "auto1_race",
+  "profile_version": "1.0.0",
+  "is_official": true,
+  "description": "Official default profile for one-cycle Auto1 race automation.",
+  "keys": {
+    "restart_key": "x",
+    "confirm_key": "enter",
+    "throttle_key": "w"
+  },
+  "timings": {
+    "startup_delay": 5.0,
+    "wait_after_restart": 2.0,
+    "wait_after_first_confirm": 10.0,
+    "race_duration": 40.0,
+    "post_cycle_delay": 3.0
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "profile_id": "base",
+  "profile_name": "Base Profile",
+  "profile_type": "base",
+  "profile_version": "1.0.0",
+  "is_official": true,
+  "description": "Default base profile metadata for future automation profiles."
+}

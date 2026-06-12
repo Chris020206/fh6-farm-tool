@@ -1,0 +1,21 @@
+{
+  "profile_id": "auto1_safe_slow",
+  "profile_name": "auto1_safe_slow",
+  "profile_type": "auto1_race",
+  "profile_version": "1.0.0",
+  "is_official": false,
+  "description": "Official default profile for one-cycle Auto1 race automation.",
+  "keys": {
+    "restart_key": "x",
+    "confirm_key": "enter",
+    "throttle_key": "w"
+  },
+  "timings": {
+    "startup_delay": 7.0,
+    "wait_after_restart": 2.0,
+    "wait_after_first_confirm": 10.0,
+    "race_duration": 40.0,
+    "post_cycle_delay": 3.0
+  },
+  "based_on": "auto1_race_default"
+}

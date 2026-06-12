@@ -1,0 +1,30 @@
+{
+  "profile_id": "auto2_safe_slow",
+  "profile_name": "auto2_safe_slow",
+  "profile_type": "auto2_buy_car",
+  "profile_version": "1.0.0",
+  "is_official": false,
+  "description": "Official default profile for one Auto2 buy-car sequence definition.",
+  "keys": {
+    "back_key": "backspace",
+    "confirm_key": "enter",
+    "down_key": "down",
+    "right_key": "right",
+    "purchase_key": "y",
+    "escape_key": "esc"
+  },
+  "navigation_counts": {
+    "manufacturer_down_presses": 18,
+    "car_right_presses": 3
+  },
+  "timings": {
+    "startup_delay": 1.0,
+    "menu_key_delay": 2.0,
+    "wait_after_menu_confirm": 1.0,
+    "wait_after_car_selection": 3.0,
+    "wait_after_purchase_confirm": 13.0,
+    "post_cycle_delay": 1.0
+  },
+  "estimated_cost_per_car": 0,
+  "based_on": "auto2_buy_car_default"
+}

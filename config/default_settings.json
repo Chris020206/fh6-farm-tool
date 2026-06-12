@@ -1,0 +1,24 @@
+{
+  "app": {
+    "name": "FH6 Farm Tool",
+    "environment": "development"
+  },
+  "keybindings": {
+    "start": null,
+    "stop": null,
+    "pause": null
+  },
+  "safety": {
+    "require_confirmation": true,
+    "allow_keyboard_automation": false,
+    "allow_mouse_automation": false
+  },
+  "logging": {
+    "level": "INFO",
+    "write_to_file": false
+  },
+  "paths": {
+    "logs": "logs",
+    "profiles": "profiles"
+  }
+}
