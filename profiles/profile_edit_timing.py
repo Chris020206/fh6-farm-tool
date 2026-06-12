@@ -5,7 +5,15 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
-from app.commands import print_error, print_info_summary
+from app.commands import (
+    CommandResult,
+    CommandStatus,
+    OperatorMessage,
+    RefusalReason,
+    RiskLevel,
+    print_info_summary,
+    print_refusal,
+)
 from profiles import ProfileLoadError, ProfileManager, ProfileValidationError
 from profiles.profile_validator import ProfileValidator
 
@@ -47,7 +55,31 @@ def main() -> int:
             raw_value=args.value,
         )
     except ProfileTimingEditError as error:
-        print_error(f"Profile timing edit failed: {error}")
+        print_refusal(
+            CommandResult(
+                status=CommandStatus.REFUSED,
+                command="Profile Timing Editing",
+                reason="Profile timing edit failed.",
+                refusal_reason=RefusalReason.INVALID_VALUE,
+                operator_message=OperatorMessage(
+                    message=str(error),
+                    required_action=(
+                        "Edit only custom profiles and use a known non-negative "
+                        "timing value."
+                    ),
+                    suggested_next_step=(
+                        "Create a custom profile from an official profile before "
+                        "editing timings."
+                    ),
+                    risk_level=RiskLevel.LOW,
+                ),
+                details=[
+                    ("Profile", args.profile),
+                    ("Timing key", args.timing),
+                    ("Requested value", args.value),
+                ],
+            )
+        )
         return 1
 
     print_info_summary(

@@ -5,9 +5,8 @@
 This document records the corrected Auto3 Skill Tree Automation flow.
 
 Auto3 now has in-memory validation modes, guarded real-input test-mode
-navigation, and a guarded one-car unlock harness. The one-car flow is validated
-for controlled/manual use. Grid traversal and multi-car looping are still
-postponed.
+navigation, a guarded one-car unlock harness, and guarded/manual multi-car
+unlock validation within the current 4-car boundary.
 
 ## Corrected Baseline
 
@@ -115,17 +114,19 @@ The first-car exception path is for A1 only. Normal next-car handling begins aft
 
 The following work is explicitly postponed:
 
-- grid traversal implementation
-- loop/index implementation
-- multi-car Auto3 execution
-- C-row to next-column transition validation
 - production Auto3 command
-- full grid traversal
-- Auto4 car removal
-- UI
+- Auto3 counts greater than 4
+- B/C start-row support
+- additional grid traversal beyond `A1 -> B1 -> C1 -> A2`
+- Auto4 car removal in the current hardening scope
+
+UI is not part of the current controlled/manual command surface, but M11
+strategic doctrine requires a restrained premium desktop UI before public paid
+launch.
 
 ## Current Status
 
 This document is the locked flow reference for current Auto3 behavior. Auto3
-test-mode real-input validation and the one-car unlock harness exist, but
-multi-car traversal is not implemented yet.
+test-mode real-input validation, the one-car unlock harness, and guarded 4-car
+multi-car unlock validation exist. Current real-input Auto3 remains
+dangerous/manual/test-only, finite, and guarded by confirmation flags.

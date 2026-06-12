@@ -28,10 +28,16 @@ Current priorities:
 Not current priorities:
 
 - Auto4
-- UI
+- UI implementation during the immediate command-hardening pass
 - new automation capability
 - timing optimization
 - expanding Auto3 boundaries
+
+Strategic note:
+
+M11 doctrine treats UI as trust infrastructure. The current controlled MVP is
+CLI/manual oriented, but a restrained premium desktop UI is mandatory before
+public paid launch.
 
 ---
 
@@ -133,11 +139,17 @@ These are frozen unless a future milestone explicitly changes them:
 
 - Auto3 > 4 cars
 - Auto3 B/C start rows
-- Auto4
+- Auto4 in the current hardening scope
 - unattended automation
 - timing optimization
 - destructive/remove-car behavior
 - startup automation
+
+Auto3's 4-car limit is the current validated boundary, not a final launch
+ceiling. Future scaling must be validation-based and explicitly milestoned.
+
+Auto4 is a conditional pre-launch candidate under M11 doctrine, but remains
+outside current MVP hardening until a dedicated safety milestone justifies it.
 
 ---
 
@@ -152,13 +164,15 @@ These are frozen unless a future milestone explicitly changes them:
 
 ## Next Recommended Milestone
 
-M11.5 — Operator Runbooks
+M11.6 - Command Surface Hardening
 
 Focus:
 
-- Auto1 runbook
-- Auto2 runbook
-- Auto3 runbook
+- refusal message clarity
+- command consistency
+- operator visibility
+- pre-flight validation
+- safety hardening
 
 No new automation capability before hardening.
 

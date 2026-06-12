@@ -120,7 +120,8 @@ class DangerousCommandRefusalTest(unittest.TestCase):
         )
 
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("Error: cars must be greater than 0.", result.output)
+        self.assertIn("REFUSED", result.output)
+        self.assertIn("cars must be greater than 0.", result.output)
         self.assert_no_real_input_startup(result.output)
 
     def test_auto3_multi_car_test_mode_rejects_more_than_four_cars(self) -> None:
@@ -133,7 +134,9 @@ class DangerousCommandRefusalTest(unittest.TestCase):
         )
 
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("Error: cars must be 4 or fewer.", result.output)
+        self.assertIn("REFUSED", result.output)
+        self.assertIn("cars must be 4 or fewer.", result.output)
+        self.assertIn("Validated traversal", result.output)
         self.assert_no_real_input_startup(result.output)
 
     def test_auto3_multi_car_unlock_requires_real_input_confirmation(self) -> None:
@@ -172,7 +175,8 @@ class DangerousCommandRefusalTest(unittest.TestCase):
         )
 
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("Error: cars must be greater than 0.", result.output)
+        self.assertIn("REFUSED", result.output)
+        self.assertIn("cars must be greater than 0.", result.output)
         self.assert_no_real_input_startup(result.output)
 
     def test_auto3_multi_car_unlock_rejects_more_than_four_cars(self) -> None:
@@ -185,7 +189,26 @@ class DangerousCommandRefusalTest(unittest.TestCase):
         )
 
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("Error: cars must be 4 or fewer.", result.output)
+        self.assertIn("REFUSED", result.output)
+        self.assertIn("cars must be 4 or fewer.", result.output)
+        self.assertIn("Validated traversal", result.output)
+        self.assert_no_real_input_startup(result.output)
+
+    def test_official_profile_timing_edit_refuses_structurally(self) -> None:
+        result = _run_module(
+            "profiles.profile_edit_timing",
+            "--profile",
+            "auto1_race_default",
+            "--timing",
+            "startup_delay",
+            "--value",
+            "7.0",
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("REFUSED", result.output)
+        self.assertIn("Official profiles cannot be edited.", result.output)
+        self.assertIn("Required action", result.output)
         self.assert_no_real_input_startup(result.output)
 
     def test_auto3_multi_car_unlock_help_works(self) -> None:

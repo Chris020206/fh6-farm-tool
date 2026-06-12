@@ -2,10 +2,18 @@
 
 ## Purpose
 
-This document locks the Auto3 My Cars grid traversal model before loop or index
-behavior is implemented.
+This document records the Auto3 My Cars grid traversal model that was first
+defined before loop/index behavior existed and is now implemented within the
+current guarded/manual validation boundary.
 
-This is documentation only. No Auto3 loop behavior exists yet.
+Current validated boundary:
+
+- max cars: `4`
+- start row: `A`
+- validated traversal: `A1 -> B1 -> C1 -> A2`
+- real-input usage remains dangerous/manual/test-only
+- no production Auto3 command exists
+- no unattended Auto3 mode exists
 
 ## Grid Model
 
@@ -66,16 +74,19 @@ Likely transition concept:
 1. `right` once
 2. `up` twice
 
-Exact FH6 behavior must be validated before real-input use.
+This transition has been validated for the current `C1 -> A2` guarded
+real-input traversal. Future transitions beyond the current 4-car boundary must
+still be validated before real-input use.
 
-## Postponed Work
+## Current Boundary And Future Work
 
-Auto3 loop and grid traversal are postponed until this rule is implemented and
-tested.
+Auto3 grid traversal is implemented and validated only within the current
+4-car, row-`A` boundary.
 
-Do not add real-input loop behavior until:
+Future scaling remains validation-based. Do not expand real-input traversal
+beyond the current boundary until:
 
-- same-column movement is implemented safely
-- column transition behavior is implemented separately
-- the `right`, `up`, `up` transition concept is validated
+- the larger movement range is implemented safely
+- additional column transitions are validated
 - test-mode validation confirms traversal without spending skill points
+- guarded unlock validation proves the larger count remains trustworthy

@@ -32,7 +32,10 @@ Auto1, Auto2, and Auto3 form the MVP core loop:
 2. Auto2 Buy Car Automation buys target cars.
 3. Auto3 Skill Tree Automation unlocks skill-tree rewards.
 
-Auto4 Remove Cars is postponed.
+Auto4 Remove Cars is not part of the current controlled MVP hardening scope.
+Per M11 strategic doctrine, it remains a conditional pre-launch candidate only
+if it can be made strongly guarded, clearly explained, and safe enough to
+protect trust.
 
 ## Auto1 Status
 
@@ -142,8 +145,10 @@ python -B -m profiles.profile_create_custom --source auto1_race_default --name a
 python -B -m profiles.profile_edit_timing --profile auto1_safe_slow --timing startup_delay --value 7.0
 ```
 
-Profile key editing, navigation-count editing, import/export, and UI editing
-are postponed.
+Profile key editing, navigation-count editing, and import/export are
+postponed. Profile UI editing is not part of the current controlled/manual MVP
+surface, but UI work is required before public paid launch under the M11
+strategic doctrine.
 
 ## Command Framework Status
 
@@ -211,10 +216,12 @@ with faster defaults casually.
 
 ## Postponed Systems
 
-Postponed systems include:
+Systems outside the current controlled/manual MVP surface include:
 
-- Auto4 Remove Cars.
-- UI/dashboard.
+- Auto4 Remove Cars, except as a future conditional pre-launch candidate after
+  a dedicated safety milestone.
+- UI/dashboard for current CLI/manual operation. A restrained premium desktop
+  UI is required before public paid launch.
 - Packaging/installer.
 - F7 start hotkey.
 - Pause/resume.
@@ -253,3 +260,7 @@ The next design target is MVP hardening around the validated command surface.
 
 Do not expand Auto3 counts above 4, add start-row flexibility, or promote an
 Auto3 production command without a separate milestone and review.
+
+In parallel strategic planning, preserve the M11 direction that public paid
+launch requires a restrained premium desktop UI. The current CLI/manual command
+surface is an operator/developer surface, not the intended public launch UX.

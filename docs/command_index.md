@@ -5,6 +5,22 @@ This document lists the current command-line surface for the FH6 Farm Tool.
 `main.py` is safe: it loads configuration, logs startup, and exits. It does not
 run automation.
 
+## Command Output
+
+Manual commands use structured operator output for refusals and run summaries.
+The CLI is the current consumer of this result layer; future desktop UI can use
+the same status, reason, risk, required-action, and summary concepts for
+warning cards, pre-flight panels, and completion summaries.
+
+Refusals are expected to show:
+
+- command
+- reason
+- relevant details
+- required action
+- suggested next step where useful
+- risk level
+
 ## Auto1 Official Manual Run
 
 Runs Auto1 with real keyboard input through the guarded manual command.

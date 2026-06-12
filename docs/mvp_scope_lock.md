@@ -27,7 +27,6 @@ The following systems are included in the MVP scope:
 The following systems are explicitly outside the current MVP scope:
 
 - Auto4 Remove Cars.
-- UI/dashboard.
 - Packaging/installer.
 - F7 start hotkey.
 - Pause/resume.
@@ -38,6 +37,11 @@ The following systems are explicitly outside the current MVP scope:
 - Profile key editing.
 - Profile navigation-count editing.
 - Timing optimization.
+
+UI/dashboard work is outside the current controlled developer/manual MVP
+surface. Per the M11 strategic doctrine, this does not mean UI is post-launch
+or optional for public release. A restrained premium desktop UI is required
+before a public paid launch.
 
 ## Why Auto3 Is Included
 
@@ -60,14 +64,20 @@ A1 -> B1 -> C1 -> A2
 The current hard max is 4 cars, and the current start-row assumption is row
 `A`. Production/unattended Auto3 behavior remains excluded.
 
-## Why Auto4 Is Postponed
+## Why Auto4 Is Not Current Scope
 
-Auto4 Remove Cars is postponed because it carries destructive risk.
+Auto4 Remove Cars is not part of the current controlled MVP hardening scope
+because it carries destructive risk.
 
 Removing cars changes the user's garage state and has a higher trust
 requirement than racing, buying, or unlocking a known skill-tree path. Auto4
 should not be added until the existing MVP systems are stable, well documented,
 and easier to supervise.
+
+M11 strategic doctrine treats Auto4 as a conditional pre-launch candidate, not
+as a launch blocker and not as rejected scope. It should only move forward if a
+future milestone proves it can be strongly guarded, clearly explained, and safe
+enough to protect trust.
 
 ## Current MVP Stage
 
@@ -83,7 +93,7 @@ The current stage is not:
 - broad production release
 - unattended automation
 - packaged consumer app
-- UI-driven workflow
+- public paid UI workflow
 
 The MVP should continue to prioritize reliability, explicit user confirmation,
 safe refusal behavior, and clear recovery paths over speed or convenience.

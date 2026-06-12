@@ -4,9 +4,13 @@ Modular FH6 Farm Tool implementation in controlled manual validation and MVP
 hardening.
 
 The project is organized as small modules with clear ownership boundaries. This
-stage includes shared runtime systems, guarded manual automation commands,
+stage includes shared runtime systems, guarded manual operator commands,
 profile tooling, and documentation for validated Auto1/Auto2/Auto3 behavior.
 It is not a broad production release.
+
+The current command surface is for controlled developer/manual operation. It is
+not the intended public paid launch UX; M11 strategy requires a restrained
+premium desktop UI before public paid launch.
 
 Normal `main.py` startup remains safe: it loads configuration, logs startup,
 and exits without running automation or sending keyboard input.
@@ -103,8 +107,9 @@ dangerous/manual/test-only for real input, and no production Auto3 command
 exists. These commands require explicit confirmation flags and support F8 stop
 where real input is used.
 
-Auto4 is explicitly postponed and is not part of the current MVP hardening
-scope.
+Auto4 is not part of the current MVP hardening scope. M11 strategy treats it as
+a conditional pre-launch candidate only if a future safety milestone proves it
+can be strongly guarded, clearly explained, and trust-preserving.
 
 ## Engineering Standards
 

@@ -56,7 +56,8 @@ Required before controlled MVP:
 - Keep MVP scope lock current.
 - Keep Auto1, Auto2, and Auto3 reliability reports aligned with current
   behavior.
-- Keep Auto4 explicitly postponed.
+- Keep Auto4 clearly outside current MVP hardening unless a future dedicated
+  safety milestone justifies it.
 
 Required before broader release:
 
@@ -88,8 +89,13 @@ Required before broader release:
 
 Postponed after MVP:
 
-- UI/dashboard.
 - Interactive command wizard.
+
+Public paid launch requirement:
+
+- Build a restrained premium desktop UI/dashboard. The current CLI remains the
+  controlled developer/manual operator surface, not the intended public paid
+  UX.
 
 ## 5. Profile / Settings
 
@@ -113,7 +119,11 @@ Postponed after MVP:
 - Profile key editing.
 - Profile navigation-count editing.
 - Profile import/export.
-- Profile UI/editor.
+
+Public paid launch requirement:
+
+- Add profile UI/editor flows only after command/profile behavior remains
+  stable enough to present safely.
 
 ## 6. Auto1
 
@@ -131,7 +141,10 @@ Required before broader release:
 Postponed after MVP:
 
 - Speed tuning beyond validated profile timing changes.
-- UI control surface.
+
+Public paid launch requirement:
+
+- Add a restrained Auto1 UI control surface before public paid launch.
 
 ## 7. Auto2
 
@@ -150,8 +163,12 @@ Required before broader release:
 Postponed after MVP:
 
 - Auto2 production multi-cycle purchase command.
-- Purchase UI or confirmation modal.
 - Advanced cost management.
+
+Public paid launch requirement:
+
+- Add purchase UI/confirmation safeguards before public paid launch if Auto2 is
+  exposed through the desktop product.
 
 ## 8. Auto3
 
@@ -200,7 +217,10 @@ Postponed after MVP:
 
 - Signed installer.
 - Auto-update.
-- Non-technical dashboard-first release.
+
+Public paid launch requirement:
+
+- Non-technical dashboard-first release experience.
 
 ## Summary
 
@@ -209,9 +229,11 @@ accurate docs, passing tests, guarded real-input commands, clear profile
 behavior, and preserved startup safety.
 
 Blocking gaps before broader release are larger: friendlier command entry
-points, stronger user-facing safeguards, packaging, UI, and more automated
-coverage.
+points, stronger user-facing safeguards, packaging, restrained premium desktop
+UI, and more automated coverage.
 
 Auto3 production operation, Auto3 start-row flexibility, Auto3 counts above 4,
-Auto2 production multi-cycle purchase, timing optimization, UI, installer work,
-and Auto4 remain outside the controlled MVP boundary.
+Auto2 production multi-cycle purchase, timing optimization, installer work, and
+Auto4 remain outside the controlled MVP boundary. UI also remains outside the
+current controlled/manual MVP surface, but M11 doctrine makes it mandatory
+before public paid launch.

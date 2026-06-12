@@ -1,10 +1,17 @@
 # Auto3 Grid Traversal Design
 
-This document defines the planned Auto3 multi-car grid traversal model before
-any traversal code is implemented.
+This document defines the Auto3 multi-car grid traversal model. It began as a
+pre-implementation design spec and now also records the current implemented and
+validated boundary.
 
-This is a design specification only. No Auto3 loop or grid traversal behavior
-is implemented by this document.
+Current validated boundary:
+
+- max cars: `4`
+- start row: `A`
+- validated traversal: `A1 -> B1 -> C1 -> A2`
+- guarded/manual real-input validation exists
+- no production Auto3 command exists
+- no unattended Auto3 mode exists
 
 ## Grid Model
 
@@ -86,8 +93,9 @@ up
 up
 ```
 
-This exact behavior must be validated in test mode before any real-input unlock
-loop is allowed.
+This behavior has been validated for `C1 -> A2` within the current 4-car
+guarded traversal. Additional column transitions beyond the current boundary
+must still be validated before real-input use.
 
 ## MVP Start-Row Assumption
 
@@ -103,8 +111,8 @@ Starting on row `B` or row `C` would require adjusted traversal logic because
 the first movement and column-transition assumptions would change.
 
 `--start-row` is a future enhancement, not current MVP scope. It is
-intentionally postponed to avoid adding traversal complexity before the
-row-`A` unlock loop is stable.
+intentionally postponed to avoid expanding traversal complexity beyond the
+validated row-`A` unlock boundary.
 
 ## First-Car Exception
 
@@ -127,8 +135,8 @@ For every target after index `0`, Auto3 should:
 4. Return and resort to the known baseline.
 
 Normal same-column movement uses the existing next-car get-in path after moving
-down. Column transition behavior must be validated separately before real-input
-use.
+down. The `C1 -> A2` column transition is validated; additional transitions
+remain future validation work.
 
 ## Test-Mode Baseline Reset Requirement
 
@@ -190,8 +198,9 @@ After this reset, next movement should occur from the grid baseline:
 - from `B1` to `C1`: `down`
 - from `C1` to `A2`: `right`, `up`, `up`
 
-The reset sequence must be implemented and validated in memory before any
-guarded real-input traversal command is added.
+The reset sequence has been implemented and validated for the current guarded
+4-car traversal. Larger traversal ranges must continue to prove
+reset-before-movement behavior before real-input use.
 
 ## Loop Boundary
 
@@ -210,9 +219,9 @@ The loop should track:
 - completed cars
 - final status: `completed`, `stopped`, or `failed`
 
-## Planned Test Strategy
+## Validation Progression
 
-Implementation should proceed in stages:
+The original planned progression was:
 
 1. In-memory movement sequence generation.
 2. Unit tests for index-to-position mapping.
@@ -227,6 +236,15 @@ Implementation should proceed in stages:
 7. Guarded real-input test-mode traversal without unlock actions.
 8. Only after traversal validation, consider guarded unlock loop behavior.
 
+Current status:
+
+- in-memory movement generation exists
+- reset-to-grid sequencing exists
+- guarded real-input test-mode traversal exists
+- guarded 4-car unlock validation exists for `A1 -> B1 -> C1 -> A2`
+
+Future scaling should repeat this validation ladder before increasing limits.
+
 ## Safety Boundaries
 
 Auto3 grid traversal must preserve the current safety boundaries:
@@ -234,14 +252,15 @@ Auto3 grid traversal must preserve the current safety boundaries:
 - no Auto4
 - no destructive deletion
 - no unattended infinite loop
-- no production loop until traversal is validated
-- no unlock loop before test-mode traversal is validated
-- no real-input traversal until baseline reset is implemented and tested
+- no production loop
+- no expansion beyond 4 cars without a dedicated validation milestone
+- no B/C start-row behavior without adjusted traversal validation
 - no `main.py` startup automation
 - real-input traversal must require explicit confirmation
 - F8 stop must remain available in guarded real-input traversal
 
 ## Current Recommendation
 
-Start with pure in-memory index and movement builders. Do not add real-input
-grid traversal until movement sequences are covered by tests and reviewed.
+Treat the current 4-car row-`A` traversal as the validated baseline. Future
+scaling should be validation-based, not treated as permanently blocked or
+automatically safe.

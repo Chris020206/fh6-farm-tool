@@ -2,9 +2,17 @@ import argparse
 from copy import deepcopy
 
 from app.commands import (
+    CommandResult,
+    CommandStatus,
     ConfirmationRequirement,
+    OperatorMessage,
+    RefusalReason,
+    RiskLevel,
+    RunSummary,
     print_command_intro,
     print_error,
+    print_refusal,
+    print_run_summary,
     require_confirmations,
 )
 from app_logging.log_manager import ProjectLogger, configure_logging
@@ -100,7 +108,7 @@ def main() -> int:
         validate_car_count(args.cars)
     except ValueError as error:
         logger.error(str(error), category="error")
-        print_error(str(error))
+        print_refusal(build_car_count_refusal(str(error), args.cars))
         return 1
 
     try:
@@ -146,13 +154,27 @@ def main() -> int:
         print_error(f"Auto3 multi-car unlock test unavailable: {error}")
         return 1
 
-    print()
-    print("## Run Summary")
-    print()
-    print("Mode: multi-car-unlock-test")
-    print(f"Cars: {args.cars}")
-    print(f"Profile: {profile_data['profile_id']}")
-    print(f"Final status: {result.status}")
+    print_run_summary(
+        RunSummary(
+            status=CommandStatus(result.status),
+            command="Auto3 Multi-Car Unlock Test",
+            fields=[
+                ("Mode", "multi-car-unlock-test"),
+                ("Cars", args.cars),
+                ("Profile", profile_data["profile_id"]),
+                ("Final status", result.status),
+            ],
+            operator_message=OperatorMessage(
+                message=(
+                    "Auto3 returned control after guarded multi-car unlock execution."
+                ),
+                suggested_next_step=(
+                    "Verify FH6 baseline and selected car state before another run."
+                ),
+                risk_level=RiskLevel.MEDIUM,
+            ),
+        )
+    )
 
     if result.completed:
         logger.warning("Auto3 multi-car unlock test completed.", category="sequence")
@@ -180,6 +202,31 @@ def validate_car_count(car_count: int) -> None:
 
     if car_count > MAX_CARS:
         raise ValueError(f"cars must be {MAX_CARS} or fewer.")
+
+
+def build_car_count_refusal(message: str, car_count: int) -> CommandResult:
+    details: list[tuple[str, object]] = [
+        ("Requested cars", car_count),
+        ("Current validated limit", f"{MAX_CARS} cars"),
+        ("Validated traversal", "A1 -> B1 -> C1 -> A2"),
+    ]
+
+    return CommandResult(
+        status=CommandStatus.REFUSED,
+        command="Auto3 Multi-Car Unlock Test",
+        reason="Requested car count is outside the current validated boundary.",
+        refusal_reason=RefusalReason.INVALID_COUNT,
+        operator_message=OperatorMessage(
+            message=message,
+            required_action=f"Choose 1-{MAX_CARS} cars.",
+            suggested_next_step=(
+                "Use the validated A-start traversal boundary until a future "
+                "scaling milestone changes it."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+        ),
+        details=details,
+    )
 
 
 def run_auto3_multi_car_unlock_test(
