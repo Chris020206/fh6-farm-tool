@@ -7,8 +7,15 @@ production mode.
 
 This test sends real keyboard input.
 
-F8 stop is not implemented yet. There is no global emergency hotkey in this
-build.
+F8 stop is available for guarded Auto1 real-input execution, including the
+official guarded command:
+
+```powershell
+python -B -m automation.auto1_race.run_auto1 25 --confirm
+```
+
+Keep F8 ready during execution. Auto1 remains supervised/manual and does not
+provide unattended safety.
 
 ## Starting Location
 
@@ -69,6 +76,7 @@ The test should:
 
 If behavior is not expected:
 
+- Press F8 to request a safe stop.
 - Alt-tab away from FH6 if needed.
 - Stop the terminal process if needed.
 - Manually release or press keys if needed.
