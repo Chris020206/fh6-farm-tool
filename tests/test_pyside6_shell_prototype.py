@@ -1,6 +1,7 @@
 import unittest
 
 from desktop.pyside6_shell_prototype import build_prototype_shell_spec
+from desktop.pyside6_shell_prototype import PrototypeNavigationRailMode
 from ui.automation_environment import AutomationEnvironmentSectionId
 from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 
@@ -35,6 +36,25 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertEqual("Controlled MVP", sidebar.footer_status)
         self.assertEqual("Manual operation ready", sidebar.footer_detail)
 
+    def test_navigation_rail_is_miniature_and_toggle_first(self) -> None:
+        navigation_rail = self.shell_spec.navigation_rail
+
+        self.assertTrue(navigation_rail.is_miniature)
+        self.assertTrue(navigation_rail.is_low_emphasis)
+        self.assertEqual(72, navigation_rail.collapsed_width)
+        self.assertEqual(168, navigation_rail.expanded_width)
+        self.assertEqual(
+            PrototypeNavigationRailMode.TOGGLE,
+            navigation_rail.default_mode,
+        )
+        self.assertEqual(
+            (
+                PrototypeNavigationRailMode.TOGGLE,
+                PrototypeNavigationRailMode.HOVER,
+            ),
+            navigation_rail.supported_modes,
+        )
+
     def test_placeholder_screens_match_sidebar_destinations(self) -> None:
         sidebar_screen_ids = tuple(
             destination.screen_id
@@ -68,10 +88,10 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         )
         self.assertEqual(5, len(self.shell_spec.screens))
 
-    def test_prototype_window_is_intentionally_compact_and_fixed(self) -> None:
-        self.assertEqual(1024, self.shell_spec.window_width)
-        self.assertEqual(576, self.shell_spec.window_height)
-        self.assertEqual(16 / 9, self.shell_spec.window_width / self.shell_spec.window_height)
+    def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
+        self.assertEqual(640, self.shell_spec.window_width)
+        self.assertEqual(768, self.shell_spec.window_height)
+        self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
 
     def test_home_concept_is_single_frame_and_not_dashboard_like(self) -> None:

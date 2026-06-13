@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum
 
 from frontend.automation_controller import (
     AutomationRunRequest,
@@ -85,6 +86,21 @@ class PrototypeSidebarComposition:
     has_structural_closure: bool
 
 
+class PrototypeNavigationRailMode(str, Enum):
+    TOGGLE = "toggle"
+    HOVER = "hover"
+
+
+@dataclass(frozen=True)
+class PrototypeNavigationRail:
+    collapsed_width: int
+    expanded_width: int
+    default_mode: PrototypeNavigationRailMode
+    supported_modes: tuple[PrototypeNavigationRailMode, ...]
+    is_miniature: bool
+    is_low_emphasis: bool
+
+
 @dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
@@ -96,6 +112,7 @@ class PrototypeShellSpec:
     automation_environment: PrototypeAutomationEnvironment
     home_concept: PrototypeHomeConcept
     sidebar_composition: PrototypeSidebarComposition
+    navigation_rail: PrototypeNavigationRail
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -103,8 +120,8 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
 
     return PrototypeShellSpec(
         window_title="FH6 Farm Tool - PySide6 Shell Prototype",
-        window_width=1024,
-        window_height=576,
+        window_width=640,
+        window_height=768,
         is_fixed_size=True,
         sidebar_destinations=sidebar_destinations,
         screens=tuple(
@@ -114,10 +131,13 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         automation_environment=_build_prototype_automation_environment(),
         home_concept=_build_prototype_home_concept(),
         sidebar_composition=_build_prototype_sidebar_composition(),
+        navigation_rail=_build_prototype_navigation_rail(),
     )
 
 
-def launch_pyside6_shell_prototype() -> int:
+def launch_pyside6_shell_prototype(
+    navigation_mode: PrototypeNavigationRailMode = PrototypeNavigationRailMode.TOGGLE,
+) -> int:
     try:
         from PySide6.QtWidgets import (
             QApplication,
@@ -128,6 +148,7 @@ def launch_pyside6_shell_prototype() -> int:
             QListWidget,
             QListWidgetItem,
             QMainWindow,
+            QPushButton,
             QSizePolicy,
             QStackedWidget,
             QVBoxLayout,
@@ -149,25 +170,30 @@ def launch_pyside6_shell_prototype() -> int:
     root = QWidget()
     root_layout = QHBoxLayout(root)
 
-    sidebar_container = QWidget()
-    sidebar_container.setFixedWidth(220)
-    sidebar_container.setSizePolicy(
+    nav_container = QWidget()
+    nav_container.setFixedWidth(shell_spec.navigation_rail.collapsed_width)
+    nav_container.setSizePolicy(
         QSizePolicy.Policy.Fixed,
         QSizePolicy.Policy.Expanding,
     )
-    sidebar_layout = QVBoxLayout(sidebar_container)
-    sidebar_layout.addWidget(QLabel(shell_spec.sidebar_composition.navigation_block_label))
+    nav_layout = QVBoxLayout(nav_container)
+    nav_label = QLabel(shell_spec.sidebar_composition.navigation_block_label)
+    nav_layout.addWidget(nav_label)
 
-    sidebar = QListWidget()
-    sidebar.setFixedHeight(190)
-    sidebar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    nav_toggle = QPushButton(">")
+    if navigation_mode == PrototypeNavigationRailMode.TOGGLE:
+        nav_layout.addWidget(nav_toggle)
+
+    nav_list = QListWidget()
+    nav_list.setFixedHeight(190)
+    nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     stacked_screens = QStackedWidget()
 
     for screen in shell_spec.screens:
         item = QListWidgetItem(screen.title)
         item.setData(256, screen.screen_id.value)
-        sidebar.addItem(item)
+        nav_list.addItem(item)
         stacked_screens.addWidget(
             _build_screen_widget(
                 screen,
@@ -186,15 +212,55 @@ def launch_pyside6_shell_prototype() -> int:
         _build_automation_environment_widget(shell_spec.automation_environment)
     )
 
-    sidebar.currentRowChanged.connect(stacked_screens.setCurrentIndex)
-    sidebar.setCurrentRow(0)
+    nav_list.currentRowChanged.connect(stacked_screens.setCurrentIndex)
+    nav_list.setCurrentRow(0)
 
-    sidebar_layout.addWidget(sidebar)
-    sidebar_layout.addStretch()
-    sidebar_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_status))
-    sidebar_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_detail))
+    _set_navigation_rail_expanded(
+        nav_container=nav_container,
+        nav_list=nav_list,
+        nav_label=nav_label,
+        shell_spec=shell_spec,
+        expanded=False,
+    )
 
-    root_layout.addWidget(sidebar_container)
+    if navigation_mode == PrototypeNavigationRailMode.TOGGLE:
+        expanded_state = {"expanded": False}
+
+        def toggle_navigation_rail() -> None:
+            expanded_state["expanded"] = not expanded_state["expanded"]
+            _set_navigation_rail_expanded(
+                nav_container=nav_container,
+                nav_list=nav_list,
+                nav_label=nav_label,
+                shell_spec=shell_spec,
+                expanded=expanded_state["expanded"],
+            )
+            nav_toggle.setText("<" if expanded_state["expanded"] else ">")
+
+        nav_toggle.clicked.connect(toggle_navigation_rail)
+
+    if navigation_mode == PrototypeNavigationRailMode.HOVER:
+        nav_container.enterEvent = lambda _event: _set_navigation_rail_expanded(
+            nav_container=nav_container,
+            nav_list=nav_list,
+            nav_label=nav_label,
+            shell_spec=shell_spec,
+            expanded=True,
+        )
+        nav_container.leaveEvent = lambda _event: _set_navigation_rail_expanded(
+            nav_container=nav_container,
+            nav_list=nav_list,
+            nav_label=nav_label,
+            shell_spec=shell_spec,
+            expanded=False,
+        )
+
+    nav_layout.addWidget(nav_list)
+    nav_layout.addStretch()
+    nav_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_status))
+    nav_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_detail))
+
+    root_layout.addWidget(nav_container)
     root_layout.addWidget(_vertical_separator(QFrame))
     root_layout.addWidget(stacked_screens)
 
@@ -374,6 +440,40 @@ def _build_prototype_sidebar_composition() -> PrototypeSidebarComposition:
     )
 
 
+def _build_prototype_navigation_rail() -> PrototypeNavigationRail:
+    return PrototypeNavigationRail(
+        collapsed_width=72,
+        expanded_width=168,
+        default_mode=PrototypeNavigationRailMode.TOGGLE,
+        supported_modes=(
+            PrototypeNavigationRailMode.TOGGLE,
+            PrototypeNavigationRailMode.HOVER,
+        ),
+        is_miniature=True,
+        is_low_emphasis=True,
+    )
+
+
+def _set_navigation_rail_expanded(
+    nav_container,
+    nav_list,
+    nav_label,
+    shell_spec: PrototypeShellSpec,
+    expanded: bool,
+) -> None:
+    nav_container.setFixedWidth(
+        shell_spec.navigation_rail.expanded_width
+        if expanded
+        else shell_spec.navigation_rail.collapsed_width
+    )
+    nav_label.setText(
+        shell_spec.sidebar_composition.navigation_block_label if expanded else "FH6"
+    )
+
+    for index, destination in enumerate(shell_spec.sidebar_destinations):
+        nav_list.item(index).setText(destination.label if expanded else destination.label[:1])
+
+
 def _build_screen_widget(
     screen: PrototypeScreen,
     home_concept: PrototypeHomeConcept | None = None,
@@ -448,7 +548,22 @@ def _vertical_separator(frame_type):
 
 
 def main() -> int:
-    return launch_pyside6_shell_prototype()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Launch the PySide6 vertical companion prototype."
+    )
+    parser.add_argument(
+        "--navigation-mode",
+        choices=tuple(mode.value for mode in PrototypeNavigationRailMode),
+        default=PrototypeNavigationRailMode.TOGGLE.value,
+        help="Prototype navigation rail behavior to compare.",
+    )
+    args = parser.parse_args()
+
+    return launch_pyside6_shell_prototype(
+        navigation_mode=PrototypeNavigationRailMode(args.navigation_mode)
+    )
 
 
 if __name__ == "__main__":
