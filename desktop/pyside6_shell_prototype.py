@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from enum import Enum
 
 from frontend.automation_controller import (
     AutomationRunRequest,
@@ -86,19 +85,17 @@ class PrototypeSidebarComposition:
     has_structural_closure: bool
 
 
-class PrototypeNavigationRailMode(str, Enum):
-    TOGGLE = "toggle"
-    HOVER = "hover"
-
-
 @dataclass(frozen=True)
 class PrototypeNavigationRail:
     collapsed_width: int
     expanded_width: int
-    default_mode: PrototypeNavigationRailMode
-    supported_modes: tuple[PrototypeNavigationRailMode, ...]
+    expansion_trigger: str
+    animation_duration_ms: int
     is_miniature: bool
     is_low_emphasis: bool
+    reserves_collapsed_space: bool
+    overlays_main_content: bool
+    reflows_main_content_on_hover: bool
 
 
 @dataclass(frozen=True)
@@ -135,10 +132,9 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
     )
 
 
-def launch_pyside6_shell_prototype(
-    navigation_mode: PrototypeNavigationRailMode = PrototypeNavigationRailMode.TOGGLE,
-) -> int:
+def launch_pyside6_shell_prototype() -> int:
     try:
+        from PySide6.QtCore import QPropertyAnimation, QRect
         from PySide6.QtWidgets import (
             QApplication,
             QFrame,
@@ -148,7 +144,6 @@ def launch_pyside6_shell_prototype(
             QListWidget,
             QListWidgetItem,
             QMainWindow,
-            QPushButton,
             QSizePolicy,
             QStackedWidget,
             QVBoxLayout,
@@ -170,30 +165,31 @@ def launch_pyside6_shell_prototype(
     root = QWidget()
     root_layout = QHBoxLayout(root)
 
-    nav_container = QWidget()
-    nav_container.setFixedWidth(shell_spec.navigation_rail.collapsed_width)
-    nav_container.setSizePolicy(
+    collapsed_rail = QWidget()
+    collapsed_rail.setFixedWidth(shell_spec.navigation_rail.collapsed_width)
+    collapsed_rail.setSizePolicy(
         QSizePolicy.Policy.Fixed,
         QSizePolicy.Policy.Expanding,
     )
-    nav_layout = QVBoxLayout(nav_container)
-    nav_label = QLabel(shell_spec.sidebar_composition.navigation_block_label)
-    nav_layout.addWidget(nav_label)
+    collapsed_rail_layout = QVBoxLayout(collapsed_rail)
+    collapsed_rail_label = QLabel("FH6")
+    collapsed_rail_layout.addWidget(collapsed_rail_label)
 
-    nav_toggle = QPushButton(">")
-    if navigation_mode == PrototypeNavigationRailMode.TOGGLE:
-        nav_layout.addWidget(nav_toggle)
+    collapsed_nav_list = QListWidget()
+    collapsed_nav_list.setFixedHeight(190)
+    collapsed_nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-    nav_list = QListWidget()
-    nav_list.setFixedHeight(190)
-    nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
+    main_area = QWidget()
+    main_area_layout = QVBoxLayout(main_area)
     stacked_screens = QStackedWidget()
+    main_area_layout.addWidget(stacked_screens)
 
     for screen in shell_spec.screens:
         item = QListWidgetItem(screen.title)
         item.setData(256, screen.screen_id.value)
-        nav_list.addItem(item)
+        collapsed_item = QListWidgetItem(screen.title[:1])
+        collapsed_item.setData(256, screen.screen_id.value)
+        collapsed_nav_list.addItem(collapsed_item)
         stacked_screens.addWidget(
             _build_screen_widget(
                 screen,
@@ -212,57 +208,79 @@ def launch_pyside6_shell_prototype(
         _build_automation_environment_widget(shell_spec.automation_environment)
     )
 
-    nav_list.currentRowChanged.connect(stacked_screens.setCurrentIndex)
-    nav_list.setCurrentRow(0)
+    overlay_navigation = QWidget(main_area)
+    overlay_navigation.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+    overlay_navigation.setGeometry(QRect(0, 0, 0, main_area.height()))
+    overlay_navigation.raise_()
 
-    _set_navigation_rail_expanded(
-        nav_container=nav_container,
-        nav_list=nav_list,
-        nav_label=nav_label,
-        shell_spec=shell_spec,
-        expanded=False,
-    )
+    overlay_layout = QVBoxLayout(overlay_navigation)
+    overlay_layout.addWidget(QLabel(shell_spec.sidebar_composition.navigation_block_label))
 
-    if navigation_mode == PrototypeNavigationRailMode.TOGGLE:
-        expanded_state = {"expanded": False}
+    overlay_nav_list = QListWidget()
+    overlay_nav_list.setFixedHeight(190)
+    overlay_nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    for screen in shell_spec.screens:
+        item = QListWidgetItem(screen.title)
+        item.setData(256, screen.screen_id.value)
+        overlay_nav_list.addItem(item)
 
-        def toggle_navigation_rail() -> None:
-            expanded_state["expanded"] = not expanded_state["expanded"]
-            _set_navigation_rail_expanded(
-                nav_container=nav_container,
-                nav_list=nav_list,
-                nav_label=nav_label,
-                shell_spec=shell_spec,
-                expanded=expanded_state["expanded"],
+    overlay_layout.addWidget(overlay_nav_list)
+    overlay_layout.addStretch()
+    overlay_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_status))
+    overlay_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_detail))
+
+    navigation_animation = QPropertyAnimation(overlay_navigation, b"geometry")
+    navigation_animation.setDuration(shell_spec.navigation_rail.animation_duration_ms)
+
+    def set_navigation_index(index: int) -> None:
+        if index < 0:
+            return
+        stacked_screens.setCurrentIndex(index)
+        if collapsed_nav_list.currentRow() != index:
+            collapsed_nav_list.setCurrentRow(index)
+        if overlay_nav_list.currentRow() != index:
+            overlay_nav_list.setCurrentRow(index)
+
+    def expand_navigation_overlay() -> None:
+        navigation_animation.stop()
+        overlay_navigation.show()
+        overlay_navigation.raise_()
+        navigation_animation.setStartValue(overlay_navigation.geometry())
+        navigation_animation.setEndValue(
+            QRect(
+                0,
+                0,
+                shell_spec.navigation_rail.expanded_width,
+                main_area.height(),
             )
-            nav_toggle.setText("<" if expanded_state["expanded"] else ">")
-
-        nav_toggle.clicked.connect(toggle_navigation_rail)
-
-    if navigation_mode == PrototypeNavigationRailMode.HOVER:
-        nav_container.enterEvent = lambda _event: _set_navigation_rail_expanded(
-            nav_container=nav_container,
-            nav_list=nav_list,
-            nav_label=nav_label,
-            shell_spec=shell_spec,
-            expanded=True,
         )
-        nav_container.leaveEvent = lambda _event: _set_navigation_rail_expanded(
-            nav_container=nav_container,
-            nav_list=nav_list,
-            nav_label=nav_label,
-            shell_spec=shell_spec,
-            expanded=False,
-        )
+        navigation_animation.start()
 
-    nav_layout.addWidget(nav_list)
-    nav_layout.addStretch()
-    nav_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_status))
-    nav_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_detail))
+    def collapse_navigation_overlay() -> None:
+        navigation_animation.stop()
+        navigation_animation.setStartValue(overlay_navigation.geometry())
+        navigation_animation.setEndValue(QRect(0, 0, 0, main_area.height()))
+        navigation_animation.start()
 
-    root_layout.addWidget(nav_container)
+    collapsed_nav_list.currentRowChanged.connect(set_navigation_index)
+    overlay_nav_list.currentRowChanged.connect(set_navigation_index)
+    collapsed_nav_list.setCurrentRow(0)
+    overlay_nav_list.setCurrentRow(0)
+
+    collapsed_rail.enterEvent = lambda _event: expand_navigation_overlay()
+    overlay_navigation.leaveEvent = lambda _event: collapse_navigation_overlay()
+
+    collapsed_rail_layout.addWidget(collapsed_nav_list)
+    collapsed_rail_layout.addStretch()
+    collapsed_rail_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_status))
+
+    root_layout.addWidget(collapsed_rail)
     root_layout.addWidget(_vertical_separator(QFrame))
-    root_layout.addWidget(stacked_screens)
+    root_layout.addWidget(main_area)
+
+    main_area.resizeEvent = lambda _event: overlay_navigation.setGeometry(
+        QRect(0, 0, overlay_navigation.width(), main_area.height())
+    )
 
     window.setCentralWidget(root)
     window.show()
@@ -444,34 +462,14 @@ def _build_prototype_navigation_rail() -> PrototypeNavigationRail:
     return PrototypeNavigationRail(
         collapsed_width=72,
         expanded_width=168,
-        default_mode=PrototypeNavigationRailMode.TOGGLE,
-        supported_modes=(
-            PrototypeNavigationRailMode.TOGGLE,
-            PrototypeNavigationRailMode.HOVER,
-        ),
+        expansion_trigger="hover",
+        animation_duration_ms=200,
         is_miniature=True,
         is_low_emphasis=True,
+        reserves_collapsed_space=True,
+        overlays_main_content=True,
+        reflows_main_content_on_hover=False,
     )
-
-
-def _set_navigation_rail_expanded(
-    nav_container,
-    nav_list,
-    nav_label,
-    shell_spec: PrototypeShellSpec,
-    expanded: bool,
-) -> None:
-    nav_container.setFixedWidth(
-        shell_spec.navigation_rail.expanded_width
-        if expanded
-        else shell_spec.navigation_rail.collapsed_width
-    )
-    nav_label.setText(
-        shell_spec.sidebar_composition.navigation_block_label if expanded else "FH6"
-    )
-
-    for index, destination in enumerate(shell_spec.sidebar_destinations):
-        nav_list.item(index).setText(destination.label if expanded else destination.label[:1])
 
 
 def _build_screen_widget(
@@ -548,22 +546,7 @@ def _vertical_separator(frame_type):
 
 
 def main() -> int:
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Launch the PySide6 vertical companion prototype."
-    )
-    parser.add_argument(
-        "--navigation-mode",
-        choices=tuple(mode.value for mode in PrototypeNavigationRailMode),
-        default=PrototypeNavigationRailMode.TOGGLE.value,
-        help="Prototype navigation rail behavior to compare.",
-    )
-    args = parser.parse_args()
-
-    return launch_pyside6_shell_prototype(
-        navigation_mode=PrototypeNavigationRailMode(args.navigation_mode)
-    )
+    return launch_pyside6_shell_prototype()
 
 
 if __name__ == "__main__":

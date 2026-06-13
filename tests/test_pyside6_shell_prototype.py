@@ -1,7 +1,6 @@
 import unittest
 
 from desktop.pyside6_shell_prototype import build_prototype_shell_spec
-from desktop.pyside6_shell_prototype import PrototypeNavigationRailMode
 from ui.automation_environment import AutomationEnvironmentSectionId
 from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 
@@ -36,24 +35,24 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertEqual("Controlled MVP", sidebar.footer_status)
         self.assertEqual("Manual operation ready", sidebar.footer_detail)
 
-    def test_navigation_rail_is_miniature_and_toggle_first(self) -> None:
+    def test_navigation_rail_is_hover_overlay_only(self) -> None:
         navigation_rail = self.shell_spec.navigation_rail
 
         self.assertTrue(navigation_rail.is_miniature)
         self.assertTrue(navigation_rail.is_low_emphasis)
         self.assertEqual(72, navigation_rail.collapsed_width)
         self.assertEqual(168, navigation_rail.expanded_width)
-        self.assertEqual(
-            PrototypeNavigationRailMode.TOGGLE,
-            navigation_rail.default_mode,
-        )
-        self.assertEqual(
-            (
-                PrototypeNavigationRailMode.TOGGLE,
-                PrototypeNavigationRailMode.HOVER,
-            ),
-            navigation_rail.supported_modes,
-        )
+        self.assertEqual("hover", navigation_rail.expansion_trigger)
+
+    def test_navigation_rail_reserves_space_and_overlays_without_reflow(self) -> None:
+        navigation_rail = self.shell_spec.navigation_rail
+
+        self.assertTrue(navigation_rail.reserves_collapsed_space)
+        self.assertTrue(navigation_rail.overlays_main_content)
+        self.assertFalse(navigation_rail.reflows_main_content_on_hover)
+        self.assertGreaterEqual(navigation_rail.animation_duration_ms, 180)
+        self.assertLessEqual(navigation_rail.animation_duration_ms, 220)
+        self.assertLess(navigation_rail.animation_duration_ms, 1000)
 
     def test_placeholder_screens_match_sidebar_destinations(self) -> None:
         sidebar_screen_ids = tuple(
