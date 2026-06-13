@@ -1,1 +1,35 @@
-"""User interface package placeholder."""
+from ui.shell import (
+    APP_SHELL,
+    SIDEBAR_DESTINATIONS,
+    SCREEN_DESCRIPTORS,
+    AppShell,
+    ContentZone,
+    ScreenDescriptor,
+    ScreenId,
+    ScreenType,
+    SidebarDestination,
+    SidebarDestinationId,
+    WeightedContentZones,
+    ZoneRole,
+    get_screen_descriptor,
+    get_screen_descriptors,
+    get_sidebar_destinations,
+)
+
+__all__ = [
+    "APP_SHELL",
+    "SIDEBAR_DESTINATIONS",
+    "SCREEN_DESCRIPTORS",
+    "AppShell",
+    "ContentZone",
+    "ScreenDescriptor",
+    "ScreenId",
+    "ScreenType",
+    "SidebarDestination",
+    "SidebarDestinationId",
+    "WeightedContentZones",
+    "ZoneRole",
+    "get_screen_descriptor",
+    "get_screen_descriptors",
+    "get_sidebar_destinations",
+]
