@@ -19,6 +19,13 @@ from ui.app_flow import (
     AppFlowTrigger,
     get_app_flow,
 )
+from ui.architecture_integration_review import (
+    CARRY_FORWARD_NOTES,
+    HARD_BOUNDARIES_PRESERVED,
+    UIArchitectureIntegrationCheck,
+    UIArchitectureIntegrationReview,
+    build_ui_architecture_integration_review,
+)
 from ui.history_screen import (
     HistoryDetailLayer,
     HistoryFilterState,
@@ -91,6 +98,7 @@ __all__ = [
     "AutomationEnvironmentScreen",
     "AutomationEnvironmentSectionId",
     "AlternativeProfilesSection",
+    "CARRY_FORWARD_NOTES",
     "ContextualWarningsSection",
     "CommonQuestionsSection",
     "ContextualGuidanceSection",
@@ -100,6 +108,7 @@ __all__ = [
     "HelpScreen",
     "HelpSectionId",
     "HelpTopicType",
+    "HARD_BOUNDARIES_PRESERVED",
     "HistoryDetailLayer",
     "HistoryFilterState",
     "HistoryScreen",
@@ -133,6 +142,8 @@ __all__ = [
     "SidebarDestination",
     "SidebarDestinationId",
     "TroubleshootingSection",
+    "UIArchitectureIntegrationCheck",
+    "UIArchitectureIntegrationReview",
     "WeightedContentZones",
     "ZoneRole",
     "build_automation_environment_screen",
@@ -140,6 +151,7 @@ __all__ = [
     "build_history_screen",
     "build_profiles_screen",
     "build_settings_screen",
+    "build_ui_architecture_integration_review",
     "get_app_flow",
     "get_screen_descriptor",
     "get_screen_descriptors",
