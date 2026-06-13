@@ -60,11 +60,29 @@ class PrototypeAutomationEnvironment:
 
 
 @dataclass(frozen=True)
+class PrototypeHomeSignal:
+    title: str
+    summary: str
+    zone_role: ZoneRole
+
+
+@dataclass(frozen=True)
+class PrototypeHomeConcept:
+    title: str
+    philosophy_statement: str
+    opening_feel: str
+    is_single_frame: bool
+    is_dashboard_like: bool
+    signals: tuple[PrototypeHomeSignal, ...]
+
+
+@dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
     sidebar_destinations: tuple[SidebarDestination, ...]
     screens: tuple[PrototypeScreen, ...]
     automation_environment: PrototypeAutomationEnvironment
+    home_concept: PrototypeHomeConcept
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -78,6 +96,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
             for destination in sidebar_destinations
         ),
         automation_environment=_build_prototype_automation_environment(),
+        home_concept=_build_prototype_home_concept(),
     )
 
 
@@ -126,6 +145,9 @@ def launch_pyside6_shell_prototype() -> int:
         stacked_screens.addWidget(
             _build_screen_widget(
                 screen,
+                home_concept=shell_spec.home_concept
+                if screen.screen_id == ScreenId.HOME
+                else None,
                 open_automation_environment=(
                     lambda: stacked_screens.setCurrentIndex(len(shell_spec.screens))
                 )
@@ -279,8 +301,41 @@ def _build_automation_section(
     )
 
 
+def _build_prototype_home_concept() -> PrototypeHomeConcept:
+    return PrototypeHomeConcept(
+        title="Home",
+        philosophy_statement="Quiet confidence before operational commitment.",
+        opening_feel="A restrained launchpad with a slight premium control-room feeling.",
+        is_single_frame=True,
+        is_dashboard_like=False,
+        signals=(
+            PrototypeHomeSignal(
+                title="Recommended Next Step",
+                summary="Choose an automation only when the FH6 baseline is ready.",
+                zone_role=ZoneRole.PRIMARY,
+            ),
+            PrototypeHomeSignal(
+                title="Quick Automation Access",
+                summary="Open the Automation Environment for focused preparation.",
+                zone_role=ZoneRole.PRIMARY,
+            ),
+            PrototypeHomeSignal(
+                title="Relevant Activity",
+                summary="Recent operational context stays lightweight and reassuring.",
+                zone_role=ZoneRole.SECONDARY,
+            ),
+            PrototypeHomeSignal(
+                title="Quiet Status",
+                summary="Controlled MVP ready for supervised developer/manual use.",
+                zone_role=ZoneRole.TERTIARY,
+            ),
+        ),
+    )
+
+
 def _build_screen_widget(
     screen: PrototypeScreen,
+    home_concept: PrototypeHomeConcept | None = None,
     open_automation_environment=None,
 ):
     from PySide6.QtWidgets import QPushButton, QGroupBox, QLabel, QVBoxLayout, QWidget
@@ -290,10 +345,23 @@ def _build_screen_widget(
     layout.addWidget(QLabel(screen.title))
     layout.addWidget(QLabel(screen.primary_intention))
 
+    if home_concept is not None:
+        layout.addWidget(QLabel(home_concept.philosophy_statement))
+        layout.addWidget(QLabel(home_concept.opening_feel))
+
+        for signal in home_concept.signals:
+            group_box = QGroupBox(f"{signal.zone_role.value.title()} - {signal.title}")
+            signal_layout = QVBoxLayout(group_box)
+            signal_layout.addWidget(QLabel(signal.summary))
+            layout.addWidget(group_box)
+
     if open_automation_environment is not None:
         button = QPushButton("Open Automation Environment Prototype")
         button.clicked.connect(open_automation_environment)
         layout.addWidget(button)
+
+    if home_concept is not None:
+        return container
 
     for zone in screen.zones:
         group_box = QGroupBox(zone.role.value.title())

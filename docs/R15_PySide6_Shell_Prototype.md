@@ -18,6 +18,7 @@ It is intentionally narrow and reversible.
 - Placeholder screen area.
 - Basic navigation between placeholder screens.
 - Primary, secondary, and tertiary content zones as placeholders.
+- Home philosophy-first launchpad prototype.
 - Automation Environment prototype screen opened from Home.
 - Automation Environment six-section structure:
   - Overview
@@ -28,6 +29,7 @@ It is intentionally narrow and reversible.
   - Run
 
 The prototype reads from the existing non-visual shell descriptors in `ui/shell.py`.
+The Home prototype tests a quiet, single-frame launchpad rather than a dashboard.
 The Automation Environment prototype uses existing product-facing screen structure and a prepared preview plan without execution wiring.
 
 ## How To Run

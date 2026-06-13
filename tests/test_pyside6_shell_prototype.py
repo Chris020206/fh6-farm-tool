@@ -59,6 +59,37 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         )
         self.assertEqual(5, len(self.shell_spec.screens))
 
+    def test_home_concept_is_single_frame_and_not_dashboard_like(self) -> None:
+        home = self.shell_spec.home_concept
+
+        self.assertTrue(home.is_single_frame)
+        self.assertFalse(home.is_dashboard_like)
+        self.assertIn("Quiet confidence", home.philosophy_statement)
+        self.assertIn("launchpad", home.opening_feel)
+
+    def test_home_concept_preserves_restrained_signal_set(self) -> None:
+        signal_titles = tuple(signal.title for signal in self.shell_spec.home_concept.signals)
+        signal_roles = tuple(signal.zone_role for signal in self.shell_spec.home_concept.signals)
+
+        self.assertEqual(
+            (
+                "Recommended Next Step",
+                "Quick Automation Access",
+                "Relevant Activity",
+                "Quiet Status",
+            ),
+            signal_titles,
+        )
+        self.assertEqual(
+            (
+                ZoneRole.PRIMARY,
+                ZoneRole.PRIMARY,
+                ZoneRole.SECONDARY,
+                ZoneRole.TERTIARY,
+            ),
+            signal_roles,
+        )
+
     def test_automation_environment_renders_six_section_structure(self) -> None:
         section_ids = tuple(
             section.section_id
