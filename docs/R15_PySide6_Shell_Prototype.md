@@ -18,8 +18,17 @@ It is intentionally narrow and reversible.
 - Placeholder screen area.
 - Basic navigation between placeholder screens.
 - Primary, secondary, and tertiary content zones as placeholders.
+- Automation Environment prototype screen opened from Home.
+- Automation Environment six-section structure:
+  - Overview
+  - Profile
+  - Readiness
+  - Contextual Warnings
+  - Advanced / Refinement
+  - Run
 
 The prototype reads from the existing non-visual shell descriptors in `ui/shell.py`.
+The Automation Environment prototype uses existing product-facing screen structure and a prepared preview plan without execution wiring.
 
 ## How To Run
 
@@ -30,6 +39,8 @@ python -B -m desktop.pyside6_shell_prototype
 ```
 
 If PySide6 is not installed, the prototype exits with a readable message.
+
+From the Home placeholder screen, use the Automation Environment prototype button to inspect the six-section structure.
 
 ## Non-Goals
 

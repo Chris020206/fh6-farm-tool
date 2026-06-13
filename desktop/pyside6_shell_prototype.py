@@ -1,5 +1,23 @@
 from dataclasses import dataclass
 
+from frontend.automation_controller import (
+    AutomationRunRequest,
+    FrontendAutomationController,
+)
+from product.automation_registry import get_automation_definition
+from product.profile_metadata_registry import get_profile_metadata
+from product.readiness_registry import get_readiness_model
+from ui.automation_environment import (
+    AdvancedSection,
+    AutomationEnvironmentScreen,
+    AutomationEnvironmentSectionId,
+    ContextualWarningsSection,
+    OverviewSection,
+    ProfileSection,
+    ReadinessSection,
+    RunSection,
+    build_automation_environment_screen,
+)
 from ui.shell import (
     ScreenDescriptor,
     ScreenId,
@@ -25,10 +43,28 @@ class PrototypeScreen:
 
 
 @dataclass(frozen=True)
+class PrototypeAutomationEnvironmentSection:
+    section_id: AutomationEnvironmentSectionId
+    title: str
+    summary: str
+    details: tuple[str, ...]
+    zone_role: ZoneRole
+    is_collapsed_feeling: bool = False
+
+
+@dataclass(frozen=True)
+class PrototypeAutomationEnvironment:
+    title: str
+    primary_intention: str
+    sections: tuple[PrototypeAutomationEnvironmentSection, ...]
+
+
+@dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
     sidebar_destinations: tuple[SidebarDestination, ...]
     screens: tuple[PrototypeScreen, ...]
+    automation_environment: PrototypeAutomationEnvironment
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -41,6 +77,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
             _build_prototype_screen(get_screen_descriptor(destination.screen_id))
             for destination in sidebar_destinations
         ),
+        automation_environment=_build_prototype_automation_environment(),
     )
 
 
@@ -86,7 +123,20 @@ def launch_pyside6_shell_prototype() -> int:
         item = QListWidgetItem(screen.title)
         item.setData(256, screen.screen_id.value)
         sidebar.addItem(item)
-        stacked_screens.addWidget(_build_screen_widget(screen))
+        stacked_screens.addWidget(
+            _build_screen_widget(
+                screen,
+                open_automation_environment=(
+                    lambda: stacked_screens.setCurrentIndex(len(shell_spec.screens))
+                )
+                if screen.screen_id == ScreenId.HOME
+                else None,
+            )
+        )
+
+    stacked_screens.addWidget(
+        _build_automation_environment_widget(shell_spec.automation_environment)
+    )
 
     sidebar.currentRowChanged.connect(stacked_screens.setCurrentIndex)
     sidebar.setCurrentRow(0)
@@ -113,18 +163,169 @@ def _build_prototype_screen(screen_descriptor: ScreenDescriptor) -> PrototypeScr
     )
 
 
-def _build_screen_widget(screen: PrototypeScreen):
-    from PySide6.QtWidgets import QGroupBox, QLabel, QVBoxLayout, QWidget
+def _build_prototype_automation_environment() -> PrototypeAutomationEnvironment:
+    controller = FrontendAutomationController(
+        session_id_provider=lambda: "prototype-preview-session",
+    )
+    run_plan = controller.prepare_run_plan(
+        AutomationRunRequest(
+            automation_id="auto1",
+            profile_id="auto1_race_default",
+            requested_count=1,
+        )
+    )
+    automation_environment_screen = build_automation_environment_screen(
+        automation_definition=get_automation_definition("auto1"),
+        profile_metadata=get_profile_metadata("auto1_race_default"),
+        readiness_model=get_readiness_model("auto1"),
+        run_plan=run_plan,
+    )
+
+    return _build_automation_environment_prototype_screen(
+        automation_environment_screen
+    )
+
+
+def _build_automation_environment_prototype_screen(
+    screen: AutomationEnvironmentScreen,
+) -> PrototypeAutomationEnvironment:
+    return PrototypeAutomationEnvironment(
+        title="Automation Environment",
+        primary_intention="Orientation -> Confidence Formation -> Commitment",
+        sections=tuple(_build_automation_section(section) for section in screen.sections),
+    )
+
+
+def _build_automation_section(
+    section: (
+        OverviewSection
+        | ProfileSection
+        | ReadinessSection
+        | ContextualWarningsSection
+        | AdvancedSection
+        | RunSection
+    ),
+) -> PrototypeAutomationEnvironmentSection:
+    if isinstance(section, OverviewSection):
+        return PrototypeAutomationEnvironmentSection(
+            section_id=section.section_id,
+            title="Overview",
+            summary=section.display_name,
+            details=(
+                section.short_purpose,
+                section.validated_scope,
+                section.expected_baseline,
+            ),
+            zone_role=ZoneRole.PRIMARY,
+        )
+
+    if isinstance(section, ProfileSection):
+        return PrototypeAutomationEnvironmentSection(
+            section_id=section.section_id,
+            title="Profile",
+            summary=section.profile_name,
+            details=(
+                section.behavior_summary,
+                section.reliability_posture,
+                section.customization_status,
+            ),
+            zone_role=ZoneRole.PRIMARY,
+        )
+
+    if isinstance(section, ReadinessSection):
+        return PrototypeAutomationEnvironmentSection(
+            section_id=section.section_id,
+            title="Readiness",
+            summary=section.readiness_wording,
+            details=(
+                section.expected_baseline,
+                section.manual_positioning_assumption,
+                section.focus_requirement,
+            )
+            + section.recommended_setup
+            + section.confidence_notes,
+            zone_role=ZoneRole.PRIMARY,
+        )
+
+    if isinstance(section, ContextualWarningsSection):
+        return PrototypeAutomationEnvironmentSection(
+            section_id=section.section_id,
+            title="Contextual Warnings",
+            summary="Warnings remain contextual and secondary.",
+            details=section.warnings or ("No contextual warnings for this placeholder.",),
+            zone_role=ZoneRole.SECONDARY,
+        )
+
+    if isinstance(section, AdvancedSection):
+        return PrototypeAutomationEnvironmentSection(
+            section_id=section.section_id,
+            title="Advanced / Refinement",
+            summary=section.purpose,
+            details=section.available_refinements or ("Collapsed placeholder only.",),
+            zone_role=ZoneRole.TERTIARY,
+            is_collapsed_feeling=section.is_collapsed_by_default,
+        )
+
+    return PrototypeAutomationEnvironmentSection(
+        section_id=section.section_id,
+        title="Run",
+        summary=section.commitment_message,
+        details=(
+            f"Status: {section.status_label}",
+            f"Requested count: {section.requested_count}",
+            f"Acknowledgement: {section.acknowledgement_level.value}",
+        ),
+        zone_role=ZoneRole.PRIMARY,
+    )
+
+
+def _build_screen_widget(
+    screen: PrototypeScreen,
+    open_automation_environment=None,
+):
+    from PySide6.QtWidgets import QPushButton, QGroupBox, QLabel, QVBoxLayout, QWidget
 
     container = QWidget()
     layout = QVBoxLayout(container)
     layout.addWidget(QLabel(screen.title))
     layout.addWidget(QLabel(screen.primary_intention))
 
+    if open_automation_environment is not None:
+        button = QPushButton("Open Automation Environment Prototype")
+        button.clicked.connect(open_automation_environment)
+        layout.addWidget(button)
+
     for zone in screen.zones:
         group_box = QGroupBox(zone.role.value.title())
         zone_layout = QVBoxLayout(group_box)
         zone_layout.addWidget(QLabel(zone.purpose))
+        layout.addWidget(group_box)
+
+    return container
+
+
+def _build_automation_environment_widget(
+    automation_environment: PrototypeAutomationEnvironment,
+):
+    from PySide6.QtWidgets import QGroupBox, QLabel, QVBoxLayout, QWidget
+
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.addWidget(QLabel(automation_environment.title))
+    layout.addWidget(QLabel(automation_environment.primary_intention))
+
+    for section in automation_environment.sections:
+        title = f"{section.zone_role.value.title()} - {section.title}"
+        if section.is_collapsed_feeling:
+            title = f"{title} (collapsed placeholder)"
+
+        group_box = QGroupBox(title)
+        section_layout = QVBoxLayout(group_box)
+        section_layout.addWidget(QLabel(section.summary))
+
+        for detail in section.details:
+            section_layout.addWidget(QLabel(detail))
+
         layout.addWidget(group_box)
 
     return container
