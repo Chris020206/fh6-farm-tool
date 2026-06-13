@@ -97,6 +97,7 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
                 ),
                 zone_roles,
             )
+            self.assertEqual(3, len(screen.zones))
 
     def test_smoke_spec_does_not_require_gui_launch(self) -> None:
         self.assertEqual(
@@ -145,24 +146,33 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
 
         self.assertTrue(visual_composition.uses_custom_cards)
         self.assertEqual(
-            "warm quiet launch surface",
+            "dark quiet launch surface",
             visual_composition.home_hero_treatment,
         )
         self.assertEqual(
-            "soft raised utility card",
+            "layered dark utility card",
             visual_composition.card_treatment,
         )
         self.assertEqual(
-            "muted contextual support",
+            "recessed contextual support",
             visual_composition.secondary_treatment,
         )
         self.assertEqual(
-            "deliberate calm action",
+            "restrained amber commitment",
             visual_composition.commitment_treatment,
         )
         self.assertEqual(
-            "designed surface over default widgets",
+            "mvp-coherent dark companion surface",
             visual_composition.composition_principle,
+        )
+        self.assertEqual("dark companion canvas", visual_composition.background_treatment)
+        self.assertEqual(
+            "launch surface with paired operational signals",
+            visual_composition.home_layout_treatment,
+        )
+        self.assertEqual(
+            "preparation flow with deliberate commitment",
+            visual_composition.automation_layout_treatment,
         )
 
     def test_home_concept_is_single_frame_and_not_dashboard_like(self) -> None:
@@ -214,6 +224,10 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
                 AutomationEnvironmentSectionId.RUN,
             ),
             section_ids,
+        )
+        self.assertEqual(
+            "Orient, confirm, then commit.",
+            self.shell_spec.automation_environment.primary_intention,
         )
 
     def test_automation_environment_represents_weighted_zones(self) -> None:

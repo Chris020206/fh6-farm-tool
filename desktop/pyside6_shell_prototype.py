@@ -142,6 +142,8 @@ class PrototypeVisualComposition:
     commitment_treatment: str
     background_treatment: str
     composition_principle: str
+    home_layout_treatment: str
+    automation_layout_treatment: str
 
 
 @dataclass(frozen=True)
@@ -190,7 +192,6 @@ def launch_pyside6_shell_prototype() -> int:
         from PySide6.QtWidgets import (
             QApplication,
             QFrame,
-            QGroupBox,
             QHBoxLayout,
             QLabel,
             QListWidget,
@@ -210,11 +211,26 @@ def launch_pyside6_shell_prototype() -> int:
 
     shell_spec = build_prototype_shell_spec()
     app = QApplication(sys.argv)
+    app.setStyleSheet(
+        """
+        QWidget {
+            font-family: "Segoe UI";
+        }
+        QMainWindow {
+            background-color: #111315;
+        }
+        QStackedWidget {
+            background: transparent;
+            border: none;
+        }
+        """
+    )
     window = QMainWindow()
     window.setWindowTitle(shell_spec.window_title)
     window.setFixedSize(shell_spec.window_width, shell_spec.window_height)
 
     root = QWidget()
+    root.setStyleSheet("background-color: #111315;")
     root_layout = QHBoxLayout(root)
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(0)
@@ -226,7 +242,7 @@ def launch_pyside6_shell_prototype() -> int:
         QSizePolicy.Policy.Expanding,
     )
     collapsed_rail.setStyleSheet(
-        "background-color: #f5f5f2; border-right: 1px solid #d8d6cf;"
+        "background-color: #101214; border-right: 1px solid #282b2d;"
     )
     collapsed_rail_layout = QVBoxLayout(collapsed_rail)
     collapsed_rail_layout.setContentsMargins(8, 14, 8, 12)
@@ -245,7 +261,7 @@ def launch_pyside6_shell_prototype() -> int:
     )
 
     main_area = QWidget()
-    main_area.setStyleSheet("background-color: #f8f5ee;")
+    main_area.setStyleSheet("background-color: #17191b;")
     main_area_layout = QVBoxLayout(main_area)
     main_area_layout.setContentsMargins(
         shell_spec.vertical_rhythm.content_margin,
@@ -288,7 +304,7 @@ def launch_pyside6_shell_prototype() -> int:
     overlay_navigation.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
     overlay_navigation.setGeometry(QRect(0, 0, 0, main_area.height()))
     overlay_navigation.setStyleSheet(
-        "background-color: #fbfaf7; border-right: 1px solid #d0cdc5;"
+        "background-color: #151719; border-right: 1px solid #333638;"
     )
     overlay_navigation.raise_()
 
@@ -422,7 +438,7 @@ def _build_automation_environment_prototype_screen(
 ) -> PrototypeAutomationEnvironment:
     return PrototypeAutomationEnvironment(
         title="Automation Environment",
-        primary_intention="Orientation -> Confidence Formation -> Commitment",
+        primary_intention="Orient, confirm, then commit.",
         sections=tuple(_build_automation_section(section) for section in screen.sections),
     )
 
@@ -606,12 +622,14 @@ def _build_prototype_typography_hierarchy() -> PrototypeTypographyHierarchy:
 def _build_prototype_visual_composition() -> PrototypeVisualComposition:
     return PrototypeVisualComposition(
         uses_custom_cards=True,
-        home_hero_treatment="warm quiet launch surface",
-        card_treatment="soft raised utility card",
-        secondary_treatment="muted contextual support",
-        commitment_treatment="deliberate calm action",
-        background_treatment="warm companion canvas",
-        composition_principle="designed surface over default widgets",
+        home_hero_treatment="dark quiet launch surface",
+        card_treatment="layered dark utility card",
+        secondary_treatment="recessed contextual support",
+        commitment_treatment="restrained amber commitment",
+        background_treatment="dark companion canvas",
+        composition_principle="mvp-coherent dark companion surface",
+        home_layout_treatment="launch surface with paired operational signals",
+        automation_layout_treatment="preparation flow with deliberate commitment",
     )
 
 
@@ -633,15 +651,15 @@ def _apply_navigation_list_refinement(
             border-radius: 6px;
             padding: 4px 8px;
             font-size: 12px;
-            color: #3c3933;
+            color: #bdb6aa;
         }
         QListWidget::item:selected {
-            background: #e3e0d7;
-            color: #171510;
+            background: #303337;
+            color: #f2e7d2;
             font-weight: 600;
         }
         QListWidget::item:hover {
-            background: #eeece5;
+            background: #25282b;
         }
         """
     )
@@ -663,7 +681,7 @@ def _build_screen_widget(
     home_concept: PrototypeHomeConcept | None = None,
     open_automation_environment=None,
 ):
-    from PySide6.QtWidgets import QPushButton, QGroupBox, QLabel, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
     container = QWidget()
     layout = QVBoxLayout(container)
@@ -677,59 +695,25 @@ def _build_screen_widget(
     layout.addWidget(primary_intention_label)
 
     if home_concept is not None:
-        layout.addWidget(
-            _build_visual_card(
-                title="What matters now",
-                summary=home_concept.philosophy_statement,
-                details=(home_concept.opening_feel,),
-                shell_spec=shell_spec,
-                treatment="hero",
-            )
+        _build_home_screen_content(
+            layout=layout,
+            home_concept=home_concept,
+            shell_spec=shell_spec,
+            open_automation_environment=open_automation_environment,
         )
-        layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
-
-        for signal in home_concept.signals:
-            layout.addWidget(
-                _build_visual_card(
-                    title=signal.title,
-                    summary=signal.summary,
-                    details=(),
-                    shell_spec=shell_spec,
-                    treatment=signal.zone_role.value,
-                )
-            )
-            layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-
-    if open_automation_environment is not None:
-        button = QPushButton(
-            home_concept.primary_action_label
-            if home_concept is not None
-            else "Open Automation Environment Prototype"
-        )
-        _style_primary_button(button, shell_spec=shell_spec)
-        button.clicked.connect(open_automation_environment)
-        layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
-        layout.addWidget(button)
-
-    if home_concept is not None:
         layout.addStretch()
         return container
 
     for zone in screen.zones:
-        group_box = QGroupBox(zone.role.value.title())
-        _style_group_box(group_box, shell_spec=shell_spec)
-        zone_layout = QVBoxLayout(group_box)
-        zone_layout.setContentsMargins(
-            shell_spec.vertical_rhythm.group_inner_margin,
-            shell_spec.vertical_rhythm.group_inner_margin,
-            shell_spec.vertical_rhythm.group_inner_margin,
-            shell_spec.vertical_rhythm.group_inner_margin,
+        layout.addWidget(
+            _build_visual_card(
+                title=zone.role.value.title(),
+                summary=zone.purpose,
+                details=(),
+                shell_spec=shell_spec,
+                treatment=zone.role.value,
+            )
         )
-        zone_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-        zone_label = QLabel(zone.purpose)
-        _style_detail_label(zone_label, shell_spec=shell_spec)
-        zone_layout.addWidget(zone_label)
-        layout.addWidget(group_box)
         layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
     layout.addStretch()
@@ -755,25 +739,156 @@ def _build_automation_environment_widget(
     layout.addWidget(primary_intention_label)
     layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
-    for section in automation_environment.sections:
-        title = section.title
-        if section.is_collapsed_feeling:
-            title = f"{title} (secondary)"
-
-        layout.addWidget(
-            _build_visual_card(
-                title=title,
-                summary=section.summary,
-                details=section.details,
-                shell_spec=shell_spec,
-                treatment=section.readability_treatment,
-            )
-        )
-        layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    _build_automation_environment_content(
+        layout=layout,
+        automation_environment=automation_environment,
+        shell_spec=shell_spec,
+    )
 
     layout.addStretch()
 
     return container
+
+
+def _build_home_screen_content(
+    layout,
+    home_concept: PrototypeHomeConcept,
+    shell_spec: PrototypeShellSpec,
+    open_automation_environment,
+) -> None:
+    from PySide6.QtWidgets import QPushButton
+
+    layout.addWidget(
+        _build_visual_card(
+            title="Ready when the baseline is clear",
+            summary=home_concept.philosophy_statement,
+            details=(home_concept.opening_feel,),
+            shell_spec=shell_spec,
+            treatment="hero",
+        )
+    )
+    layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
+
+    first_row = _build_card_row(
+        cards=(
+            _build_visual_card(
+                title=home_concept.signals[0].title,
+                summary=home_concept.signals[0].summary,
+                details=(),
+                shell_spec=shell_spec,
+                treatment="primary",
+            ),
+            _build_visual_card(
+                title=home_concept.signals[1].title,
+                summary=home_concept.signals[1].summary,
+                details=(),
+                shell_spec=shell_spec,
+                treatment="primary",
+            ),
+        ),
+        shell_spec=shell_spec,
+    )
+    layout.addLayout(first_row)
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+
+    second_row = _build_card_row(
+        cards=(
+            _build_visual_card(
+                title=home_concept.signals[2].title,
+                summary=home_concept.signals[2].summary,
+                details=(),
+                shell_spec=shell_spec,
+                treatment="secondary",
+            ),
+            _build_visual_card(
+                title=home_concept.signals[3].title,
+                summary=home_concept.signals[3].summary,
+                details=(),
+                shell_spec=shell_spec,
+                treatment="tertiary",
+            ),
+        ),
+        shell_spec=shell_spec,
+    )
+    layout.addLayout(second_row)
+
+    if open_automation_environment is not None:
+        button = QPushButton(home_concept.primary_action_label)
+        _style_primary_button(button, shell_spec=shell_spec)
+        button.clicked.connect(open_automation_environment)
+        layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
+        layout.addWidget(button)
+
+
+def _build_automation_environment_content(
+    layout,
+    automation_environment: PrototypeAutomationEnvironment,
+    shell_spec: PrototypeShellSpec,
+) -> None:
+    sections_by_id = {
+        section.section_id: section
+        for section in automation_environment.sections
+    }
+
+    overview = sections_by_id[AutomationEnvironmentSectionId.OVERVIEW]
+    profile = sections_by_id[AutomationEnvironmentSectionId.PROFILE]
+    readiness = sections_by_id[AutomationEnvironmentSectionId.READINESS]
+    warnings = sections_by_id[AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS]
+    advanced = sections_by_id[AutomationEnvironmentSectionId.ADVANCED]
+    run = sections_by_id[AutomationEnvironmentSectionId.RUN]
+
+    layout.addLayout(
+        _build_card_row(
+            cards=(
+                _build_section_card(overview, shell_spec=shell_spec),
+                _build_section_card(profile, shell_spec=shell_spec),
+            ),
+            shell_spec=shell_spec,
+        )
+    )
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    layout.addWidget(_build_section_card(readiness, shell_spec=shell_spec))
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    layout.addLayout(
+        _build_card_row(
+            cards=(
+                _build_section_card(warnings, shell_spec=shell_spec),
+                _build_section_card(advanced, shell_spec=shell_spec),
+            ),
+            shell_spec=shell_spec,
+        )
+    )
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    layout.addWidget(_build_section_card(run, shell_spec=shell_spec))
+
+
+def _build_section_card(
+    section: PrototypeAutomationEnvironmentSection,
+    shell_spec: PrototypeShellSpec,
+):
+    title = section.title
+    if section.is_collapsed_feeling:
+        title = f"{title} (quiet)"
+
+    return _build_visual_card(
+        title=title,
+        summary=section.summary,
+        details=section.details,
+        shell_spec=shell_spec,
+        treatment=section.readability_treatment,
+    )
+
+
+def _build_card_row(cards: tuple[object, object], shell_spec: PrototypeShellSpec):
+    from PySide6.QtWidgets import QHBoxLayout
+
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    for card in cards:
+        row.addWidget(card)
+
+    return row
 
 
 def _build_visual_card(
@@ -783,10 +898,11 @@ def _build_visual_card(
     shell_spec: PrototypeShellSpec,
     treatment: str,
 ):
-    from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+    from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout
 
     card = QFrame()
     card.setFrameShape(QFrame.Shape.NoFrame)
+    card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
     _style_visual_card(card, treatment=treatment)
 
     card_layout = QVBoxLayout(card)
@@ -818,9 +934,9 @@ def _style_visual_card(card, treatment: str) -> None:
         card.setStyleSheet(
             """
             QFrame {
-                background-color: #fffdf8;
-                border: 1px solid #d8d2c4;
-                border-left: 4px solid #8d8067;
+                background-color: #202327;
+                border: 1px solid #3e3b34;
+                border-left: 4px solid #a9905f;
                 border-radius: 8px;
             }
             """
@@ -831,8 +947,8 @@ def _style_visual_card(card, treatment: str) -> None:
         card.setStyleSheet(
             """
             QFrame {
-                background-color: #f2efe7;
-                border: 1px solid #ded9cc;
+                background-color: #1b1d20;
+                border: 1px solid #2d3032;
                 border-radius: 7px;
             }
             """
@@ -843,8 +959,8 @@ def _style_visual_card(card, treatment: str) -> None:
         card.setStyleSheet(
             """
             QFrame {
-                background-color: #f7f3ea;
-                border: 1px solid #ded8ca;
+                background-color: #1d2023;
+                border: 1px solid #313436;
                 border-radius: 7px;
             }
             """
@@ -855,9 +971,9 @@ def _style_visual_card(card, treatment: str) -> None:
         card.setStyleSheet(
             """
             QFrame {
-                background-color: #fffaf0;
-                border: 1px solid #cfc5b0;
-                border-left: 4px solid #7f755f;
+                background-color: #242018;
+                border: 1px solid #514632;
+                border-left: 4px solid #b79a63;
                 border-radius: 8px;
             }
             """
@@ -867,8 +983,8 @@ def _style_visual_card(card, treatment: str) -> None:
     card.setStyleSheet(
         """
         QFrame {
-            background-color: #fffefb;
-            border: 1px solid #ded8ca;
+            background-color: #202326;
+            border: 1px solid #35383a;
             border-radius: 7px;
         }
         """
@@ -876,10 +992,10 @@ def _style_visual_card(card, treatment: str) -> None:
 
 
 def _style_card_title(label, shell_spec: PrototypeShellSpec, treatment: str) -> None:
-    color = "#24211c"
+    color = "#f4ead7"
     weight = 620
     if "secondary" in treatment or "tertiary" in treatment:
-        color = "#514b40"
+        color = "#c8beac"
         weight = 560
 
     label.setStyleSheet(
@@ -892,7 +1008,7 @@ def _style_card_title(label, shell_spec: PrototypeShellSpec, treatment: str) -> 
 def _style_screen_title(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.screen_title_size}px; "
-        "font-weight: 650; color: #171510;"
+        "font-weight: 650; color: #f5ead8;"
     )
     label.setWordWrap(True)
 
@@ -900,7 +1016,7 @@ def _style_screen_title(label, shell_spec: PrototypeShellSpec) -> None:
 def _style_opening_statement(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.opening_statement_size}px; "
-        "font-weight: 500; color: #2d2a24;"
+        "font-weight: 500; color: #ddd0ba;"
     )
     label.setWordWrap(True)
 
@@ -908,7 +1024,7 @@ def _style_opening_statement(label, shell_spec: PrototypeShellSpec) -> None:
 def _style_summary_label(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.summary_size}px; "
-        "font-weight: 500; color: #2f2c26;"
+        "font-weight: 500; color: #d6c9b6;"
     )
     label.setWordWrap(True)
 
@@ -916,7 +1032,7 @@ def _style_summary_label(label, shell_spec: PrototypeShellSpec) -> None:
 def _style_detail_label(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.detail_size}px; "
-        "font-weight: 400; color: #6a665d;"
+        "font-weight: 400; color: #948b7c;"
     )
     label.setWordWrap(True)
 
@@ -924,14 +1040,14 @@ def _style_detail_label(label, shell_spec: PrototypeShellSpec) -> None:
 def _style_navigation_label(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.navigation_size}px; "
-        "font-weight: 600; color: #27241f;"
+        "font-weight: 600; color: #f0e3ca;"
     )
 
 
 def _style_footer_label(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.footer_size}px; "
-        "font-weight: 400; color: #777267;"
+        "font-weight: 400; color: #8f8778;"
     )
     label.setWordWrap(True)
 
@@ -942,38 +1058,17 @@ def _style_primary_button(button, shell_spec: PrototypeShellSpec) -> None:
         QPushButton {{
             font-size: {shell_spec.typography.summary_size}px;
             font-weight: 620;
-            color: #1f1c17;
-            background-color: #e8e1d3;
-            border: 1px solid #cfc5b0;
+            color: #181613;
+            background-color: #ad9362;
+            border: 1px solid #c2a873;
             border-radius: 7px;
             padding: 8px 10px;
         }}
         QPushButton:hover {{
-            background-color: #ddd4c3;
+            background-color: #bca36f;
         }}
         QPushButton:pressed {{
-            background-color: #d1c5b2;
-        }}
-        """
-    )
-
-
-def _style_group_box(group_box, shell_spec: PrototypeShellSpec) -> None:
-    group_box.setStyleSheet(
-        f"""
-        QGroupBox {{
-            font-size: {shell_spec.typography.section_title_size}px;
-            font-weight: 600;
-            color: #24211c;
-            border: 1px solid #dedbd2;
-            border-radius: 6px;
-            margin-top: 9px;
-            background-color: #fffefb;
-        }}
-        QGroupBox::title {{
-            subcontrol-origin: margin;
-            left: 9px;
-            padding: 0 4px;
+            background-color: #967d50;
         }}
         """
     )
@@ -983,6 +1078,7 @@ def _vertical_separator(frame_type):
     separator = frame_type()
     separator.setFrameShape(frame_type.Shape.VLine)
     separator.setFrameShadow(frame_type.Shadow.Sunken)
+    separator.setStyleSheet("color: #292c2d; background-color: #292c2d;")
     return separator
 
 
