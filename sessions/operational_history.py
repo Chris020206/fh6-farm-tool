@@ -72,6 +72,9 @@ def _build_summary(run_session: RunSession, automation_name: str) -> str:
     if run_session.status == SessionStatus.REFUSED:
         return f"{automation_name} did not start because a safety requirement was not met."
 
+    if run_session.status == SessionStatus.PREPARED:
+        return f"{automation_name} was prepared but has not started."
+
     if run_session.status == SessionStatus.INTERRUPTED:
         return f"{automation_name} was interrupted before the requested run was complete."
 
@@ -90,6 +93,9 @@ def _build_confidence_note(status: SessionStatus) -> str:
 
     if status == SessionStatus.REFUSED:
         return "The session was refused before execution to preserve safety boundaries."
+
+    if status == SessionStatus.PREPARED:
+        return "The session is prepared for operator review before execution."
 
     if status == SessionStatus.INTERRUPTED:
         return "The session needs operator review before another run."

@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class SessionStatus(str, Enum):
+    PREPARED = "prepared"
     RUNNING = "running"
     COMPLETED = "completed"
     STOPPED = "stopped"
