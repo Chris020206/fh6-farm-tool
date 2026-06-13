@@ -117,6 +117,20 @@ class PrototypeVerticalRhythm:
 
 
 @dataclass(frozen=True)
+class PrototypeTypographyHierarchy:
+    screen_title_size: int
+    opening_statement_size: int
+    section_title_size: int
+    summary_size: int
+    detail_size: int
+    navigation_size: int
+    footer_size: int
+    active_navigation_weight: int
+    secondary_detail_treatment: str
+    hierarchy_principle: str
+
+
+@dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
     window_width: int
@@ -129,6 +143,7 @@ class PrototypeShellSpec:
     sidebar_composition: PrototypeSidebarComposition
     navigation_rail: PrototypeNavigationRail
     vertical_rhythm: PrototypeVerticalRhythm
+    typography: PrototypeTypographyHierarchy
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -149,6 +164,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         sidebar_composition=_build_prototype_sidebar_composition(),
         navigation_rail=_build_prototype_navigation_rail(),
         vertical_rhythm=_build_prototype_vertical_rhythm(),
+        typography=_build_prototype_typography_hierarchy(),
     )
 
 
@@ -200,6 +216,7 @@ def launch_pyside6_shell_prototype() -> int:
     collapsed_rail_layout.setContentsMargins(8, 14, 8, 12)
     collapsed_rail_layout.setSpacing(12)
     collapsed_rail_label = QLabel("FH6")
+    _style_navigation_label(collapsed_rail_label, shell_spec=shell_spec)
     collapsed_rail_layout.addWidget(collapsed_rail_label)
 
     collapsed_nav_list = QListWidget()
@@ -261,7 +278,9 @@ def launch_pyside6_shell_prototype() -> int:
     overlay_layout = QVBoxLayout(overlay_navigation)
     overlay_layout.setContentsMargins(14, 16, 14, 14)
     overlay_layout.setSpacing(12)
-    overlay_layout.addWidget(QLabel(shell_spec.sidebar_composition.navigation_block_label))
+    overlay_title = QLabel(shell_spec.sidebar_composition.navigation_block_label)
+    _style_navigation_label(overlay_title, shell_spec=shell_spec)
+    overlay_layout.addWidget(overlay_title)
 
     overlay_nav_list = QListWidget()
     overlay_nav_list.setFixedHeight(230)
@@ -278,8 +297,12 @@ def launch_pyside6_shell_prototype() -> int:
 
     overlay_layout.addWidget(overlay_nav_list)
     overlay_layout.addStretch()
-    overlay_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_status))
-    overlay_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_detail))
+    overlay_footer_status = QLabel(shell_spec.sidebar_composition.footer_status)
+    overlay_footer_detail = QLabel(shell_spec.sidebar_composition.footer_detail)
+    _style_footer_label(overlay_footer_status, shell_spec=shell_spec)
+    _style_footer_label(overlay_footer_detail, shell_spec=shell_spec)
+    overlay_layout.addWidget(overlay_footer_status)
+    overlay_layout.addWidget(overlay_footer_detail)
 
     navigation_animation = QPropertyAnimation(overlay_navigation, b"geometry")
     navigation_animation.setDuration(shell_spec.navigation_rail.animation_duration_ms)
@@ -325,7 +348,7 @@ def launch_pyside6_shell_prototype() -> int:
     collapsed_rail_layout.addWidget(collapsed_nav_list)
     collapsed_rail_layout.addStretch()
     footer_label = QLabel(shell_spec.sidebar_composition.footer_status)
-    footer_label.setStyleSheet("color: #6f6b62; font-size: 11px;")
+    _style_footer_label(footer_label, shell_spec=shell_spec)
     collapsed_rail_layout.addWidget(footer_label)
 
     root_layout.addWidget(collapsed_rail)
@@ -545,6 +568,21 @@ def _build_prototype_vertical_rhythm() -> PrototypeVerticalRhythm:
     )
 
 
+def _build_prototype_typography_hierarchy() -> PrototypeTypographyHierarchy:
+    return PrototypeTypographyHierarchy(
+        screen_title_size=20,
+        opening_statement_size=13,
+        section_title_size=13,
+        summary_size=12,
+        detail_size=11,
+        navigation_size=12,
+        footer_size=10,
+        active_navigation_weight=600,
+        secondary_detail_treatment="muted supporting text",
+        hierarchy_principle="scan first, detail second",
+    )
+
+
 def _apply_navigation_list_refinement(
     navigation_list,
     shell_spec: PrototypeShellSpec,
@@ -562,11 +600,13 @@ def _apply_navigation_list_refinement(
             min-height: 34px;
             border-radius: 6px;
             padding: 4px 8px;
+            font-size: 12px;
             color: #3c3933;
         }
         QListWidget::item:selected {
             background: #e3e0d7;
             color: #171510;
+            font-weight: 600;
         }
         QListWidget::item:hover {
             background: #eeece5;
@@ -597,16 +637,25 @@ def _build_screen_widget(
     layout = QVBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(shell_spec.vertical_rhythm.header_spacing)
-    layout.addWidget(QLabel(screen.title))
-    layout.addWidget(QLabel(screen.primary_intention))
+    title_label = QLabel(screen.title)
+    primary_intention_label = QLabel(screen.primary_intention)
+    _style_screen_title(title_label, shell_spec=shell_spec)
+    _style_summary_label(primary_intention_label, shell_spec=shell_spec)
+    layout.addWidget(title_label)
+    layout.addWidget(primary_intention_label)
 
     if home_concept is not None:
-        layout.addWidget(QLabel(home_concept.philosophy_statement))
-        layout.addWidget(QLabel(home_concept.opening_feel))
+        philosophy_label = QLabel(home_concept.philosophy_statement)
+        opening_feel_label = QLabel(home_concept.opening_feel)
+        _style_opening_statement(philosophy_label, shell_spec=shell_spec)
+        _style_detail_label(opening_feel_label, shell_spec=shell_spec)
+        layout.addWidget(philosophy_label)
+        layout.addWidget(opening_feel_label)
         layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
         for signal in home_concept.signals:
             group_box = QGroupBox(f"{signal.zone_role.value.title()} - {signal.title}")
+            _style_group_box(group_box, shell_spec=shell_spec)
             signal_layout = QVBoxLayout(group_box)
             signal_layout.setContentsMargins(
                 shell_spec.vertical_rhythm.group_inner_margin,
@@ -615,7 +664,9 @@ def _build_screen_widget(
                 shell_spec.vertical_rhythm.group_inner_margin,
             )
             signal_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-            signal_layout.addWidget(QLabel(signal.summary))
+            summary_label = QLabel(signal.summary)
+            _style_summary_label(summary_label, shell_spec=shell_spec)
+            signal_layout.addWidget(summary_label)
             layout.addWidget(group_box)
             layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
@@ -631,6 +682,7 @@ def _build_screen_widget(
 
     for zone in screen.zones:
         group_box = QGroupBox(zone.role.value.title())
+        _style_group_box(group_box, shell_spec=shell_spec)
         zone_layout = QVBoxLayout(group_box)
         zone_layout.setContentsMargins(
             shell_spec.vertical_rhythm.group_inner_margin,
@@ -639,7 +691,9 @@ def _build_screen_widget(
             shell_spec.vertical_rhythm.group_inner_margin,
         )
         zone_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-        zone_layout.addWidget(QLabel(zone.purpose))
+        zone_label = QLabel(zone.purpose)
+        _style_detail_label(zone_label, shell_spec=shell_spec)
+        zone_layout.addWidget(zone_label)
         layout.addWidget(group_box)
         layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
@@ -658,8 +712,12 @@ def _build_automation_environment_widget(
     layout = QVBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(shell_spec.vertical_rhythm.header_spacing)
-    layout.addWidget(QLabel(automation_environment.title))
-    layout.addWidget(QLabel(automation_environment.primary_intention))
+    title_label = QLabel(automation_environment.title)
+    primary_intention_label = QLabel(automation_environment.primary_intention)
+    _style_screen_title(title_label, shell_spec=shell_spec)
+    _style_summary_label(primary_intention_label, shell_spec=shell_spec)
+    layout.addWidget(title_label)
+    layout.addWidget(primary_intention_label)
     layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
     for section in automation_environment.sections:
@@ -668,6 +726,7 @@ def _build_automation_environment_widget(
             title = f"{title} (collapsed placeholder)"
 
         group_box = QGroupBox(title)
+        _style_group_box(group_box, shell_spec=shell_spec)
         section_layout = QVBoxLayout(group_box)
         section_layout.setContentsMargins(
             shell_spec.vertical_rhythm.group_inner_margin,
@@ -676,10 +735,14 @@ def _build_automation_environment_widget(
             shell_spec.vertical_rhythm.group_inner_margin,
         )
         section_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-        section_layout.addWidget(QLabel(section.summary))
+        summary_label = QLabel(section.summary)
+        _style_summary_label(summary_label, shell_spec=shell_spec)
+        section_layout.addWidget(summary_label)
 
         for detail in section.details:
-            section_layout.addWidget(QLabel(detail))
+            detail_label = QLabel(detail)
+            _style_detail_label(detail_label, shell_spec=shell_spec)
+            section_layout.addWidget(detail_label)
 
         layout.addWidget(group_box)
         layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
@@ -687,6 +750,74 @@ def _build_automation_environment_widget(
     layout.addStretch()
 
     return container
+
+
+def _style_screen_title(label, shell_spec: PrototypeShellSpec) -> None:
+    label.setStyleSheet(
+        f"font-size: {shell_spec.typography.screen_title_size}px; "
+        "font-weight: 650; color: #171510;"
+    )
+    label.setWordWrap(True)
+
+
+def _style_opening_statement(label, shell_spec: PrototypeShellSpec) -> None:
+    label.setStyleSheet(
+        f"font-size: {shell_spec.typography.opening_statement_size}px; "
+        "font-weight: 500; color: #2d2a24;"
+    )
+    label.setWordWrap(True)
+
+
+def _style_summary_label(label, shell_spec: PrototypeShellSpec) -> None:
+    label.setStyleSheet(
+        f"font-size: {shell_spec.typography.summary_size}px; "
+        "font-weight: 500; color: #2f2c26;"
+    )
+    label.setWordWrap(True)
+
+
+def _style_detail_label(label, shell_spec: PrototypeShellSpec) -> None:
+    label.setStyleSheet(
+        f"font-size: {shell_spec.typography.detail_size}px; "
+        "font-weight: 400; color: #6a665d;"
+    )
+    label.setWordWrap(True)
+
+
+def _style_navigation_label(label, shell_spec: PrototypeShellSpec) -> None:
+    label.setStyleSheet(
+        f"font-size: {shell_spec.typography.navigation_size}px; "
+        "font-weight: 600; color: #27241f;"
+    )
+
+
+def _style_footer_label(label, shell_spec: PrototypeShellSpec) -> None:
+    label.setStyleSheet(
+        f"font-size: {shell_spec.typography.footer_size}px; "
+        "font-weight: 400; color: #777267;"
+    )
+    label.setWordWrap(True)
+
+
+def _style_group_box(group_box, shell_spec: PrototypeShellSpec) -> None:
+    group_box.setStyleSheet(
+        f"""
+        QGroupBox {{
+            font-size: {shell_spec.typography.section_title_size}px;
+            font-weight: 600;
+            color: #24211c;
+            border: 1px solid #dedbd2;
+            border-radius: 6px;
+            margin-top: 9px;
+            background-color: #fffefb;
+        }}
+        QGroupBox::title {{
+            subcontrol-origin: margin;
+            left: 9px;
+            padding: 0 4px;
+        }}
+        """
+    )
 
 
 def _vertical_separator(frame_type):

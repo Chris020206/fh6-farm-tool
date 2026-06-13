@@ -124,6 +124,22 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertFalse(rhythm.introduces_scrolling)
         self.assertEqual("restrained but not empty", rhythm.density_principle)
 
+    def test_typography_hierarchy_supports_scan_first_reading(self) -> None:
+        typography = self.shell_spec.typography
+
+        self.assertEqual(20, typography.screen_title_size)
+        self.assertEqual(13, typography.opening_statement_size)
+        self.assertEqual(13, typography.section_title_size)
+        self.assertEqual(12, typography.summary_size)
+        self.assertEqual(11, typography.detail_size)
+        self.assertEqual(12, typography.navigation_size)
+        self.assertEqual(10, typography.footer_size)
+        self.assertEqual(600, typography.active_navigation_weight)
+        self.assertGreater(typography.screen_title_size, typography.summary_size)
+        self.assertGreater(typography.summary_size, typography.detail_size)
+        self.assertEqual("muted supporting text", typography.secondary_detail_treatment)
+        self.assertEqual("scan first, detail second", typography.hierarchy_principle)
+
     def test_home_concept_is_single_frame_and_not_dashboard_like(self) -> None:
         home = self.shell_spec.home_concept
 
