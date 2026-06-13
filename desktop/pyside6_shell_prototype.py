@@ -77,12 +77,22 @@ class PrototypeHomeConcept:
 
 
 @dataclass(frozen=True)
+class PrototypeSidebarComposition:
+    navigation_block_label: str
+    footer_status: str
+    footer_detail: str
+    is_compact_navigation: bool
+    has_structural_closure: bool
+
+
+@dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
     sidebar_destinations: tuple[SidebarDestination, ...]
     screens: tuple[PrototypeScreen, ...]
     automation_environment: PrototypeAutomationEnvironment
     home_concept: PrototypeHomeConcept
+    sidebar_composition: PrototypeSidebarComposition
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -97,6 +107,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         ),
         automation_environment=_build_prototype_automation_environment(),
         home_concept=_build_prototype_home_concept(),
+        sidebar_composition=_build_prototype_sidebar_composition(),
     )
 
 
@@ -132,9 +143,18 @@ def launch_pyside6_shell_prototype() -> int:
     root = QWidget()
     root_layout = QHBoxLayout(root)
 
+    sidebar_container = QWidget()
+    sidebar_container.setFixedWidth(220)
+    sidebar_container.setSizePolicy(
+        QSizePolicy.Policy.Fixed,
+        QSizePolicy.Policy.Expanding,
+    )
+    sidebar_layout = QVBoxLayout(sidebar_container)
+    sidebar_layout.addWidget(QLabel(shell_spec.sidebar_composition.navigation_block_label))
+
     sidebar = QListWidget()
-    sidebar.setFixedWidth(220)
-    sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+    sidebar.setFixedHeight(190)
+    sidebar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     stacked_screens = QStackedWidget()
 
@@ -158,12 +178,17 @@ def launch_pyside6_shell_prototype() -> int:
 
     stacked_screens.addWidget(
         _build_automation_environment_widget(shell_spec.automation_environment)
-    )
+        )
 
     sidebar.currentRowChanged.connect(stacked_screens.setCurrentIndex)
     sidebar.setCurrentRow(0)
 
-    root_layout.addWidget(sidebar)
+    sidebar_layout.addWidget(sidebar)
+    sidebar_layout.addStretch()
+    sidebar_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_status))
+    sidebar_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_detail))
+
+    root_layout.addWidget(sidebar_container)
     root_layout.addWidget(_vertical_separator(QFrame))
     root_layout.addWidget(stacked_screens)
 
@@ -330,6 +355,16 @@ def _build_prototype_home_concept() -> PrototypeHomeConcept:
                 zone_role=ZoneRole.TERTIARY,
             ),
         ),
+    )
+
+
+def _build_prototype_sidebar_composition() -> PrototypeSidebarComposition:
+    return PrototypeSidebarComposition(
+        navigation_block_label="FH6 Farm Tool",
+        footer_status="Controlled MVP",
+        footer_detail="Manual operation ready",
+        is_compact_navigation=True,
+        has_structural_closure=True,
     )
 
 

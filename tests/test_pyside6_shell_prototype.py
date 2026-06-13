@@ -26,6 +26,15 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
             destination_ids,
         )
 
+    def test_sidebar_composition_is_compact_and_closed(self) -> None:
+        sidebar = self.shell_spec.sidebar_composition
+
+        self.assertTrue(sidebar.is_compact_navigation)
+        self.assertTrue(sidebar.has_structural_closure)
+        self.assertEqual("FH6 Farm Tool", sidebar.navigation_block_label)
+        self.assertEqual("Controlled MVP", sidebar.footer_status)
+        self.assertEqual("Manual operation ready", sidebar.footer_detail)
+
     def test_placeholder_screens_match_sidebar_destinations(self) -> None:
         sidebar_screen_ids = tuple(
             destination.screen_id
