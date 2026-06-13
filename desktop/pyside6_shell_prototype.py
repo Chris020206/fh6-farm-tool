@@ -91,6 +91,11 @@ class PrototypeNavigationRail:
     expanded_width: int
     expansion_trigger: str
     animation_duration_ms: int
+    item_height: int
+    item_spacing: int
+    active_state_treatment: str
+    overlay_treatment: str
+    footer_treatment: str
     is_miniature: bool
     is_low_emphasis: bool
     reserves_collapsed_space: bool
@@ -164,6 +169,8 @@ def launch_pyside6_shell_prototype() -> int:
 
     root = QWidget()
     root_layout = QHBoxLayout(root)
+    root_layout.setContentsMargins(0, 0, 0, 0)
+    root_layout.setSpacing(0)
 
     collapsed_rail = QWidget()
     collapsed_rail.setFixedWidth(shell_spec.navigation_rail.collapsed_width)
@@ -171,16 +178,27 @@ def launch_pyside6_shell_prototype() -> int:
         QSizePolicy.Policy.Fixed,
         QSizePolicy.Policy.Expanding,
     )
+    collapsed_rail.setStyleSheet(
+        "background-color: #f5f5f2; border-right: 1px solid #d8d6cf;"
+    )
     collapsed_rail_layout = QVBoxLayout(collapsed_rail)
+    collapsed_rail_layout.setContentsMargins(8, 14, 8, 12)
+    collapsed_rail_layout.setSpacing(12)
     collapsed_rail_label = QLabel("FH6")
     collapsed_rail_layout.addWidget(collapsed_rail_label)
 
     collapsed_nav_list = QListWidget()
-    collapsed_nav_list.setFixedHeight(190)
+    collapsed_nav_list.setFixedHeight(230)
     collapsed_nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    _apply_navigation_list_refinement(
+        collapsed_nav_list,
+        shell_spec=shell_spec,
+        collapsed=True,
+    )
 
     main_area = QWidget()
     main_area_layout = QVBoxLayout(main_area)
+    main_area_layout.setContentsMargins(14, 14, 14, 14)
     stacked_screens = QStackedWidget()
     main_area_layout.addWidget(stacked_screens)
 
@@ -211,14 +229,24 @@ def launch_pyside6_shell_prototype() -> int:
     overlay_navigation = QWidget(main_area)
     overlay_navigation.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
     overlay_navigation.setGeometry(QRect(0, 0, 0, main_area.height()))
+    overlay_navigation.setStyleSheet(
+        "background-color: #fbfaf7; border-right: 1px solid #d0cdc5;"
+    )
     overlay_navigation.raise_()
 
     overlay_layout = QVBoxLayout(overlay_navigation)
+    overlay_layout.setContentsMargins(14, 16, 14, 14)
+    overlay_layout.setSpacing(12)
     overlay_layout.addWidget(QLabel(shell_spec.sidebar_composition.navigation_block_label))
 
     overlay_nav_list = QListWidget()
-    overlay_nav_list.setFixedHeight(190)
+    overlay_nav_list.setFixedHeight(230)
     overlay_nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    _apply_navigation_list_refinement(
+        overlay_nav_list,
+        shell_spec=shell_spec,
+        collapsed=False,
+    )
     for screen in shell_spec.screens:
         item = QListWidgetItem(screen.title)
         item.setData(256, screen.screen_id.value)
@@ -272,7 +300,9 @@ def launch_pyside6_shell_prototype() -> int:
 
     collapsed_rail_layout.addWidget(collapsed_nav_list)
     collapsed_rail_layout.addStretch()
-    collapsed_rail_layout.addWidget(QLabel(shell_spec.sidebar_composition.footer_status))
+    footer_label = QLabel(shell_spec.sidebar_composition.footer_status)
+    footer_label.setStyleSheet("color: #6f6b62; font-size: 11px;")
+    collapsed_rail_layout.addWidget(footer_label)
 
     root_layout.addWidget(collapsed_rail)
     root_layout.addWidget(_vertical_separator(QFrame))
@@ -460,16 +490,61 @@ def _build_prototype_sidebar_composition() -> PrototypeSidebarComposition:
 
 def _build_prototype_navigation_rail() -> PrototypeNavigationRail:
     return PrototypeNavigationRail(
-        collapsed_width=72,
-        expanded_width=168,
+        collapsed_width=64,
+        expanded_width=184,
         expansion_trigger="hover",
         animation_duration_ms=200,
+        item_height=34,
+        item_spacing=8,
+        active_state_treatment="soft filled selection with clear contrast",
+        overlay_treatment="quiet floating panel with restrained hierarchy",
+        footer_treatment="low-emphasis operational status",
         is_miniature=True,
         is_low_emphasis=True,
         reserves_collapsed_space=True,
         overlays_main_content=True,
         reflows_main_content_on_hover=False,
     )
+
+
+def _apply_navigation_list_refinement(
+    navigation_list,
+    shell_spec: PrototypeShellSpec,
+    collapsed: bool,
+) -> None:
+    navigation_list.setSpacing(shell_spec.navigation_rail.item_spacing)
+    navigation_list.setStyleSheet(
+        """
+        QListWidget {
+            background: transparent;
+            border: none;
+            outline: none;
+        }
+        QListWidget::item {
+            min-height: 34px;
+            border-radius: 6px;
+            padding: 4px 8px;
+            color: #3c3933;
+        }
+        QListWidget::item:selected {
+            background: #e3e0d7;
+            color: #171510;
+        }
+        QListWidget::item:hover {
+            background: #eeece5;
+        }
+        """
+    )
+    if collapsed:
+        navigation_list.setStyleSheet(
+            navigation_list.styleSheet()
+            + """
+            QListWidget::item {
+                text-align: center;
+                padding: 4px 0;
+            }
+            """
+        )
 
 
 def _build_screen_widget(

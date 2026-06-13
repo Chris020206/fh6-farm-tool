@@ -40,9 +40,27 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
 
         self.assertTrue(navigation_rail.is_miniature)
         self.assertTrue(navigation_rail.is_low_emphasis)
-        self.assertEqual(72, navigation_rail.collapsed_width)
-        self.assertEqual(168, navigation_rail.expanded_width)
+        self.assertEqual(64, navigation_rail.collapsed_width)
+        self.assertEqual(184, navigation_rail.expanded_width)
         self.assertEqual("hover", navigation_rail.expansion_trigger)
+
+    def test_navigation_rail_visual_refinement_is_restrained(self) -> None:
+        navigation_rail = self.shell_spec.navigation_rail
+
+        self.assertEqual(34, navigation_rail.item_height)
+        self.assertEqual(8, navigation_rail.item_spacing)
+        self.assertEqual(
+            "soft filled selection with clear contrast",
+            navigation_rail.active_state_treatment,
+        )
+        self.assertEqual(
+            "quiet floating panel with restrained hierarchy",
+            navigation_rail.overlay_treatment,
+        )
+        self.assertEqual(
+            "low-emphasis operational status",
+            navigation_rail.footer_treatment,
+        )
 
     def test_navigation_rail_reserves_space_and_overlays_without_reflow(self) -> None:
         navigation_rail = self.shell_spec.navigation_rail
