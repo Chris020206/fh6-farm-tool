@@ -134,6 +134,17 @@ class PrototypeTypographyHierarchy:
 
 
 @dataclass(frozen=True)
+class PrototypeVisualComposition:
+    uses_custom_cards: bool
+    home_hero_treatment: str
+    card_treatment: str
+    secondary_treatment: str
+    commitment_treatment: str
+    background_treatment: str
+    composition_principle: str
+
+
+@dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
     window_width: int
@@ -147,6 +158,7 @@ class PrototypeShellSpec:
     navigation_rail: PrototypeNavigationRail
     vertical_rhythm: PrototypeVerticalRhythm
     typography: PrototypeTypographyHierarchy
+    visual_composition: PrototypeVisualComposition
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -168,6 +180,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         navigation_rail=_build_prototype_navigation_rail(),
         vertical_rhythm=_build_prototype_vertical_rhythm(),
         typography=_build_prototype_typography_hierarchy(),
+        visual_composition=_build_prototype_visual_composition(),
     )
 
 
@@ -232,6 +245,7 @@ def launch_pyside6_shell_prototype() -> int:
     )
 
     main_area = QWidget()
+    main_area.setStyleSheet("background-color: #f8f5ee;")
     main_area_layout = QVBoxLayout(main_area)
     main_area_layout.setContentsMargins(
         shell_spec.vertical_rhythm.content_margin,
@@ -589,6 +603,18 @@ def _build_prototype_typography_hierarchy() -> PrototypeTypographyHierarchy:
     )
 
 
+def _build_prototype_visual_composition() -> PrototypeVisualComposition:
+    return PrototypeVisualComposition(
+        uses_custom_cards=True,
+        home_hero_treatment="warm quiet launch surface",
+        card_treatment="soft raised utility card",
+        secondary_treatment="muted contextual support",
+        commitment_treatment="deliberate calm action",
+        background_treatment="warm companion canvas",
+        composition_principle="designed surface over default widgets",
+    )
+
+
 def _apply_navigation_list_refinement(
     navigation_list,
     shell_spec: PrototypeShellSpec,
@@ -651,29 +677,27 @@ def _build_screen_widget(
     layout.addWidget(primary_intention_label)
 
     if home_concept is not None:
-        philosophy_label = QLabel(home_concept.philosophy_statement)
-        opening_feel_label = QLabel(home_concept.opening_feel)
-        _style_opening_statement(philosophy_label, shell_spec=shell_spec)
-        _style_detail_label(opening_feel_label, shell_spec=shell_spec)
-        layout.addWidget(philosophy_label)
-        layout.addWidget(opening_feel_label)
+        layout.addWidget(
+            _build_visual_card(
+                title="What matters now",
+                summary=home_concept.philosophy_statement,
+                details=(home_concept.opening_feel,),
+                shell_spec=shell_spec,
+                treatment="hero",
+            )
+        )
         layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
         for signal in home_concept.signals:
-            group_box = QGroupBox(signal.title)
-            _style_group_box(group_box, shell_spec=shell_spec)
-            signal_layout = QVBoxLayout(group_box)
-            signal_layout.setContentsMargins(
-                shell_spec.vertical_rhythm.group_inner_margin,
-                shell_spec.vertical_rhythm.group_inner_margin,
-                shell_spec.vertical_rhythm.group_inner_margin,
-                shell_spec.vertical_rhythm.group_inner_margin,
+            layout.addWidget(
+                _build_visual_card(
+                    title=signal.title,
+                    summary=signal.summary,
+                    details=(),
+                    shell_spec=shell_spec,
+                    treatment=signal.zone_role.value,
+                )
             )
-            signal_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-            summary_label = QLabel(signal.summary)
-            _style_summary_label(summary_label, shell_spec=shell_spec)
-            signal_layout.addWidget(summary_label)
-            layout.addWidget(group_box)
             layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
     if open_automation_environment is not None:
@@ -682,6 +706,7 @@ def _build_screen_widget(
             if home_concept is not None
             else "Open Automation Environment Prototype"
         )
+        _style_primary_button(button, shell_spec=shell_spec)
         button.clicked.connect(open_automation_environment)
         layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
         layout.addWidget(button)
@@ -716,7 +741,7 @@ def _build_automation_environment_widget(
     automation_environment: PrototypeAutomationEnvironment,
     shell_spec: PrototypeShellSpec,
 ):
-    from PySide6.QtWidgets import QGroupBox, QLabel, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
     container = QWidget()
     layout = QVBoxLayout(container)
@@ -735,31 +760,133 @@ def _build_automation_environment_widget(
         if section.is_collapsed_feeling:
             title = f"{title} (secondary)"
 
-        group_box = QGroupBox(title)
-        _style_group_box(group_box, shell_spec=shell_spec)
-        section_layout = QVBoxLayout(group_box)
-        section_layout.setContentsMargins(
-            shell_spec.vertical_rhythm.group_inner_margin,
-            shell_spec.vertical_rhythm.group_inner_margin,
-            shell_spec.vertical_rhythm.group_inner_margin,
-            shell_spec.vertical_rhythm.group_inner_margin,
+        layout.addWidget(
+            _build_visual_card(
+                title=title,
+                summary=section.summary,
+                details=section.details,
+                shell_spec=shell_spec,
+                treatment=section.readability_treatment,
+            )
         )
-        section_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-        summary_label = QLabel(section.summary)
-        _style_summary_label(summary_label, shell_spec=shell_spec)
-        section_layout.addWidget(summary_label)
-
-        for detail in section.details:
-            detail_label = QLabel(detail)
-            _style_detail_label(detail_label, shell_spec=shell_spec)
-            section_layout.addWidget(detail_label)
-
-        layout.addWidget(group_box)
         layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
     layout.addStretch()
 
     return container
+
+
+def _build_visual_card(
+    title: str,
+    summary: str,
+    details: tuple[str, ...],
+    shell_spec: PrototypeShellSpec,
+    treatment: str,
+):
+    from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+
+    card = QFrame()
+    card.setFrameShape(QFrame.Shape.NoFrame)
+    _style_visual_card(card, treatment=treatment)
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.group_inner_margin + 2,
+        shell_spec.vertical_rhythm.group_inner_margin,
+        shell_spec.vertical_rhythm.group_inner_margin + 2,
+        shell_spec.vertical_rhythm.group_inner_margin,
+    )
+    card_layout.setSpacing(6)
+
+    title_label = QLabel(title)
+    summary_label = QLabel(summary)
+    _style_card_title(title_label, shell_spec=shell_spec, treatment=treatment)
+    _style_summary_label(summary_label, shell_spec=shell_spec)
+    card_layout.addWidget(title_label)
+    card_layout.addWidget(summary_label)
+
+    for detail in details:
+        detail_label = QLabel(detail)
+        _style_detail_label(detail_label, shell_spec=shell_spec)
+        card_layout.addWidget(detail_label)
+
+    return card
+
+
+def _style_visual_card(card, treatment: str) -> None:
+    if treatment == "hero":
+        card.setStyleSheet(
+            """
+            QFrame {
+                background-color: #fffdf8;
+                border: 1px solid #d8d2c4;
+                border-left: 4px solid #8d8067;
+                border-radius: 8px;
+            }
+            """
+        )
+        return
+
+    if "tertiary" in treatment:
+        card.setStyleSheet(
+            """
+            QFrame {
+                background-color: #f2efe7;
+                border: 1px solid #ded9cc;
+                border-radius: 7px;
+            }
+            """
+        )
+        return
+
+    if "secondary" in treatment:
+        card.setStyleSheet(
+            """
+            QFrame {
+                background-color: #f7f3ea;
+                border: 1px solid #ded8ca;
+                border-radius: 7px;
+            }
+            """
+        )
+        return
+
+    if "commitment" in treatment:
+        card.setStyleSheet(
+            """
+            QFrame {
+                background-color: #fffaf0;
+                border: 1px solid #cfc5b0;
+                border-left: 4px solid #7f755f;
+                border-radius: 8px;
+            }
+            """
+        )
+        return
+
+    card.setStyleSheet(
+        """
+        QFrame {
+            background-color: #fffefb;
+            border: 1px solid #ded8ca;
+            border-radius: 7px;
+        }
+        """
+    )
+
+
+def _style_card_title(label, shell_spec: PrototypeShellSpec, treatment: str) -> None:
+    color = "#24211c"
+    weight = 620
+    if "secondary" in treatment or "tertiary" in treatment:
+        color = "#514b40"
+        weight = 560
+
+    label.setStyleSheet(
+        f"font-size: {shell_spec.typography.section_title_size}px; "
+        f"font-weight: {weight}; color: {color};"
+    )
+    label.setWordWrap(True)
 
 
 def _style_screen_title(label, shell_spec: PrototypeShellSpec) -> None:
@@ -807,6 +934,28 @@ def _style_footer_label(label, shell_spec: PrototypeShellSpec) -> None:
         "font-weight: 400; color: #777267;"
     )
     label.setWordWrap(True)
+
+
+def _style_primary_button(button, shell_spec: PrototypeShellSpec) -> None:
+    button.setStyleSheet(
+        f"""
+        QPushButton {{
+            font-size: {shell_spec.typography.summary_size}px;
+            font-weight: 620;
+            color: #1f1c17;
+            background-color: #e8e1d3;
+            border: 1px solid #cfc5b0;
+            border-radius: 7px;
+            padding: 8px 10px;
+        }}
+        QPushButton:hover {{
+            background-color: #ddd4c3;
+        }}
+        QPushButton:pressed {{
+            background-color: #d1c5b2;
+        }}
+        """
+    )
 
 
 def _style_group_box(group_box, shell_spec: PrototypeShellSpec) -> None:

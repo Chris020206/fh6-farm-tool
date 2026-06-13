@@ -140,6 +140,31 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertEqual("muted supporting text", typography.secondary_detail_treatment)
         self.assertEqual("scan first, detail second", typography.hierarchy_principle)
 
+    def test_visual_composition_moves_beyond_default_widgets(self) -> None:
+        visual_composition = self.shell_spec.visual_composition
+
+        self.assertTrue(visual_composition.uses_custom_cards)
+        self.assertEqual(
+            "warm quiet launch surface",
+            visual_composition.home_hero_treatment,
+        )
+        self.assertEqual(
+            "soft raised utility card",
+            visual_composition.card_treatment,
+        )
+        self.assertEqual(
+            "muted contextual support",
+            visual_composition.secondary_treatment,
+        )
+        self.assertEqual(
+            "deliberate calm action",
+            visual_composition.commitment_treatment,
+        )
+        self.assertEqual(
+            "designed surface over default widgets",
+            visual_composition.composition_principle,
+        )
+
     def test_home_concept_is_single_frame_and_not_dashboard_like(self) -> None:
         home = self.shell_spec.home_concept
 
