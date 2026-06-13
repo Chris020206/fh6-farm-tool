@@ -147,6 +147,14 @@ class PrototypeVisualComposition:
 
 
 @dataclass(frozen=True)
+class PrototypeTopBar:
+    title: str
+    height: int
+    treatment: str
+    reserves_identity_space: bool
+
+
+@dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
     window_width: int
@@ -161,6 +169,7 @@ class PrototypeShellSpec:
     vertical_rhythm: PrototypeVerticalRhythm
     typography: PrototypeTypographyHierarchy
     visual_composition: PrototypeVisualComposition
+    top_bar: PrototypeTopBar
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -183,6 +192,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         vertical_rhythm=_build_prototype_vertical_rhythm(),
         typography=_build_prototype_typography_hierarchy(),
         visual_composition=_build_prototype_visual_composition(),
+        top_bar=_build_prototype_top_bar(),
     )
 
 
@@ -197,6 +207,7 @@ def launch_pyside6_shell_prototype() -> int:
             QListWidget,
             QListWidgetItem,
             QMainWindow,
+            QPushButton,
             QSizePolicy,
             QStackedWidget,
             QVBoxLayout,
@@ -211,29 +222,24 @@ def launch_pyside6_shell_prototype() -> int:
 
     shell_spec = build_prototype_shell_spec()
     app = QApplication(sys.argv)
-    app.setStyleSheet(
-        """
-        QWidget {
-            font-family: "Segoe UI";
-        }
-        QMainWindow {
-            background-color: #111315;
-        }
-        QStackedWidget {
-            background: transparent;
-            border: none;
-        }
-        """
-    )
+    app.setStyleSheet(_global_stylesheet())
+
     window = QMainWindow()
     window.setWindowTitle(shell_spec.window_title)
     window.setFixedSize(shell_spec.window_width, shell_spec.window_height)
 
     root = QWidget()
     root.setStyleSheet("background-color: #111315;")
-    root_layout = QHBoxLayout(root)
+    root_layout = QVBoxLayout(root)
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(0)
+
+    root_layout.addWidget(_build_top_bar_widget(shell_spec, QLabel))
+
+    body = QWidget()
+    body_layout = QHBoxLayout(body)
+    body_layout.setContentsMargins(0, 0, 0, 0)
+    body_layout.setSpacing(0)
 
     collapsed_rail = QWidget()
     collapsed_rail.setFixedWidth(shell_spec.navigation_rail.collapsed_width)
@@ -245,14 +251,11 @@ def launch_pyside6_shell_prototype() -> int:
         "background-color: #101214; border-right: 1px solid #282b2d;"
     )
     collapsed_rail_layout = QVBoxLayout(collapsed_rail)
-    collapsed_rail_layout.setContentsMargins(8, 14, 8, 12)
-    collapsed_rail_layout.setSpacing(12)
-    collapsed_rail_label = QLabel("FH6")
-    _style_navigation_label(collapsed_rail_label, shell_spec=shell_spec)
-    collapsed_rail_layout.addWidget(collapsed_rail_label)
+    collapsed_rail_layout.setContentsMargins(8, 12, 8, 12)
+    collapsed_rail_layout.setSpacing(10)
 
     collapsed_nav_list = QListWidget()
-    collapsed_nav_list.setFixedHeight(230)
+    collapsed_nav_list.setFixedHeight(216)
     collapsed_nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     _apply_navigation_list_refinement(
         collapsed_nav_list,
@@ -269,12 +272,11 @@ def launch_pyside6_shell_prototype() -> int:
         shell_spec.vertical_rhythm.content_margin,
         shell_spec.vertical_rhythm.content_margin,
     )
+
     stacked_screens = QStackedWidget()
     main_area_layout.addWidget(stacked_screens)
 
     for screen in shell_spec.screens:
-        item = QListWidgetItem(screen.title)
-        item.setData(256, screen.screen_id.value)
         collapsed_item = QListWidgetItem(screen.title[:1])
         collapsed_item.setData(256, screen.screen_id.value)
         collapsed_nav_list.addItem(collapsed_item)
@@ -316,13 +318,14 @@ def launch_pyside6_shell_prototype() -> int:
     overlay_layout.addWidget(overlay_title)
 
     overlay_nav_list = QListWidget()
-    overlay_nav_list.setFixedHeight(230)
+    overlay_nav_list.setFixedHeight(216)
     overlay_nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     _apply_navigation_list_refinement(
         overlay_nav_list,
         shell_spec=shell_spec,
         collapsed=False,
     )
+
     for screen in shell_spec.screens:
         item = QListWidgetItem(screen.title)
         item.setData(256, screen.screen_id.value)
@@ -384,9 +387,10 @@ def launch_pyside6_shell_prototype() -> int:
     _style_footer_label(footer_label, shell_spec=shell_spec)
     collapsed_rail_layout.addWidget(footer_label)
 
-    root_layout.addWidget(collapsed_rail)
-    root_layout.addWidget(_vertical_separator(QFrame))
-    root_layout.addWidget(main_area)
+    body_layout.addWidget(collapsed_rail)
+    body_layout.addWidget(_vertical_separator(QFrame))
+    body_layout.addWidget(main_area)
+    root_layout.addWidget(body)
 
     main_area.resizeEvent = lambda _event: overlay_navigation.setGeometry(
         QRect(0, 0, overlay_navigation.width(), main_area.height())
@@ -458,10 +462,7 @@ def _build_automation_section(
             section_id=section.section_id,
             title="Overview",
             summary=section.display_name,
-            details=(
-                section.short_purpose,
-                section.expected_baseline,
-            ),
+            details=(section.short_purpose, section.expected_baseline),
             zone_role=ZoneRole.PRIMARY,
             readability_treatment="primary orientation",
         )
@@ -471,10 +472,7 @@ def _build_automation_section(
             section_id=section.section_id,
             title="Profile",
             summary=section.profile_name,
-            details=(
-                section.behavior_summary,
-                section.reliability_posture,
-            ),
+            details=(section.behavior_summary, section.reliability_posture),
             zone_role=ZoneRole.PRIMARY,
             readability_treatment="primary behavior summary",
         )
@@ -484,10 +482,7 @@ def _build_automation_section(
             section_id=section.section_id,
             title="Readiness",
             summary=section.readiness_wording,
-            details=(
-                section.expected_baseline,
-                section.focus_requirement,
-            )
+            details=(section.expected_baseline, section.focus_requirement)
             + section.confidence_notes[:1],
             zone_role=ZoneRole.PRIMARY,
             readability_treatment="primary confidence check",
@@ -633,6 +628,50 @@ def _build_prototype_visual_composition() -> PrototypeVisualComposition:
     )
 
 
+def _build_prototype_top_bar() -> PrototypeTopBar:
+    return PrototypeTopBar(
+        title="FH6 Farm Tool",
+        height=42,
+        treatment="restrained product identity bar",
+        reserves_identity_space=True,
+    )
+
+
+def _global_stylesheet() -> str:
+    return """
+    QWidget {
+        font-family: "Segoe UI";
+    }
+    QMainWindow {
+        background-color: #111315;
+    }
+    QStackedWidget {
+        background: transparent;
+        border: none;
+    }
+    """
+
+
+def _build_top_bar_widget(shell_spec: PrototypeShellSpec, label_type):
+    from PySide6.QtWidgets import QHBoxLayout, QWidget
+
+    top_bar = QWidget()
+    top_bar.setFixedHeight(shell_spec.top_bar.height)
+    top_bar.setStyleSheet(
+        "background-color: #0f1113; border-bottom: 1px solid #2d3032;"
+    )
+    layout = QHBoxLayout(top_bar)
+    layout.setContentsMargins(16, 0, 16, 0)
+    layout.setSpacing(8)
+
+    title_label = label_type(shell_spec.top_bar.title)
+    title_label.setStyleSheet("font-size: 13px; font-weight: 650; color: #f1e6d2;")
+    layout.addWidget(title_label)
+    layout.addStretch()
+
+    return top_bar
+
+
 def _apply_navigation_list_refinement(
     navigation_list,
     shell_spec: PrototypeShellSpec,
@@ -645,6 +684,11 @@ def _apply_navigation_list_refinement(
             background: transparent;
             border: none;
             outline: none;
+        }
+        QScrollBar:vertical, QScrollBar:horizontal {
+            width: 0px;
+            height: 0px;
+            background: transparent;
         }
         QListWidget::item {
             min-height: 34px;
@@ -717,7 +761,6 @@ def _build_screen_widget(
         layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
     layout.addStretch()
-
     return container
 
 
@@ -746,7 +789,6 @@ def _build_automation_environment_widget(
     )
 
     layout.addStretch()
-
     return container
 
 
@@ -769,48 +811,50 @@ def _build_home_screen_content(
     )
     layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
-    first_row = _build_card_row(
-        cards=(
-            _build_visual_card(
-                title=home_concept.signals[0].title,
-                summary=home_concept.signals[0].summary,
-                details=(),
-                shell_spec=shell_spec,
-                treatment="primary",
+    layout.addLayout(
+        _build_card_row(
+            cards=(
+                _build_visual_card(
+                    title=home_concept.signals[0].title,
+                    summary=home_concept.signals[0].summary,
+                    details=(),
+                    shell_spec=shell_spec,
+                    treatment="primary",
+                ),
+                _build_visual_card(
+                    title=home_concept.signals[1].title,
+                    summary=home_concept.signals[1].summary,
+                    details=(),
+                    shell_spec=shell_spec,
+                    treatment="primary",
+                ),
             ),
-            _build_visual_card(
-                title=home_concept.signals[1].title,
-                summary=home_concept.signals[1].summary,
-                details=(),
-                shell_spec=shell_spec,
-                treatment="primary",
-            ),
-        ),
-        shell_spec=shell_spec,
+            shell_spec=shell_spec,
+        )
     )
-    layout.addLayout(first_row)
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
-    second_row = _build_card_row(
-        cards=(
-            _build_visual_card(
-                title=home_concept.signals[2].title,
-                summary=home_concept.signals[2].summary,
-                details=(),
-                shell_spec=shell_spec,
-                treatment="secondary",
+    layout.addLayout(
+        _build_card_row(
+            cards=(
+                _build_visual_card(
+                    title=home_concept.signals[2].title,
+                    summary=home_concept.signals[2].summary,
+                    details=(),
+                    shell_spec=shell_spec,
+                    treatment="secondary",
+                ),
+                _build_visual_card(
+                    title=home_concept.signals[3].title,
+                    summary=home_concept.signals[3].summary,
+                    details=(),
+                    shell_spec=shell_spec,
+                    treatment="tertiary",
+                ),
             ),
-            _build_visual_card(
-                title=home_concept.signals[3].title,
-                summary=home_concept.signals[3].summary,
-                details=(),
-                shell_spec=shell_spec,
-                treatment="tertiary",
-            ),
-        ),
-        shell_spec=shell_spec,
+            shell_spec=shell_spec,
+        )
     )
-    layout.addLayout(second_row)
 
     if open_automation_environment is not None:
         button = QPushButton(home_concept.primary_action_label)
@@ -1009,14 +1053,6 @@ def _style_screen_title(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.screen_title_size}px; "
         "font-weight: 650; color: #f5ead8;"
-    )
-    label.setWordWrap(True)
-
-
-def _style_opening_statement(label, shell_spec: PrototypeShellSpec) -> None:
-    label.setStyleSheet(
-        f"font-size: {shell_spec.typography.opening_statement_size}px; "
-        "font-weight: 500; color: #ddd0ba;"
     )
     label.setWordWrap(True)
 
