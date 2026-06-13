@@ -104,6 +104,19 @@ class PrototypeNavigationRail:
 
 
 @dataclass(frozen=True)
+class PrototypeVerticalRhythm:
+    content_margin: int
+    header_spacing: int
+    section_spacing: int
+    group_spacing: int
+    group_inner_margin: int
+    important_element_spacing: int
+    is_single_frame: bool
+    introduces_scrolling: bool
+    density_principle: str
+
+
+@dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
     window_width: int
@@ -115,6 +128,7 @@ class PrototypeShellSpec:
     home_concept: PrototypeHomeConcept
     sidebar_composition: PrototypeSidebarComposition
     navigation_rail: PrototypeNavigationRail
+    vertical_rhythm: PrototypeVerticalRhythm
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -134,6 +148,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         home_concept=_build_prototype_home_concept(),
         sidebar_composition=_build_prototype_sidebar_composition(),
         navigation_rail=_build_prototype_navigation_rail(),
+        vertical_rhythm=_build_prototype_vertical_rhythm(),
     )
 
 
@@ -198,7 +213,12 @@ def launch_pyside6_shell_prototype() -> int:
 
     main_area = QWidget()
     main_area_layout = QVBoxLayout(main_area)
-    main_area_layout.setContentsMargins(14, 14, 14, 14)
+    main_area_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.content_margin,
+        shell_spec.vertical_rhythm.content_margin,
+        shell_spec.vertical_rhythm.content_margin,
+        shell_spec.vertical_rhythm.content_margin,
+    )
     stacked_screens = QStackedWidget()
     main_area_layout.addWidget(stacked_screens)
 
@@ -211,6 +231,7 @@ def launch_pyside6_shell_prototype() -> int:
         stacked_screens.addWidget(
             _build_screen_widget(
                 screen,
+                shell_spec=shell_spec,
                 home_concept=shell_spec.home_concept
                 if screen.screen_id == ScreenId.HOME
                 else None,
@@ -223,7 +244,10 @@ def launch_pyside6_shell_prototype() -> int:
         )
 
     stacked_screens.addWidget(
-        _build_automation_environment_widget(shell_spec.automation_environment)
+        _build_automation_environment_widget(
+            shell_spec.automation_environment,
+            shell_spec=shell_spec,
+        )
     )
 
     overlay_navigation = QWidget(main_area)
@@ -507,6 +531,20 @@ def _build_prototype_navigation_rail() -> PrototypeNavigationRail:
     )
 
 
+def _build_prototype_vertical_rhythm() -> PrototypeVerticalRhythm:
+    return PrototypeVerticalRhythm(
+        content_margin=18,
+        header_spacing=8,
+        section_spacing=14,
+        group_spacing=10,
+        group_inner_margin=10,
+        important_element_spacing=16,
+        is_single_frame=True,
+        introduces_scrolling=False,
+        density_principle="restrained but not empty",
+    )
+
+
 def _apply_navigation_list_refinement(
     navigation_list,
     shell_spec: PrototypeShellSpec,
@@ -549,6 +587,7 @@ def _apply_navigation_list_refinement(
 
 def _build_screen_widget(
     screen: PrototypeScreen,
+    shell_spec: PrototypeShellSpec,
     home_concept: PrototypeHomeConcept | None = None,
     open_automation_environment=None,
 ):
@@ -556,45 +595,72 @@ def _build_screen_widget(
 
     container = QWidget()
     layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(shell_spec.vertical_rhythm.header_spacing)
     layout.addWidget(QLabel(screen.title))
     layout.addWidget(QLabel(screen.primary_intention))
 
     if home_concept is not None:
         layout.addWidget(QLabel(home_concept.philosophy_statement))
         layout.addWidget(QLabel(home_concept.opening_feel))
+        layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
         for signal in home_concept.signals:
             group_box = QGroupBox(f"{signal.zone_role.value.title()} - {signal.title}")
             signal_layout = QVBoxLayout(group_box)
+            signal_layout.setContentsMargins(
+                shell_spec.vertical_rhythm.group_inner_margin,
+                shell_spec.vertical_rhythm.group_inner_margin,
+                shell_spec.vertical_rhythm.group_inner_margin,
+                shell_spec.vertical_rhythm.group_inner_margin,
+            )
+            signal_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
             signal_layout.addWidget(QLabel(signal.summary))
             layout.addWidget(group_box)
+            layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
     if open_automation_environment is not None:
         button = QPushButton("Open Automation Environment Prototype")
         button.clicked.connect(open_automation_environment)
+        layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
         layout.addWidget(button)
 
     if home_concept is not None:
+        layout.addStretch()
         return container
 
     for zone in screen.zones:
         group_box = QGroupBox(zone.role.value.title())
         zone_layout = QVBoxLayout(group_box)
+        zone_layout.setContentsMargins(
+            shell_spec.vertical_rhythm.group_inner_margin,
+            shell_spec.vertical_rhythm.group_inner_margin,
+            shell_spec.vertical_rhythm.group_inner_margin,
+            shell_spec.vertical_rhythm.group_inner_margin,
+        )
+        zone_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
         zone_layout.addWidget(QLabel(zone.purpose))
         layout.addWidget(group_box)
+        layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+
+    layout.addStretch()
 
     return container
 
 
 def _build_automation_environment_widget(
     automation_environment: PrototypeAutomationEnvironment,
+    shell_spec: PrototypeShellSpec,
 ):
     from PySide6.QtWidgets import QGroupBox, QLabel, QVBoxLayout, QWidget
 
     container = QWidget()
     layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(shell_spec.vertical_rhythm.header_spacing)
     layout.addWidget(QLabel(automation_environment.title))
     layout.addWidget(QLabel(automation_environment.primary_intention))
+    layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
     for section in automation_environment.sections:
         title = f"{section.zone_role.value.title()} - {section.title}"
@@ -603,12 +669,22 @@ def _build_automation_environment_widget(
 
         group_box = QGroupBox(title)
         section_layout = QVBoxLayout(group_box)
+        section_layout.setContentsMargins(
+            shell_spec.vertical_rhythm.group_inner_margin,
+            shell_spec.vertical_rhythm.group_inner_margin,
+            shell_spec.vertical_rhythm.group_inner_margin,
+            shell_spec.vertical_rhythm.group_inner_margin,
+        )
+        section_layout.setSpacing(shell_spec.vertical_rhythm.group_spacing)
         section_layout.addWidget(QLabel(section.summary))
 
         for detail in section.details:
             section_layout.addWidget(QLabel(detail))
 
         layout.addWidget(group_box)
+        layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+
+    layout.addStretch()
 
     return container
 

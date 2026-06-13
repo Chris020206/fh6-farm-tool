@@ -111,6 +111,19 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
 
+    def test_vertical_rhythm_supports_digestible_single_frame_layout(self) -> None:
+        rhythm = self.shell_spec.vertical_rhythm
+
+        self.assertEqual(18, rhythm.content_margin)
+        self.assertEqual(8, rhythm.header_spacing)
+        self.assertEqual(14, rhythm.section_spacing)
+        self.assertEqual(10, rhythm.group_spacing)
+        self.assertEqual(10, rhythm.group_inner_margin)
+        self.assertEqual(16, rhythm.important_element_spacing)
+        self.assertTrue(rhythm.is_single_frame)
+        self.assertFalse(rhythm.introduces_scrolling)
+        self.assertEqual("restrained but not empty", rhythm.density_principle)
+
     def test_home_concept_is_single_frame_and_not_dashboard_like(self) -> None:
         home = self.shell_spec.home_concept
 
