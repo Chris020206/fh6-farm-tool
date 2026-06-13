@@ -147,6 +147,8 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertFalse(home.is_dashboard_like)
         self.assertIn("Quiet confidence", home.philosophy_statement)
         self.assertIn("launchpad", home.opening_feel)
+        self.assertEqual("recommended next step first", home.composition_principle)
+        self.assertEqual("Prepare Automation", home.primary_action_label)
 
     def test_home_concept_preserves_restrained_signal_set(self) -> None:
         signal_titles = tuple(signal.title for signal in self.shell_spec.home_concept.signals)
@@ -155,8 +157,8 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertEqual(
             (
                 "Recommended Next Step",
-                "Quick Automation Access",
-                "Relevant Activity",
+                "Prepare A Run",
+                "Recent Context",
                 "Quiet Status",
             ),
             signal_titles,

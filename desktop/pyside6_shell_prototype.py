@@ -71,6 +71,8 @@ class PrototypeHomeConcept:
     title: str
     philosophy_statement: str
     opening_feel: str
+    composition_principle: str
+    primary_action_label: str
     is_single_frame: bool
     is_dashboard_like: bool
     signals: tuple[PrototypeHomeSignal, ...]
@@ -497,23 +499,25 @@ def _build_prototype_home_concept() -> PrototypeHomeConcept:
     return PrototypeHomeConcept(
         title="Home",
         philosophy_statement="Quiet confidence before operational commitment.",
-        opening_feel="A restrained launchpad with a slight premium control-room feeling.",
+        opening_feel="A restrained launchpad that presents what matters now.",
+        composition_principle="recommended next step first",
+        primary_action_label="Prepare Automation",
         is_single_frame=True,
         is_dashboard_like=False,
         signals=(
             PrototypeHomeSignal(
                 title="Recommended Next Step",
-                summary="Choose an automation only when the FH6 baseline is ready.",
+                summary="Prepare a supervised run when FH6 is at a known baseline.",
                 zone_role=ZoneRole.PRIMARY,
             ),
             PrototypeHomeSignal(
-                title="Quick Automation Access",
-                summary="Open the Automation Environment for focused preparation.",
+                title="Prepare A Run",
+                summary="Review profile, readiness, warnings, and commitment in one focused place.",
                 zone_role=ZoneRole.PRIMARY,
             ),
             PrototypeHomeSignal(
-                title="Relevant Activity",
-                summary="Recent operational context stays lightweight and reassuring.",
+                title="Recent Context",
+                summary="Recent activity stays lightweight: reassurance, not a dashboard.",
                 zone_role=ZoneRole.SECONDARY,
             ),
             PrototypeHomeSignal(
@@ -654,7 +658,7 @@ def _build_screen_widget(
         layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
         for signal in home_concept.signals:
-            group_box = QGroupBox(f"{signal.zone_role.value.title()} - {signal.title}")
+            group_box = QGroupBox(signal.title)
             _style_group_box(group_box, shell_spec=shell_spec)
             signal_layout = QVBoxLayout(group_box)
             signal_layout.setContentsMargins(
@@ -671,7 +675,11 @@ def _build_screen_widget(
             layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
     if open_automation_environment is not None:
-        button = QPushButton("Open Automation Environment Prototype")
+        button = QPushButton(
+            home_concept.primary_action_label
+            if home_concept is not None
+            else "Open Automation Environment Prototype"
+        )
         button.clicked.connect(open_automation_environment)
         layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
         layout.addWidget(button)
