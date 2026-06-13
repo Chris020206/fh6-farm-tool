@@ -32,7 +32,7 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         risk_level=RiskLevel.CONTROLLED,
         validated_scope="Validated Autoshow purchase traversal.",
         expected_baseline="FH6 positioned at Autoshow with expected cursor placement.",
-        available_profiles=["auto2_conservative"],
+        available_profiles=["auto2_buy_car_default"],
         supported_modes=["single_purchase", "repeat_purchase"],
         contextual_warnings=[
             "Manufacturer ordering assumptions may change in FH6 updates."
@@ -50,7 +50,7 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         risk_level=RiskLevel.CONTROLLED,
         validated_scope="Validated multi-step skill-tree traversal.",
         expected_baseline="FH6 positioned on expected seated vehicle baseline.",
-        available_profiles=["auto3_validated"],
+        available_profiles=["auto3_skill_tree_default"],
         supported_modes=["test", "unlock"],
         contextual_warnings=[
             "Requires validated garage and vehicle positioning assumptions."
