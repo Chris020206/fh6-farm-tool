@@ -88,6 +88,9 @@ class PrototypeSidebarComposition:
 @dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
+    window_width: int
+    window_height: int
+    is_fixed_size: bool
     sidebar_destinations: tuple[SidebarDestination, ...]
     screens: tuple[PrototypeScreen, ...]
     automation_environment: PrototypeAutomationEnvironment
@@ -100,6 +103,9 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
 
     return PrototypeShellSpec(
         window_title="FH6 Farm Tool - PySide6 Shell Prototype",
+        window_width=1024,
+        window_height=576,
+        is_fixed_size=True,
         sidebar_destinations=sidebar_destinations,
         screens=tuple(
             _build_prototype_screen(get_screen_descriptor(destination.screen_id))
@@ -138,7 +144,7 @@ def launch_pyside6_shell_prototype() -> int:
     app = QApplication(sys.argv)
     window = QMainWindow()
     window.setWindowTitle(shell_spec.window_title)
-    window.setFixedSize(1024, 576)
+    window.setFixedSize(shell_spec.window_width, shell_spec.window_height)
 
     root = QWidget()
     root_layout = QHBoxLayout(root)
@@ -178,7 +184,7 @@ def launch_pyside6_shell_prototype() -> int:
 
     stacked_screens.addWidget(
         _build_automation_environment_widget(shell_spec.automation_environment)
-        )
+    )
 
     sidebar.currentRowChanged.connect(stacked_screens.setCurrentIndex)
     sidebar.setCurrentRow(0)

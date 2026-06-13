@@ -68,6 +68,12 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         )
         self.assertEqual(5, len(self.shell_spec.screens))
 
+    def test_prototype_window_is_intentionally_compact_and_fixed(self) -> None:
+        self.assertEqual(1024, self.shell_spec.window_width)
+        self.assertEqual(576, self.shell_spec.window_height)
+        self.assertEqual(16 / 9, self.shell_spec.window_width / self.shell_spec.window_height)
+        self.assertTrue(self.shell_spec.is_fixed_size)
+
     def test_home_concept_is_single_frame_and_not_dashboard_like(self) -> None:
         home = self.shell_spec.home_concept
 
