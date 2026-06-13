@@ -138,7 +138,7 @@ def launch_pyside6_shell_prototype() -> int:
     app = QApplication(sys.argv)
     window = QMainWindow()
     window.setWindowTitle(shell_spec.window_title)
-    window.resize(1100, 720)
+    window.setFixedSize(1024, 576)
 
     root = QWidget()
     root_layout = QHBoxLayout(root)
