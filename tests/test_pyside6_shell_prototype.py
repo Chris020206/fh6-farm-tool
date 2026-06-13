@@ -225,6 +225,60 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertNotIn("execute", run.summary.lower())
         self.assertNotIn("start automation", run.summary.lower())
 
+    def test_automation_environment_readability_treatments_reduce_equal_weight(self) -> None:
+        sections_by_id = {
+            section.section_id: section
+            for section in self.shell_spec.automation_environment.sections
+        }
+
+        self.assertEqual(
+            "primary orientation",
+            sections_by_id[
+                AutomationEnvironmentSectionId.OVERVIEW
+            ].readability_treatment,
+        )
+        self.assertEqual(
+            "primary confidence check",
+            sections_by_id[
+                AutomationEnvironmentSectionId.READINESS
+            ].readability_treatment,
+        )
+        self.assertEqual(
+            "secondary contextual support",
+            sections_by_id[
+                AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS
+            ].readability_treatment,
+        )
+        self.assertEqual(
+            "tertiary collapsed refinement",
+            sections_by_id[
+                AutomationEnvironmentSectionId.ADVANCED
+            ].readability_treatment,
+        )
+
+    def test_automation_environment_keeps_details_digestible(self) -> None:
+        sections_by_id = {
+            section.section_id: section
+            for section in self.shell_spec.automation_environment.sections
+        }
+
+        self.assertLessEqual(
+            len(sections_by_id[AutomationEnvironmentSectionId.OVERVIEW].details),
+            2,
+        )
+        self.assertLessEqual(
+            len(sections_by_id[AutomationEnvironmentSectionId.PROFILE].details),
+            2,
+        )
+        self.assertLessEqual(
+            len(sections_by_id[AutomationEnvironmentSectionId.READINESS].details),
+            3,
+        )
+        self.assertLessEqual(
+            len(sections_by_id[AutomationEnvironmentSectionId.RUN].details),
+            2,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

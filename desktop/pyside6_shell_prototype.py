@@ -49,6 +49,7 @@ class PrototypeAutomationEnvironmentSection:
     summary: str
     details: tuple[str, ...]
     zone_role: ZoneRole
+    readability_treatment: str
     is_collapsed_feeling: bool = False
 
 
@@ -429,10 +430,10 @@ def _build_automation_section(
             summary=section.display_name,
             details=(
                 section.short_purpose,
-                section.validated_scope,
                 section.expected_baseline,
             ),
             zone_role=ZoneRole.PRIMARY,
+            readability_treatment="primary orientation",
         )
 
     if isinstance(section, ProfileSection):
@@ -443,9 +444,9 @@ def _build_automation_section(
             details=(
                 section.behavior_summary,
                 section.reliability_posture,
-                section.customization_status,
             ),
             zone_role=ZoneRole.PRIMARY,
+            readability_treatment="primary behavior summary",
         )
 
     if isinstance(section, ReadinessSection):
@@ -455,12 +456,11 @@ def _build_automation_section(
             summary=section.readiness_wording,
             details=(
                 section.expected_baseline,
-                section.manual_positioning_assumption,
                 section.focus_requirement,
             )
-            + section.recommended_setup
-            + section.confidence_notes,
+            + section.confidence_notes[:1],
             zone_role=ZoneRole.PRIMARY,
+            readability_treatment="primary confidence check",
         )
 
     if isinstance(section, ContextualWarningsSection):
@@ -470,6 +470,7 @@ def _build_automation_section(
             summary="Warnings remain contextual and secondary.",
             details=section.warnings or ("No contextual warnings for this placeholder.",),
             zone_role=ZoneRole.SECONDARY,
+            readability_treatment="secondary contextual support",
         )
 
     if isinstance(section, AdvancedSection):
@@ -479,6 +480,7 @@ def _build_automation_section(
             summary=section.purpose,
             details=section.available_refinements or ("Collapsed placeholder only.",),
             zone_role=ZoneRole.TERTIARY,
+            readability_treatment="tertiary collapsed refinement",
             is_collapsed_feeling=section.is_collapsed_by_default,
         )
 
@@ -489,9 +491,9 @@ def _build_automation_section(
         details=(
             f"Status: {section.status_label}",
             f"Requested count: {section.requested_count}",
-            f"Acknowledgement: {section.acknowledgement_level.value}",
         ),
         zone_role=ZoneRole.PRIMARY,
+        readability_treatment="primary deliberate commitment",
     )
 
 
@@ -729,9 +731,9 @@ def _build_automation_environment_widget(
     layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
     for section in automation_environment.sections:
-        title = f"{section.zone_role.value.title()} - {section.title}"
+        title = section.title
         if section.is_collapsed_feeling:
-            title = f"{title} (collapsed placeholder)"
+            title = f"{title} (secondary)"
 
         group_box = QGroupBox(title)
         _style_group_box(group_box, shell_spec=shell_spec)
