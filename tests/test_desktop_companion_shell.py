@@ -1,19 +1,25 @@
 import unittest
 
-from desktop.pyside6_shell_prototype import (
+from desktop.companion_shell import (
     AUTO1_RACE_DURATION_MAX_SECONDS,
     AUTO1_RACE_DURATION_MIN_SECONDS,
     DEFAULT_FH6_TARGET_TITLE,
     _build_commitment_readiness_details,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
+    _desktop_execution_confirmation_summary,
+    _desktop_execution_refusal_details,
     _format_ui_focus_failure_message,
     _format_auto1_race_duration_for_display,
+    _is_desktop_execution_supported,
+    _is_real_auto1_execution_state,
     _parse_auto1_race_duration_override,
+    _request_auto1_ui_stop,
     _should_show_auto1_runtime_adjustment,
     _summarize_auto1_ui_execution_error,
-    build_prototype_shell_spec,
+    build_desktop_app_spec,
 )
+from core.stop import StopManager
 from integrations.windows_focus_handoff import (
     FocusHandoffResult,
     FocusHandoffStatus,
@@ -23,9 +29,9 @@ from ui.automation_environment import AutomationEnvironmentSectionId
 from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 
 
-class PySide6ShellPrototypeTest(unittest.TestCase):
+class DesktopCompanionShellTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.shell_spec = build_prototype_shell_spec()
+        self.shell_spec = build_desktop_app_spec()
 
     def test_sidebar_maps_to_stable_destinations(self) -> None:
         destination_ids = tuple(
@@ -186,6 +192,41 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertFalse(_should_show_auto1_runtime_adjustment("auto2"))
         self.assertFalse(_should_show_auto1_runtime_adjustment("auto3"))
 
+    def test_desktop_execution_support_is_auto1_only(self) -> None:
+        self.assertTrue(_is_desktop_execution_supported("auto1"))
+        self.assertFalse(_is_desktop_execution_supported("auto2"))
+        self.assertFalse(_is_desktop_execution_supported("auto3"))
+        self.assertFalse(_is_desktop_execution_supported("auto4"))
+        self.assertFalse(_is_desktop_execution_supported("unknown"))
+
+    def test_auto2_desktop_refusal_mentions_guarded_confirmations(self) -> None:
+        details = " ".join(_desktop_execution_refusal_details("auto2"))
+        summary = _desktop_execution_confirmation_summary("auto2")
+
+        self.assertIn("Auto2 desktop execution is not wired", details)
+        self.assertIn("test-mode navigation", details)
+        self.assertIn("one-car purchase validation", details)
+        self.assertIn("real-input and purchase confirmations", details)
+        self.assertIn("guarded manual confirmations", summary)
+
+    def test_auto3_desktop_refusal_mentions_guarded_confirmations(self) -> None:
+        details = " ".join(_desktop_execution_refusal_details("auto3"))
+        summary = _desktop_execution_confirmation_summary("auto3")
+
+        self.assertIn("Auto3 desktop execution is not wired", details)
+        self.assertIn("test-mode traversal", details)
+        self.assertIn("bounded unlock validation", details)
+        self.assertIn("real-input and unlock confirmations", details)
+        self.assertIn("guarded manual confirmations", summary)
+
+    def test_unknown_desktop_execution_refuses_without_enabling_real_input(self) -> None:
+        details = " ".join(_desktop_execution_refusal_details("auto4"))
+        summary = _desktop_execution_confirmation_summary("auto4")
+
+        self.assertIn("Desktop execution is not available", details)
+        self.assertIn("No operation will start", details)
+        self.assertIn("Execution is unavailable", summary)
+
     def test_auto1_commitment_readiness_includes_runtime_focus_stop_and_baseline(self) -> None:
         details = _build_commitment_readiness_details(
             {
@@ -199,6 +240,15 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertIn("Race drive duration: 55.0 seconds", joined)
         self.assertIn("Expected baseline", joined)
         self.assertIn("F8 emergency stop", joined)
+
+    def test_auto1_commitment_readiness_refuses_invalid_runtime_value(self) -> None:
+        with self.assertRaises(ValueError):
+            _build_commitment_readiness_details(
+                {
+                    "automation_id": "auto1",
+                    "race_duration_seconds": "invalid",
+                }
+            )
 
     def test_non_auto1_commitment_readiness_remains_refused(self) -> None:
         details = _build_commitment_readiness_details(
@@ -228,6 +278,57 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertEqual("stopped", _completion_state_id_for_auto1_status("stopped"))
         self.assertEqual("refused", _completion_state_id_for_auto1_status("failed"))
         self.assertEqual("refused", _completion_state_id_for_auto1_status("unknown"))
+
+    def test_real_auto1_execution_state_is_explicit(self) -> None:
+        self.assertTrue(
+            _is_real_auto1_execution_state(
+                {"automation_id": "auto1", "execution_active": "true"}
+            )
+        )
+        self.assertFalse(
+            _is_real_auto1_execution_state(
+                {"automation_id": "auto1", "execution_active": "false"}
+            )
+        )
+        self.assertFalse(
+            _is_real_auto1_execution_state(
+                {"automation_id": "auto2", "execution_active": "true"}
+            )
+        )
+
+    def test_ui_stop_request_uses_stop_manager_for_active_auto1(self) -> None:
+        stop_manager = StopManager()
+
+        message = _request_auto1_ui_stop(
+            stop_manager,
+            {"automation_id": "auto1", "execution_active": "true"},
+        )
+
+        self.assertTrue(stop_manager.should_stop())
+        self.assertIn("Stop requested", message)
+        self.assertIn("guarded Auto1 cleanup", message)
+
+    def test_ui_stop_request_refuses_without_active_auto1(self) -> None:
+        stop_manager = StopManager()
+
+        message = _request_auto1_ui_stop(
+            stop_manager,
+            {"automation_id": "auto2", "execution_active": "true"},
+        )
+
+        self.assertFalse(stop_manager.should_stop())
+        self.assertIn("No active Auto1", message)
+
+    def test_ui_stop_request_refuses_when_execution_flag_is_missing(self) -> None:
+        stop_manager = StopManager()
+
+        message = _request_auto1_ui_stop(
+            stop_manager,
+            {"automation_id": "auto1"},
+        )
+
+        self.assertFalse(stop_manager.should_stop())
+        self.assertIn("No active Auto1", message)
 
     def test_auto1_execution_error_summary_includes_exact_exception_context(self) -> None:
         summary = _summarize_auto1_ui_execution_error(

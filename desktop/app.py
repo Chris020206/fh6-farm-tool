@@ -1,6 +1,6 @@
 """Desktop UI application entrypoint."""
 
-from desktop.pyside6_shell_prototype import (
+from desktop.shell import (
     DesktopShellSpec,
     build_desktop_app_spec,
     launch_desktop_app,

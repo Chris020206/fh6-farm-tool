@@ -33,6 +33,50 @@ class DesktopAppTest(unittest.TestCase):
         self.assertEqual("Post-Run State", shell_spec.completion_lifecycle.title)
         self.assertTrue(shell_spec.completion_lifecycle.always_returns_to_preparation)
 
+    def test_desktop_app_workflow_contract_covers_primary_transitions(self) -> None:
+        workflow = app.build_desktop_app_spec().workflow_contract
+
+        self.assertEqual(
+            (
+                ("home", "automation_environment"),
+                ("automation_environment", "commitment"),
+                ("commitment", "countdown"),
+                ("countdown", "companion_mode"),
+                ("companion_mode", "completion"),
+                ("completion", "automation_environment"),
+                ("completion", "home"),
+            ),
+            workflow.transitions,
+        )
+        self.assertIn("visible controls", workflow.dead_button_policy)
+        self.assertIn("clears prepared", workflow.state_reset_policy)
+
+    def test_desktop_app_workflow_contract_has_no_orphan_states(self) -> None:
+        workflow = app.build_desktop_app_spec().workflow_contract
+        expected_states = {
+            "home",
+            "automation_environment",
+            "commitment",
+            "countdown",
+            "companion_mode",
+            "completion",
+        }
+        transition_states = {
+            state
+            for transition in workflow.transitions
+            for state in transition
+        }
+
+        self.assertEqual(expected_states, transition_states)
+
+    def test_desktop_app_contract_keeps_failure_recovery_explicit(self) -> None:
+        workflow = app.build_desktop_app_spec().workflow_contract
+
+        self.assertIn("clears prepared", workflow.state_reset_policy)
+        self.assertIn("Auto2 and Auto3 refuse", workflow.unsupported_execution_policy)
+        self.assertIn("Auto1 only", workflow.real_input_boundary)
+        self.assertIn("StopManager", workflow.stop_policy)
+
     def test_desktop_app_keeps_auto4_inactive(self) -> None:
         active_automation_ids = {
             definition.automation_id for definition in get_active_automation_definitions()
@@ -50,6 +94,11 @@ class DesktopAppTest(unittest.TestCase):
         self.assertTrue(wiring.uses_existing_guarded_auto1_path)
         self.assertTrue(wiring.preserves_f8_stop)
         self.assertTrue(wiring.fail_closed_for_unsupported_automations)
+        self.assertIn("Auto2 and Auto3 refuse", shell_spec.workflow_contract.unsupported_execution_policy)
+        self.assertNotIn("support", shell_spec.workflow_contract.unsupported_execution_policy.lower())
+        self.assertIn("Auto1 only", shell_spec.workflow_contract.real_input_boundary)
+        self.assertIn("Request Stop", shell_spec.workflow_contract.stop_policy)
+        self.assertIn("StopManager", shell_spec.workflow_contract.stop_policy)
 
     def test_desktop_app_does_not_directly_import_real_input_backend(self) -> None:
         source = inspect.getsource(app)
