@@ -5,6 +5,7 @@ from frontend.automation_controller import (
     FrontendAutomationController,
 )
 from product.automation_registry import get_automation_definition
+from product.automation_registry import get_active_automation_definitions
 from product.profile_metadata_registry import get_profile_metadata
 from product.readiness_registry import get_readiness_model
 from ui.automation_environment import (
@@ -883,7 +884,7 @@ def _build_automation_environment_widget(
     automation_environment: PrototypeAutomationEnvironment,
     shell_spec: PrototypeShellSpec,
 ):
-    from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
     container = QWidget()
     layout = QVBoxLayout(container)
@@ -895,13 +896,175 @@ def _build_automation_environment_widget(
     _style_summary_label(primary_intention_label, shell_spec=shell_spec)
     layout.addWidget(title_label)
     layout.addWidget(primary_intention_label)
-    layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
+    layout.addSpacing(4)
 
-    _build_automation_environment_content(
-        layout=layout,
-        automation_environment=automation_environment,
-        shell_spec=shell_spec,
+    controller = FrontendAutomationController(
+        session_id_provider=lambda: "prototype-prepared-session",
     )
+    active_automations = tuple(get_active_automation_definitions())
+    selected_automation_id = {"value": active_automations[0].automation_id}
+
+    selector_label = QLabel("Choose automation to prepare")
+    _style_eyebrow_label(selector_label, primary=False)
+    layout.addWidget(selector_label)
+
+    selector_row = QHBoxLayout()
+    selector_row.setContentsMargins(0, 0, 0, 0)
+    selector_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    selector_buttons = {}
+    for definition in active_automations:
+        button = QPushButton(_short_automation_label(definition.automation_id))
+        _style_automation_selector_button(
+            button,
+            shell_spec=shell_spec,
+            selected=definition.automation_id == selected_automation_id["value"],
+        )
+        selector_buttons[definition.automation_id] = button
+        selector_row.addWidget(button)
+    layout.addLayout(selector_row)
+    layout.addSpacing(8)
+
+    overview = _build_preparation_text_card(
+        eyebrow="WHAT AM I RUNNING?",
+        shell_spec=shell_spec,
+        treatment="primary orientation",
+    )
+    profile = _build_preparation_text_card(
+        eyebrow="WHAT PROFILE?",
+        shell_spec=shell_spec,
+        treatment="primary behavior summary",
+    )
+    readiness = _build_preparation_text_card(
+        eyebrow="AM I READY?",
+        shell_spec=shell_spec,
+        treatment="primary confidence check",
+    )
+    warnings = _build_preparation_text_card(
+        eyebrow="WARNINGS THAT MATTER",
+        shell_spec=shell_spec,
+        treatment="secondary contextual support",
+    )
+    run = _build_preparation_text_card(
+        eyebrow="PREPARE RUN",
+        shell_spec=shell_spec,
+        treatment="primary action",
+    )
+
+    layout.addWidget(overview["card"])
+    layout.addSpacing(8)
+    layout.addLayout(
+        _build_card_row(
+            cards=(profile["card"], readiness["card"]),
+            shell_spec=shell_spec,
+        )
+    )
+    layout.addSpacing(8)
+    layout.addWidget(warnings["card"])
+    layout.addSpacing(8)
+
+    prepare_button = QPushButton("Prepare Run")
+    _style_primary_button(prepare_button, shell_spec=shell_spec)
+    run["layout"].addWidget(prepare_button)
+    layout.addWidget(run["card"])
+
+    preparation_cards = {
+        "overview": overview,
+        "profile": profile,
+        "readiness": readiness,
+        "warnings": warnings,
+        "run": run,
+    }
+
+    def render_preparation_state(automation_id: str, prepared: bool = False) -> None:
+        selected_automation_id["value"] = automation_id
+        for button_automation_id, button in selector_buttons.items():
+            _style_automation_selector_button(
+                button,
+                shell_spec=shell_spec,
+                selected=button_automation_id == automation_id,
+            )
+
+        definition = get_automation_definition(automation_id)
+        profile_id = definition.available_profiles[0]
+        plan = controller.prepare_run_plan(
+            AutomationRunRequest(
+                automation_id=automation_id,
+                profile_id=profile_id,
+                requested_count=1,
+            )
+        )
+
+        if not plan.accepted:
+            _set_preparation_card_text(
+                preparation_cards["overview"],
+                title=definition.display_name,
+                summary="Run preparation is currently refused.",
+                details=(plan.refusal_message or "Review the selected automation.",),
+            )
+            return
+
+        profile_metadata = plan.profile_metadata
+        readiness_model = plan.readiness_model
+        _set_preparation_card_text(
+            preparation_cards["overview"],
+            title=definition.display_name,
+            summary=definition.short_purpose,
+            details=(
+                f"Validated scope: {definition.validated_scope}",
+                definition.expected_baseline,
+            ),
+        )
+        _set_preparation_card_text(
+            preparation_cards["profile"],
+            title=profile_metadata.profile_name,
+            summary=_compact_text(profile_metadata.behavior_summary, 118),
+            details=(
+                _compact_text(profile_metadata.reliability_posture, 92),
+                f"Confidence: {profile_metadata.validation_confidence.value}",
+            ),
+        )
+        _set_preparation_card_text(
+            preparation_cards["readiness"],
+            title=_compact_text(readiness_model.readiness_wording, 98),
+            summary=_compact_text(readiness_model.focus_requirement, 82),
+            details=tuple(_compact_text(note, 88) for note in readiness_model.confidence_notes[:2]),
+        )
+        _set_preparation_card_text(
+            preparation_cards["warnings"],
+            title="Contextual warnings",
+            summary=_format_warning_summary(plan.warnings),
+            details=plan.warnings[1:2],
+        )
+        _set_preparation_card_text(
+            preparation_cards["run"],
+            title=(
+                "Prepared for supervised operation"
+                if prepared
+                else "Prepare a supervised run plan"
+            ),
+            summary=(
+                "Ready for focus handoff. No execution has started."
+                if prepared
+                else "Creates a prepared plan for one requested cycle."
+            ),
+            details=(
+                f"Selected: {definition.display_name}",
+                "Preparation only. No runner or real input is connected.",
+            ),
+        )
+
+    def select_automation(automation_id: str) -> None:
+        render_preparation_state(automation_id, prepared=False)
+
+    for automation_id, button in selector_buttons.items():
+        button.clicked.connect(
+            lambda _checked=False, selected_id=automation_id: select_automation(selected_id)
+        )
+
+    prepare_button.clicked.connect(
+        lambda: render_preparation_state(selected_automation_id["value"], prepared=True)
+    )
+    render_preparation_state(selected_automation_id["value"], prepared=False)
 
     layout.addStretch()
     return container
@@ -1031,6 +1194,78 @@ def _build_section_card(
         shell_spec=shell_spec,
         treatment=section.readability_treatment,
     )
+
+
+def _short_automation_label(automation_id: str) -> str:
+    labels = {
+        "auto1": "Auto1",
+        "auto2": "Auto2",
+        "auto3": "Auto3",
+    }
+    return labels.get(automation_id, automation_id)
+
+
+def _build_preparation_text_card(
+    eyebrow: str,
+    shell_spec: PrototypeShellSpec,
+    treatment: str,
+) -> dict[str, object]:
+    from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout
+
+    card = QFrame()
+    card.setObjectName("PrototypeCard")
+    card.setFrameShape(QFrame.Shape.NoFrame)
+    card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(card, treatment=treatment)
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(14, 10, 14, 10)
+    card_layout.setSpacing(4)
+
+    eyebrow_label = QLabel(eyebrow)
+    _style_eyebrow_label(eyebrow_label, primary="primary" in treatment)
+    title_label = QLabel()
+    _style_card_title(title_label, shell_spec=shell_spec, treatment=treatment)
+    summary_label = QLabel()
+    _style_summary_label(summary_label, shell_spec=shell_spec)
+    detail_label = QLabel()
+    _style_detail_label(detail_label, shell_spec=shell_spec)
+
+    card_layout.addWidget(eyebrow_label)
+    card_layout.addWidget(title_label)
+    card_layout.addWidget(summary_label)
+    card_layout.addWidget(detail_label)
+
+    return {
+        "card": card,
+        "layout": card_layout,
+        "title": title_label,
+        "summary": summary_label,
+        "detail": detail_label,
+    }
+
+
+def _set_preparation_card_text(
+    card_parts: dict[str, object],
+    title: str,
+    summary: str,
+    details: tuple[str, ...],
+) -> None:
+    card_parts["title"].setText(title)
+    card_parts["summary"].setText(summary)
+    card_parts["detail"].setText(" ".join(detail for detail in details if detail))
+
+
+def _format_warning_summary(warnings: tuple[str, ...]) -> str:
+    if not warnings:
+        return "No contextual warnings for this selected automation."
+    return warnings[0]
+
+
+def _compact_text(text: str, max_length: int) -> str:
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 1].rstrip()}..."
 
 
 def _build_action_card(
@@ -1396,6 +1631,37 @@ def _style_secondary_button(button, shell_spec: PrototypeShellSpec) -> None:
         }}
         QPushButton:pressed {{
             background-color: {COLOR_SURFACE_RECESSED};
+        }}
+        """
+    )
+
+
+def _style_automation_selector_button(
+    button,
+    shell_spec: PrototypeShellSpec,
+    selected: bool,
+) -> None:
+    background = "rgba(242, 26, 135, 34)" if selected else COLOR_SURFACE_RECESSED
+    border = (
+        f"1px solid rgba(242, 26, 135, 82)"
+        if selected
+        else f"1px solid {COLOR_BORDER_SUBTLE}"
+    )
+    color = COLOR_ACCENT_PRIMARY if selected else COLOR_TEXT_SECONDARY
+    button.setStyleSheet(
+        f"""
+        QPushButton {{
+            font-size: {shell_spec.typography.summary_size}px;
+            font-weight: 640;
+            color: {color};
+            background-color: {background};
+            border: {border};
+            border-radius: 12px;
+            padding: 8px 10px;
+        }}
+        QPushButton:hover {{
+            background-color: {COLOR_SURFACE_CARD_SOFT};
+            color: {COLOR_TEXT_PRIMARY};
         }}
         """
     )
