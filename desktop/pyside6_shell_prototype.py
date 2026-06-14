@@ -198,7 +198,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
     return PrototypeShellSpec(
         window_title="FH6 Farm Tool - PySide6 Shell Prototype",
         window_width=640,
-        window_height=768,
+        window_height=864,
         is_fixed_size=True,
         sidebar_destinations=sidebar_destinations,
         screens=tuple(
@@ -295,6 +295,8 @@ def launch_pyside6_shell_prototype() -> int:
 
     stacked_screens = QStackedWidget()
     main_area_layout.addWidget(stacked_screens)
+    automation_environment_index = len(shell_spec.screens)
+    companion_mode_index = automation_environment_index + 1
 
     for index, screen in enumerate(shell_spec.screens):
         collapsed_button = _build_navigation_button(
@@ -313,19 +315,32 @@ def launch_pyside6_shell_prototype() -> int:
                 if screen.screen_id == ScreenId.HOME
                 else None,
                 open_automation_environment=(
-                    lambda: stacked_screens.setCurrentIndex(len(shell_spec.screens))
+                    lambda: stacked_screens.setCurrentIndex(automation_environment_index)
                 )
                 if screen.screen_id == ScreenId.HOME
                 else None,
             )
         )
 
+    companion_mode_widget, update_companion_mode = _build_companion_mode_widget(
+        shell_spec=shell_spec,
+        return_to_preparation=lambda: stacked_screens.setCurrentIndex(
+            automation_environment_index
+        ),
+    )
     stacked_screens.addWidget(
         _build_automation_environment_widget(
             shell_spec.automation_environment,
             shell_spec=shell_spec,
+            open_companion_mode=(
+                lambda companion_state: (
+                    update_companion_mode(companion_state),
+                    stacked_screens.setCurrentIndex(companion_mode_index),
+                )
+            ),
         )
     )
+    stacked_screens.addWidget(companion_mode_widget)
 
     overlay_navigation = QWidget(body)
     overlay_navigation.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
@@ -883,6 +898,7 @@ def _build_screen_widget(
 def _build_automation_environment_widget(
     automation_environment: PrototypeAutomationEnvironment,
     shell_spec: PrototypeShellSpec,
+    open_companion_mode,
 ):
     from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -903,6 +919,7 @@ def _build_automation_environment_widget(
     )
     active_automations = tuple(get_active_automation_definitions())
     selected_automation_id = {"value": active_automations[0].automation_id}
+    selected_companion_state = {"value": None}
 
     selector_label = QLabel("Choose automation to prepare")
     _style_eyebrow_label(selector_label, primary=False)
@@ -965,6 +982,10 @@ def _build_automation_environment_widget(
     prepare_button = QPushButton("Prepare Run")
     _style_primary_button(prepare_button, shell_spec=shell_spec)
     run["layout"].addWidget(prepare_button)
+    companion_button = QPushButton("Open Companion Mode Preview")
+    companion_button.setEnabled(False)
+    _style_secondary_button(companion_button, shell_spec=shell_spec)
+    run["layout"].addWidget(companion_button)
     layout.addWidget(run["card"])
 
     preparation_cards = {
@@ -977,6 +998,9 @@ def _build_automation_environment_widget(
 
     def render_preparation_state(automation_id: str, prepared: bool = False) -> None:
         selected_automation_id["value"] = automation_id
+        if not prepared:
+            selected_companion_state["value"] = None
+            companion_button.setEnabled(False)
         for button_automation_id, button in selector_buttons.items():
             _style_automation_selector_button(
                 button,
@@ -1052,6 +1076,17 @@ def _build_automation_environment_widget(
                 "Preparation only. No runner or real input is connected.",
             ),
         )
+        if prepared:
+            selected_companion_state["value"] = {
+                "automation_name": definition.display_name,
+                "profile_name": profile_metadata.profile_name,
+                "status": "Running",
+                "progress": "Cycle 1 of 1 - supervision placeholder",
+                "focus": "FH6 focus handoff ready",
+                "stop": "F8 emergency stop available",
+                "summary": "Supervised operation preview. No automation is executing.",
+            }
+            companion_button.setEnabled(True)
 
     def select_automation(automation_id: str) -> None:
         render_preparation_state(automation_id, prepared=False)
@@ -1063,6 +1098,11 @@ def _build_automation_environment_widget(
 
     prepare_button.clicked.connect(
         lambda: render_preparation_state(selected_automation_id["value"], prepared=True)
+    )
+    companion_button.clicked.connect(
+        lambda: open_companion_mode(selected_companion_state["value"])
+        if selected_companion_state["value"] is not None
+        else None
     )
     render_preparation_state(selected_automation_id["value"], prepared=False)
 
@@ -1136,6 +1176,100 @@ def _build_home_screen_content(
             shell_spec=shell_spec,
         )
     )
+
+
+def _build_companion_mode_widget(shell_spec: PrototypeShellSpec, return_to_preparation):
+    from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
+
+    title_label = QLabel("Companion Mode")
+    subtitle_label = QLabel("Supervise confidently while automation would be running.")
+    _style_screen_title(title_label, shell_spec=shell_spec)
+    _style_summary_label(subtitle_label, shell_spec=shell_spec)
+    layout.addWidget(title_label)
+    layout.addWidget(subtitle_label)
+    layout.addSpacing(8)
+
+    state_card = _build_preparation_text_card(
+        eyebrow="RUNNING STATE",
+        shell_spec=shell_spec,
+        treatment="commitment",
+    )
+    automation_card = _build_preparation_text_card(
+        eyebrow="SELECTED AUTOMATION",
+        shell_spec=shell_spec,
+        treatment="primary orientation",
+    )
+    progress_card = _build_preparation_text_card(
+        eyebrow="SUPERVISION",
+        shell_spec=shell_spec,
+        treatment="primary confidence check",
+    )
+    stop_card = _build_preparation_text_card(
+        eyebrow="STOP SAFELY",
+        shell_spec=shell_spec,
+        treatment="secondary contextual support",
+    )
+
+    layout.addWidget(state_card["card"])
+    layout.addSpacing(8)
+    layout.addWidget(automation_card["card"])
+    layout.addSpacing(8)
+    layout.addWidget(progress_card["card"])
+    layout.addSpacing(8)
+    layout.addWidget(stop_card["card"])
+
+    back_button = QPushButton("Return to Preparation")
+    _style_secondary_button(back_button, shell_spec=shell_spec)
+    back_button.clicked.connect(return_to_preparation)
+    layout.addSpacing(8)
+    layout.addWidget(back_button)
+    layout.addStretch()
+
+    def update_companion_mode(companion_state: dict[str, str]) -> None:
+        _set_preparation_card_text(
+            state_card,
+            title=companion_state["status"],
+            summary="Supervised operation",
+            details=(companion_state["summary"],),
+        )
+        _set_preparation_card_text(
+            automation_card,
+            title=companion_state["automation_name"],
+            summary=companion_state["profile_name"],
+            details=("Profile assumptions remain active for this prepared run.",),
+        )
+        _set_preparation_card_text(
+            progress_card,
+            title=companion_state["progress"],
+            summary=companion_state["focus"],
+            details=("Current cycle/progress is a prototype placeholder.",),
+        )
+        _set_preparation_card_text(
+            stop_card,
+            title="Stop safely",
+            summary=companion_state["stop"],
+            details=("Keep supervision active. This screen does not execute automation.",),
+        )
+
+    update_companion_mode(
+        {
+            "automation_name": "No prepared run",
+            "profile_name": "Prepare a run first",
+            "status": "Not running",
+            "progress": "No cycle active",
+            "focus": "FH6 focus handoff not active",
+            "stop": "F8 guidance appears after preparation",
+            "summary": "Companion Mode is waiting for a prepared run preview.",
+        }
+    )
+
+    return container, update_companion_mode
+
 
 def _build_automation_environment_content(
     layout,
@@ -1631,6 +1765,11 @@ def _style_secondary_button(button, shell_spec: PrototypeShellSpec) -> None:
         }}
         QPushButton:pressed {{
             background-color: {COLOR_SURFACE_RECESSED};
+        }}
+        QPushButton:disabled {{
+            color: {COLOR_TEXT_FAINT};
+            background-color: transparent;
+            border: 1px solid {COLOR_BORDER_SUBTLE};
         }}
         """
     )

@@ -110,7 +110,7 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)
-        self.assertEqual(768, self.shell_spec.window_height)
+        self.assertEqual(864, self.shell_spec.window_height)
         self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
 
