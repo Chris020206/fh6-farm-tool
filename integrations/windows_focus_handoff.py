@@ -2,6 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 import os
+import time
 
 
 LIKELY_FH6_TITLE_TERMS: tuple[str, ...] = (
@@ -34,6 +35,8 @@ class FocusHandoffResult:
     message: str
     candidates: tuple[WindowCandidate, ...] = ()
     selected_candidate: WindowCandidate | None = None
+    active_candidate: WindowCandidate | None = None
+    confirmation_attempts: int = 0
     focus_attempted: bool = False
 
     @property
@@ -43,6 +46,8 @@ class FocusHandoffResult:
 
 WindowProvider = Callable[[], tuple[WindowCandidate, ...]]
 FocusProvider = Callable[[WindowCandidate], bool]
+ForegroundProvider = Callable[[], WindowCandidate | None]
+ConfirmationObserver = Callable[[int, WindowCandidate | None], None]
 
 
 def title_matches_fh6(title: str) -> bool:
@@ -95,6 +100,10 @@ def attempt_fh6_focus_handoff(
     os_name: str | None = None,
     window_provider: WindowProvider | None = None,
     focus_provider: FocusProvider | None = None,
+    foreground_provider: ForegroundProvider | None = None,
+    confirmation_observer: ConfirmationObserver | None = None,
+    confirmation_attempts: int = 4,
+    confirmation_delay_seconds: float = 0.15,
 ) -> FocusHandoffResult:
     current_os_name = os_name or os.name
     if current_os_name != "nt":
@@ -155,12 +164,28 @@ def attempt_fh6_focus_handoff(
 
     focus = focus_provider or focus_window_candidate
     focus_succeeded = focus(selected_candidate)
-    if focus_succeeded:
+    if foreground_provider is not None:
+        foreground = foreground_provider
+    elif focus_provider is not None:
+        foreground = lambda: selected_candidate if focus_succeeded else None
+    else:
+        foreground = get_foreground_window_candidate
+    active_candidate = _confirm_foreground_candidate(
+        selected_candidate=selected_candidate,
+        foreground_provider=foreground,
+        confirmation_observer=confirmation_observer,
+        confirmation_attempts=confirmation_attempts,
+        confirmation_delay_seconds=confirmation_delay_seconds,
+        skip_initial_delay=focus_succeeded,
+    )
+    if active_candidate is not None:
         return FocusHandoffResult(
             status=FocusHandoffStatus.FOCUS_SUCCEEDED,
             message="Focus handoff appeared to succeed.",
             candidates=candidates,
             selected_candidate=selected_candidate,
+            active_candidate=active_candidate,
+            confirmation_attempts=confirmation_attempts,
             focus_attempted=True,
         )
 
@@ -169,8 +194,35 @@ def attempt_fh6_focus_handoff(
         message="Focus handoff was attempted, but success could not be confirmed.",
         candidates=candidates,
         selected_candidate=selected_candidate,
+        active_candidate=foreground(),
+        confirmation_attempts=confirmation_attempts,
         focus_attempted=True,
     )
+
+
+def _confirm_foreground_candidate(
+    selected_candidate: WindowCandidate,
+    foreground_provider: ForegroundProvider,
+    confirmation_observer: ConfirmationObserver | None,
+    confirmation_attempts: int,
+    confirmation_delay_seconds: float,
+    skip_initial_delay: bool,
+) -> WindowCandidate | None:
+    attempts = max(1, confirmation_attempts)
+    delay = max(0.0, confirmation_delay_seconds)
+
+    for attempt_number in range(1, attempts + 1):
+        if not skip_initial_delay or attempt_number > 1:
+            time.sleep(delay)
+
+        active_candidate = foreground_provider()
+        if confirmation_observer is not None:
+            confirmation_observer(attempt_number, active_candidate)
+
+        if active_candidate is not None and active_candidate.handle == selected_candidate.handle:
+            return active_candidate
+
+    return None
 
 
 def list_visible_windows() -> tuple[WindowCandidate, ...]:
@@ -219,3 +271,23 @@ def focus_window_candidate(candidate: WindowCandidate) -> bool:
 
     user32.SetForegroundWindow(hwnd)
     return int(user32.GetForegroundWindow()) == hwnd
+
+
+def get_foreground_window_candidate() -> WindowCandidate | None:
+    if os.name != "nt":
+        return None
+
+    import ctypes
+
+    user32 = ctypes.windll.user32
+    hwnd = int(user32.GetForegroundWindow())
+    if hwnd == 0:
+        return None
+
+    length = user32.GetWindowTextLengthW(hwnd)
+    if length == 0:
+        return WindowCandidate(handle=hwnd, title="")
+
+    buffer = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, buffer, length + 1)
+    return WindowCandidate(handle=hwnd, title=buffer.value.strip())

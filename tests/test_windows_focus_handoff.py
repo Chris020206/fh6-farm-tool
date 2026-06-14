@@ -203,6 +203,64 @@ class WindowsFocusHandoffTest(unittest.TestCase):
         self.assertTrue(result.focus_attempted)
         self.assertTrue(result.succeeded)
 
+    def test_focus_confirmation_retries_until_foreground_matches(self) -> None:
+        foreground_states = iter(
+            (
+                WindowCandidate(handle=9, title="Other window"),
+                WindowCandidate(handle=2, title="Forza Horizon 6"),
+            )
+        )
+        observed_attempts: list[tuple[int, WindowCandidate | None]] = []
+
+        result = attempt_fh6_focus_handoff(
+            confirm_focus=True,
+            exact_title="Forza Horizon 6",
+            os_name="nt",
+            window_provider=lambda: (
+                WindowCandidate(handle=2, title="Forza Horizon 6"),
+            ),
+            focus_provider=lambda _candidate: False,
+            foreground_provider=lambda: next(foreground_states),
+            confirmation_observer=lambda attempt, active: observed_attempts.append(
+                (attempt, active)
+            ),
+            confirmation_attempts=3,
+            confirmation_delay_seconds=0,
+        )
+
+        self.assertEqual(FocusHandoffStatus.FOCUS_SUCCEEDED, result.status)
+        self.assertEqual(
+            WindowCandidate(handle=2, title="Forza Horizon 6"),
+            result.active_candidate,
+        )
+        self.assertEqual(
+            [
+                (1, WindowCandidate(handle=9, title="Other window")),
+                (2, WindowCandidate(handle=2, title="Forza Horizon 6")),
+            ],
+            observed_attempts,
+        )
+
+    def test_focus_failure_reports_active_window_and_attempt_count(self) -> None:
+        result = attempt_fh6_focus_handoff(
+            confirm_focus=True,
+            exact_title="Forza Horizon 6",
+            os_name="nt",
+            window_provider=lambda: (
+                WindowCandidate(handle=2, title="Forza Horizon 6"),
+            ),
+            focus_provider=lambda _candidate: False,
+            foreground_provider=lambda: WindowCandidate(handle=9, title="Browser"),
+            confirmation_attempts=2,
+            confirmation_delay_seconds=0,
+        )
+
+        self.assertEqual(FocusHandoffStatus.FOCUS_FAILED, result.status)
+        self.assertEqual(WindowCandidate(handle=9, title="Browser"), result.active_candidate)
+        self.assertEqual(2, result.confirmation_attempts)
+        self.assertTrue(result.focus_attempted)
+        self.assertFalse(result.succeeded)
+
     def test_focus_handoff_module_does_not_import_automation_execution(self) -> None:
         source = inspect.getsource(windows_focus_handoff)
 

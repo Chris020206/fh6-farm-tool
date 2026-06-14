@@ -1,6 +1,24 @@
 import unittest
 
-from desktop.pyside6_shell_prototype import build_prototype_shell_spec
+from desktop.pyside6_shell_prototype import (
+    AUTO1_RACE_DURATION_MAX_SECONDS,
+    AUTO1_RACE_DURATION_MIN_SECONDS,
+    DEFAULT_FH6_TARGET_TITLE,
+    _build_commitment_readiness_details,
+    _build_auto1_ui_execution_profile,
+    _completion_state_id_for_auto1_status,
+    _format_ui_focus_failure_message,
+    _format_auto1_race_duration_for_display,
+    _parse_auto1_race_duration_override,
+    _should_show_auto1_runtime_adjustment,
+    _summarize_auto1_ui_execution_error,
+    build_prototype_shell_spec,
+)
+from integrations.windows_focus_handoff import (
+    FocusHandoffResult,
+    FocusHandoffStatus,
+    WindowCandidate,
+)
 from ui.automation_environment import AutomationEnvironmentSectionId
 from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 
@@ -137,6 +155,105 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertFalse(commitment.introduces_execution)
         self.assertIn("FH6 focus handoff", commitment.focus_label)
         self.assertIn("F8", commitment.stop_label)
+
+    def test_execution_wiring_is_auto1_only_and_fails_closed(self) -> None:
+        execution_wiring = self.shell_spec.execution_wiring
+
+        self.assertEqual(("auto1",), execution_wiring.enabled_automation_ids)
+        self.assertEqual(("auto2", "auto3"), execution_wiring.refused_automation_ids)
+        self.assertTrue(execution_wiring.uses_existing_guarded_auto1_path)
+        self.assertTrue(execution_wiring.preserves_f8_stop)
+        self.assertTrue(execution_wiring.fail_closed_for_unsupported_automations)
+        self.assertEqual("Forza Horizon 6", DEFAULT_FH6_TARGET_TITLE)
+
+    def test_auto1_race_duration_override_is_single_bounded_basic_runtime_value(self) -> None:
+        self.assertEqual(5.0, AUTO1_RACE_DURATION_MIN_SECONDS)
+        self.assertEqual(180.0, AUTO1_RACE_DURATION_MAX_SECONDS)
+        self.assertEqual(40.0, _parse_auto1_race_duration_override("40.0"))
+        self.assertEqual("40.0 seconds", _format_auto1_race_duration_for_display("40.0"))
+
+        with self.assertRaises(ValueError):
+            _parse_auto1_race_duration_override("4.9")
+
+        with self.assertRaises(ValueError):
+            _parse_auto1_race_duration_override("180.1")
+
+        with self.assertRaises(ValueError):
+            _parse_auto1_race_duration_override("not-a-number")
+
+    def test_auto1_runtime_adjustment_is_visible_only_for_auto1(self) -> None:
+        self.assertTrue(_should_show_auto1_runtime_adjustment("auto1"))
+        self.assertFalse(_should_show_auto1_runtime_adjustment("auto2"))
+        self.assertFalse(_should_show_auto1_runtime_adjustment("auto3"))
+
+    def test_auto1_commitment_readiness_includes_runtime_focus_stop_and_baseline(self) -> None:
+        details = _build_commitment_readiness_details(
+            {
+                "automation_id": "auto1",
+                "race_duration_seconds": "55.0",
+            }
+        )
+
+        joined = " ".join(details)
+        self.assertIn("Auto1 selected", joined)
+        self.assertIn("Race drive duration: 55.0 seconds", joined)
+        self.assertIn("Expected baseline", joined)
+        self.assertIn("F8 emergency stop", joined)
+
+    def test_non_auto1_commitment_readiness_remains_refused(self) -> None:
+        details = _build_commitment_readiness_details(
+            {
+                "automation_id": "auto2",
+                "race_duration_seconds": "55.0",
+            }
+        )
+
+        joined = " ".join(details)
+        self.assertIn("Only Auto1 can execute", joined)
+        self.assertIn("Auto2 and Auto3 remain refused", joined)
+
+    def test_auto1_ui_execution_profile_overrides_only_race_duration(self) -> None:
+        profile = _build_auto1_ui_execution_profile(
+            {"race_duration_seconds": "55.0"}
+        )
+
+        self.assertEqual(55.0, profile["timings"]["race_duration"])
+        self.assertEqual(5.0, profile["timings"]["startup_delay"])
+        self.assertEqual(2.0, profile["timings"]["wait_after_restart"])
+        self.assertEqual(10.0, profile["timings"]["wait_after_first_confirm"])
+        self.assertEqual(3.0, profile["timings"]["post_cycle_delay"])
+
+    def test_auto1_execution_status_mapping_fails_closed(self) -> None:
+        self.assertEqual("completed", _completion_state_id_for_auto1_status("completed"))
+        self.assertEqual("stopped", _completion_state_id_for_auto1_status("stopped"))
+        self.assertEqual("refused", _completion_state_id_for_auto1_status("failed"))
+        self.assertEqual("refused", _completion_state_id_for_auto1_status("unknown"))
+
+    def test_auto1_execution_error_summary_includes_exact_exception_context(self) -> None:
+        summary = _summarize_auto1_ui_execution_error(
+            RuntimeError("real input dependency unavailable")
+        )
+
+        self.assertIn("Auto1 manual run unavailable", summary)
+        self.assertIn("RuntimeError", summary)
+        self.assertIn("real input dependency unavailable", summary)
+
+    def test_focus_failure_message_exposes_target_active_status_and_attempts(self) -> None:
+        message = _format_ui_focus_failure_message(
+            FocusHandoffResult(
+                status=FocusHandoffStatus.FOCUS_FAILED,
+                message="Focus handoff was attempted, but success could not be confirmed.",
+                selected_candidate=WindowCandidate(handle=2, title="Forza Horizon 6"),
+                active_candidate=WindowCandidate(handle=9, title="Browser"),
+                confirmation_attempts=4,
+                focus_attempted=True,
+            )
+        )
+
+        self.assertIn("Forza Horizon 6", message)
+        self.assertIn("Browser", message)
+        self.assertIn("focus_failed", message)
+        self.assertIn("Confirmation attempts: 4", message)
 
     def test_completion_lifecycle_represents_calm_post_run_outcomes(self) -> None:
         completion = self.shell_spec.completion_lifecycle

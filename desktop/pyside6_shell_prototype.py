@@ -1,9 +1,12 @@
+from copy import deepcopy
 from dataclasses import dataclass
+import threading
 
 from frontend.automation_controller import (
     AutomationRunRequest,
     FrontendAutomationController,
 )
+from automation.auto1_race.auto1_runner import DEFAULT_AUTO1_PROFILE_PATH
 from product.automation_registry import get_automation_definition
 from product.automation_registry import get_active_automation_definitions
 from product.profile_metadata_registry import get_profile_metadata
@@ -46,6 +49,9 @@ COLOR_TEXT_PRIMARY = "#E7E9EE"
 COLOR_TEXT_SECONDARY = "#B1B8C4"
 COLOR_TEXT_MUTED = "#7C8593"
 COLOR_TEXT_FAINT = "#5F6673"
+AUTO1_RACE_DURATION_MIN_SECONDS = 5.0
+AUTO1_RACE_DURATION_MAX_SECONDS = 180.0
+DEFAULT_FH6_TARGET_TITLE = "Forza Horizon 6"
 
 
 @dataclass(frozen=True)
@@ -200,6 +206,15 @@ class PrototypeCommitmentLayer:
 
 
 @dataclass(frozen=True)
+class PrototypeExecutionWiring:
+    enabled_automation_ids: tuple[str, ...]
+    refused_automation_ids: tuple[str, ...]
+    uses_existing_guarded_auto1_path: bool
+    preserves_f8_stop: bool
+    fail_closed_for_unsupported_automations: bool
+
+
+@dataclass(frozen=True)
 class PrototypeCompletionState:
     state_id: str
     title: str
@@ -235,6 +250,7 @@ class PrototypeShellSpec:
     visual_composition: PrototypeVisualComposition
     top_bar: PrototypeTopBar
     commitment_layer: PrototypeCommitmentLayer
+    execution_wiring: PrototypeExecutionWiring
     companion_mode: PrototypeCompanionMode
     completion_lifecycle: PrototypeCompletionLifecycle
 
@@ -261,6 +277,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         visual_composition=_build_prototype_visual_composition(),
         top_bar=_build_prototype_top_bar(),
         commitment_layer=_build_prototype_commitment_layer(),
+        execution_wiring=_build_prototype_execution_wiring(),
         companion_mode=_build_prototype_companion_mode(),
         completion_lifecycle=_build_prototype_completion_lifecycle(),
     )
@@ -381,6 +398,43 @@ def launch_pyside6_shell_prototype() -> int:
         ),
         return_home=lambda: stacked_screens.setCurrentIndex(0),
     )
+
+    def open_completion_from_execution(
+        state_id: str,
+        companion_state: dict[str, str],
+        execution_message: str,
+    ) -> None:
+        completion_state = dict(companion_state)
+        completion_state["execution_message"] = execution_message
+        update_completion_state(state_id, completion_state)
+        stacked_screens.setCurrentIndex(completion_state_index)
+
+    def begin_supervised_operation(companion_state: dict[str, str]) -> None:
+        running_state = dict(companion_state)
+        running_state["status"] = "Running"
+        running_state["summary"] = (
+            "Auto1 real-input operation is active. Keep FH6 supervised."
+            if companion_state.get("automation_id") == "auto1"
+            else "Operation refused before execution. Unsupported automation selected."
+        )
+        update_companion_mode(running_state)
+        stacked_screens.setCurrentIndex(companion_mode_index)
+
+        if companion_state.get("automation_id") != "auto1":
+            open_completion_from_execution(
+                "refused",
+                running_state,
+                "UI execution is currently wired for Auto1 only.",
+            )
+            return
+
+        _start_auto1_ui_execution(
+            companion_state=running_state,
+            parent=body,
+            timer_type=QTimer,
+            on_result=open_completion_from_execution,
+        )
+
     companion_mode_widget, update_companion_mode = _build_companion_mode_widget(
         shell_spec=shell_spec,
         return_to_preparation=lambda: stacked_screens.setCurrentIndex(
@@ -399,12 +453,14 @@ def launch_pyside6_shell_prototype() -> int:
         return_to_preparation=lambda: stacked_screens.setCurrentIndex(
             automation_environment_index
         ),
-        open_companion_mode=(
-            lambda companion_state: (
-                update_companion_mode(companion_state),
-                stacked_screens.setCurrentIndex(companion_mode_index),
+        open_refusal_state=(
+            lambda companion_state, message: open_completion_from_execution(
+                "refused",
+                companion_state,
+                message,
             )
         ),
+        open_companion_mode=begin_supervised_operation,
     )
     stacked_screens.addWidget(
         _build_automation_environment_widget(
@@ -794,6 +850,16 @@ def _build_prototype_commitment_layer() -> PrototypeCommitmentLayer:
     )
 
 
+def _build_prototype_execution_wiring() -> PrototypeExecutionWiring:
+    return PrototypeExecutionWiring(
+        enabled_automation_ids=("auto1",),
+        refused_automation_ids=("auto2", "auto3"),
+        uses_existing_guarded_auto1_path=True,
+        preserves_f8_stop=True,
+        fail_closed_for_unsupported_automations=True,
+    )
+
+
 def _build_prototype_companion_mode() -> PrototypeCompanionMode:
     return PrototypeCompanionMode(
         title="Companion Mode",
@@ -859,6 +925,229 @@ def _global_stylesheet() -> str:
         border: none;
     }}
     """
+
+
+def _start_auto1_ui_execution(
+    companion_state: dict[str, str],
+    parent,
+    timer_type,
+    on_result,
+) -> None:
+    execution_state = {
+        "done": False,
+        "state_id": "refused",
+        "message": "Auto1 execution did not start.",
+    }
+    poll_timer = timer_type(parent)
+    poll_timer.setInterval(250)
+
+    def worker() -> None:
+        from app_logging.log_manager import configure_logging
+
+        logger = configure_logging()
+        logger.warning(
+            "UI-triggered Auto1 execution attempt starting. cycles=%s profile=%s",
+            companion_state.get("requested_cycles", "1"),
+            companion_state.get("profile_id", "default"),
+            category="sequence",
+        )
+        try:
+            from automation.auto1_race.manual_real_input_runner import (
+                run_manual_real_input_auto1,
+            )
+
+            result = run_manual_real_input_auto1(
+                cycle_count=int(companion_state.get("requested_cycles", "1")),
+                use_fast_timings=False,
+                logger=logger,
+                profile_data=_build_auto1_ui_execution_profile(companion_state),
+            )
+            execution_state["state_id"] = _completion_state_id_for_auto1_status(
+                result.status
+            )
+            execution_state["message"] = (
+                f"{result.message} Completed cycles: "
+                f"{result.completed_cycles}/{result.requested_cycles}."
+            )
+            logger.warning(
+                "UI-triggered Auto1 execution returned status=%s completed_cycles=%s/%s.",
+                result.status,
+                result.completed_cycles,
+                result.requested_cycles,
+                category="sequence",
+            )
+        except Exception as error:
+            execution_state["state_id"] = "refused"
+            execution_state["message"] = _summarize_auto1_ui_execution_error(error)
+            logger.error(
+                "UI-triggered Auto1 execution failed closed: %s",
+                execution_state["message"],
+                category="error",
+            )
+        finally:
+            execution_state["done"] = True
+
+    def poll_for_result() -> None:
+        if not execution_state["done"]:
+            return
+
+        poll_timer.stop()
+        on_result(
+            execution_state["state_id"],
+            companion_state,
+            execution_state["message"],
+        )
+
+    poll_timer.timeout.connect(poll_for_result)
+    threading.Thread(target=worker, daemon=True).start()
+    poll_timer.start()
+
+
+def _attempt_ui_focus_handoff(companion_state: dict[str, str]):
+    from app_logging.log_manager import configure_logging
+    from integrations.windows_focus_handoff import attempt_fh6_focus_handoff
+
+    logger = configure_logging()
+    logger.warning(
+        "UI focus handoff attempt starting. target_title=%s automation=%s",
+        DEFAULT_FH6_TARGET_TITLE,
+        companion_state.get("automation_id", "unknown"),
+        category="state",
+    )
+
+    def log_confirmation_attempt(attempt_number, active_candidate) -> None:
+        active_title = active_candidate.title if active_candidate is not None else "<none>"
+        active_handle = active_candidate.handle if active_candidate is not None else "<none>"
+        logger.warning(
+            "UI focus handoff confirmation attempt %s active_title=%s active_handle=%s",
+            attempt_number,
+            active_title,
+            active_handle,
+            category="state",
+        )
+
+    result = attempt_fh6_focus_handoff(
+        confirm_focus=True,
+        exact_title=DEFAULT_FH6_TARGET_TITLE,
+        confirmation_observer=log_confirmation_attempt,
+    )
+    if result.succeeded:
+        logger.warning(
+            "UI focus handoff succeeded: %s active_title=%s active_handle=%s",
+            result.message,
+            result.active_candidate.title if result.active_candidate else "<none>",
+            result.active_candidate.handle if result.active_candidate else "<none>",
+            category="state",
+        )
+    else:
+        logger.error(
+            "UI focus handoff failed closed: %s (%s) target_title=%s active_title=%s active_handle=%s attempts=%s",
+            result.message,
+            result.status.value,
+            DEFAULT_FH6_TARGET_TITLE,
+            result.active_candidate.title if result.active_candidate else "<none>",
+            result.active_candidate.handle if result.active_candidate else "<none>",
+            result.confirmation_attempts,
+            category="error",
+        )
+    return result
+
+
+def _format_ui_focus_failure_message(focus_result) -> str:
+    active_title = (
+        focus_result.active_candidate.title
+        if focus_result.active_candidate is not None and focus_result.active_candidate.title
+        else "unavailable"
+    )
+    return (
+        "FH6 focus handoff failed before Auto1 start. "
+        f"Reason: {focus_result.message} "
+        f"Target title: {DEFAULT_FH6_TARGET_TITLE}. "
+        f"Active window: {active_title}. "
+        f"Status: {focus_result.status.value}. "
+        f"Confirmation attempts: {focus_result.confirmation_attempts}."
+    )
+
+
+def _build_auto1_ui_execution_profile(companion_state: dict[str, str]) -> dict:
+    from profiles import ProfileManager
+
+    race_duration = _parse_auto1_race_duration_override(
+        companion_state.get("race_duration_seconds")
+    )
+    profile_data = ProfileManager().load_profile(DEFAULT_AUTO1_PROFILE_PATH)
+    execution_profile = deepcopy(profile_data)
+    execution_profile["timings"] = dict(profile_data["timings"])
+    execution_profile["timings"]["race_duration"] = race_duration
+    return execution_profile
+
+
+def _parse_auto1_race_duration_override(raw_value: str | None) -> float:
+    if raw_value is None:
+        raise ValueError("Race drive duration was not provided.")
+
+    try:
+        race_duration = float(raw_value)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Race drive duration must be a number.") from error
+
+    if not (
+        AUTO1_RACE_DURATION_MIN_SECONDS
+        <= race_duration
+        <= AUTO1_RACE_DURATION_MAX_SECONDS
+    ):
+        raise ValueError(
+            "Race drive duration must be between "
+            f"{AUTO1_RACE_DURATION_MIN_SECONDS:.0f} and "
+            f"{AUTO1_RACE_DURATION_MAX_SECONDS:.0f} seconds."
+        )
+
+    return race_duration
+
+
+def _should_show_auto1_runtime_adjustment(automation_id: str) -> bool:
+    return automation_id == "auto1"
+
+
+def _format_auto1_race_duration_for_display(raw_value: str | None) -> str:
+    return f"{_parse_auto1_race_duration_override(raw_value):.1f} seconds"
+
+
+def _build_commitment_readiness_details(companion_state: dict[str, str]) -> tuple[str, ...]:
+    if companion_state.get("automation_id") != "auto1":
+        return (
+            "Only Auto1 can execute from this UI path.",
+            "Auto2 and Auto3 remain refused before execution.",
+        )
+
+    return (
+        "Auto1 selected for supervised real-input operation.",
+        f"Race drive duration: {_format_auto1_race_duration_for_display(companion_state.get('race_duration_seconds'))}.",
+        "Expected baseline: FH6 focused at the validated Auto1 race restart state.",
+        "F8 emergency stop available.",
+    )
+
+
+def _load_auto1_default_race_duration() -> float:
+    from profiles import ProfileManager
+
+    profile_data = ProfileManager().load_profile(DEFAULT_AUTO1_PROFILE_PATH)
+    return float(profile_data["timings"]["race_duration"])
+
+
+def _completion_state_id_for_auto1_status(status: str) -> str:
+    if status == "completed":
+        return "completed"
+
+    if status == "stopped":
+        return "stopped"
+
+    return "refused"
+
+
+def _summarize_auto1_ui_execution_error(error: Exception) -> str:
+    message = str(error).strip() or error.__class__.__name__
+    return f"Auto1 manual run unavailable: {error.__class__.__name__}: {message}"
 
 
 def _build_top_bar_widget(shell_spec: PrototypeShellSpec, label_type):
@@ -1042,7 +1331,14 @@ def _build_automation_environment_widget(
     shell_spec: PrototypeShellSpec,
     open_commitment_layer,
 ):
-    from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import (
+        QDoubleSpinBox,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QVBoxLayout,
+        QWidget,
+    )
 
     container = QWidget()
     layout = QVBoxLayout(container)
@@ -1103,6 +1399,21 @@ def _build_automation_environment_widget(
         shell_spec=shell_spec,
         treatment="secondary contextual support",
     )
+    runtime = _build_preparation_text_card(
+        eyebrow="AUTO1 RUNTIME ADJUSTMENT",
+        shell_spec=shell_spec,
+        treatment="secondary contextual support",
+    )
+    race_duration_input = QDoubleSpinBox()
+    race_duration_input.setRange(
+        AUTO1_RACE_DURATION_MIN_SECONDS,
+        AUTO1_RACE_DURATION_MAX_SECONDS,
+    )
+    race_duration_input.setDecimals(1)
+    race_duration_input.setSingleStep(1.0)
+    race_duration_input.setSuffix(" sec")
+    _style_runtime_spinbox(race_duration_input, shell_spec=shell_spec)
+    runtime["layout"].addWidget(race_duration_input)
     run = _build_preparation_text_card(
         eyebrow="RUN PREPARATION",
         shell_spec=shell_spec,
@@ -1120,6 +1431,8 @@ def _build_automation_environment_widget(
     layout.addSpacing(6)
     layout.addWidget(warnings["card"])
     layout.addSpacing(6)
+    layout.addWidget(runtime["card"])
+    layout.addSpacing(6)
 
     prepare_button = QPushButton("Prepare Run")
     _style_primary_button(prepare_button, shell_spec=shell_spec)
@@ -1135,6 +1448,7 @@ def _build_automation_environment_widget(
         "profile": profile,
         "readiness": readiness,
         "warnings": warnings,
+        "runtime": runtime,
         "run": run,
     }
 
@@ -1171,6 +1485,11 @@ def _build_automation_environment_widget(
 
         profile_metadata = plan.profile_metadata
         readiness_model = plan.readiness_model
+        is_auto1 = _should_show_auto1_runtime_adjustment(automation_id)
+        if is_auto1 and not prepared:
+            race_duration_input.setValue(_load_auto1_default_race_duration())
+        runtime["card"].setVisible(is_auto1)
+        race_duration_input.setEnabled(is_auto1 and not prepared)
         _set_preparation_card_text(
             preparation_cards["overview"],
             title=definition.display_name,
@@ -1207,6 +1526,17 @@ def _build_automation_environment_widget(
                 ),
             ),
         )
+        if is_auto1:
+            _set_preparation_card_text(
+                preparation_cards["runtime"],
+                title="Race drive duration",
+                summary="Adjust only when race timing changes.",
+                details=(
+                    "Basic-accessible. Bounded safe range: "
+                    f"{AUTO1_RACE_DURATION_MIN_SECONDS:.0f}-"
+                    f"{AUTO1_RACE_DURATION_MAX_SECONDS:.0f} seconds.",
+                ),
+            )
         _set_preparation_card_text(
             preparation_cards["run"],
             title=(
@@ -1230,8 +1560,12 @@ def _build_automation_environment_widget(
         )
         if prepared:
             selected_companion_state["value"] = {
+                "automation_id": definition.automation_id,
                 "automation_name": definition.display_name,
+                "profile_id": profile_metadata.profile_id,
                 "profile_name": profile_metadata.profile_name,
+                "requested_cycles": "1",
+                "race_duration_seconds": f"{race_duration_input.value():.1f}",
                 "status": "Running",
                 "progress": "Cycle 1 of 1 - supervision placeholder",
                 "focus": "FH6 focus handoff ready",
@@ -1266,9 +1600,16 @@ def _build_commitment_layer_widget(
     shell_spec: PrototypeShellSpec,
     timer_type,
     return_to_preparation,
+    open_refusal_state,
     open_companion_mode,
 ):
-    from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import (
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QVBoxLayout,
+        QWidget,
+    )
 
     container = QWidget()
     layout = QVBoxLayout(container)
@@ -1320,10 +1661,13 @@ def _build_commitment_layer_widget(
     action_row.setContentsMargins(0, 0, 0, 0)
     action_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
     continue_button = QPushButton("Continue")
+    manual_focus_button = QPushButton("I focused FH6 manually")
     return_button = QPushButton("Return to Preparation")
     _style_primary_button(continue_button, shell_spec=shell_spec)
+    _style_secondary_button(manual_focus_button, shell_spec=shell_spec)
     _style_secondary_button(return_button, shell_spec=shell_spec)
     action_row.addWidget(continue_button)
+    action_row.addWidget(manual_focus_button)
     action_row.addWidget(return_button)
     layout.addLayout(action_row)
     layout.addStretch()
@@ -1338,23 +1682,31 @@ def _build_commitment_layer_widget(
         countdown_timer.stop()
         countdown_position["value"] = 0
         continue_button.setEnabled(True)
+        manual_focus_button.setVisible(False)
+        manual_focus_button.setEnabled(False)
         _set_preparation_card_text(
             readiness_card,
             title=shell_spec.commitment_layer.readiness_label,
             summary=companion_state.get("automation_name", "Prepared operation"),
-            details=("Confirm readiness before continuing.",),
+            details=_build_commitment_readiness_details(companion_state),
         )
         _set_preparation_card_text(
             focus_card,
             title=shell_spec.commitment_layer.focus_label,
-            summary="Final focus handoff checkpoint",
-            details=("No automation begins from this prototype layer.",),
+            summary=f"Target window: {DEFAULT_FH6_TARGET_TITLE}",
+            details=(
+                "Automatic focus handoff is attempted before countdown.",
+                "If confirmation fails, Auto1 stays stopped until you choose a safe fallback.",
+            ),
         )
         _set_preparation_card_text(
             profile_card,
             title=companion_state.get("profile_name", "Selected profile"),
             summary=shell_spec.commitment_layer.profile_label,
-            details=(shell_spec.commitment_layer.stop_label,),
+            details=(
+                shell_spec.commitment_layer.stop_label,
+                "Keep the validated race restart baseline visible before continuing.",
+            ),
         )
         _set_preparation_card_text(
             countdown_card,
@@ -1362,6 +1714,20 @@ def _build_commitment_layer_widget(
             summary="Supervised operation begins after a calm countdown.",
             details=("Continue or return to preparation.",),
         )
+
+    def start_countdown(manual_focus_acknowledged: bool = False) -> None:
+        continue_button.setEnabled(False)
+        manual_focus_button.setEnabled(False)
+        countdown_position["value"] = 0
+        if manual_focus_acknowledged:
+            _set_preparation_card_text(
+                focus_card,
+                title="Manual focus acknowledged",
+                summary="FH6 focus was confirmed by the operator.",
+                details=("Auto1 will begin after the countdown. Keep F8 ready.",),
+            )
+        advance_countdown()
+        countdown_timer.start()
 
     def advance_countdown() -> None:
         values = shell_spec.commitment_layer.countdown_values
@@ -1378,17 +1744,46 @@ def _build_commitment_layer_widget(
             countdown_card,
             title=str(value),
             summary="Supervised operation begins in",
-            details=("No runner or real input is connected.",),
+            details=("Auto1 begins after this commitment countdown.",),
         )
 
     def begin_countdown() -> None:
-        continue_button.setEnabled(False)
-        countdown_position["value"] = 0
-        advance_countdown()
-        countdown_timer.start()
+        if current_companion_state["value"] is None:
+            return
+
+        if current_companion_state["value"].get("automation_id") != "auto1":
+            open_refusal_state(
+                current_companion_state["value"],
+                "UI execution is currently wired for Auto1 only.",
+            )
+            return
+
+        focus_result = _attempt_ui_focus_handoff(current_companion_state["value"])
+        if not focus_result.succeeded:
+            failure_message = _format_ui_focus_failure_message(focus_result)
+            _set_preparation_card_text(
+                focus_card,
+                title="Focus handoff needs attention",
+                summary="Auto1 has not started.",
+                details=(failure_message,),
+            )
+            _set_preparation_card_text(
+                countdown_card,
+                title="Last safe checkpoint",
+                summary="Focus FH6 manually only if the game is ready.",
+                details=(
+                    "Use the manual acknowledgement only after you have clicked or focused FH6 yourself.",
+                ),
+            )
+            manual_focus_button.setVisible(True)
+            manual_focus_button.setEnabled(True)
+            return
+
+        start_countdown()
 
     countdown_timer.timeout.connect(advance_countdown)
     continue_button.clicked.connect(begin_countdown)
+    manual_focus_button.clicked.connect(lambda: start_countdown(manual_focus_acknowledged=True))
     return_button.clicked.connect(return_to_preparation)
     set_waiting_state(
         {
@@ -1576,7 +1971,7 @@ def _build_companion_mode_widget(
             operation_card,
             title=companion_state["automation_name"],
             summary=companion_state["progress"],
-            details=("Prepared state only. No automation is executing from this UI.",),
+            details=("Only Auto1 can execute from this supervised UI flow.",),
         )
         _set_preparation_card_text(
             focus_card,
@@ -1600,7 +1995,7 @@ def _build_companion_mode_widget(
             stop_card,
             title="Stop safely",
             summary=companion_state["stop"],
-            details=("Calm stop guidance only. This prototype does not send input.",),
+            details=("Use F8 if real Auto1 input is active or behavior is unexpected.",),
         )
 
     completed_button.clicked.connect(
@@ -1693,18 +2088,31 @@ def _build_completion_state_widget(
         state = states_by_id.get(state_id, states_by_id["refused"])
         automation_name = companion_state.get("automation_name", "Prepared operation")
         profile_name = companion_state.get("profile_name", "Selected profile")
+        execution_message = companion_state.get(
+            "execution_message",
+            "Prototype-only lifecycle state. No automation result was produced.",
+        )
+        outcome_details = (
+            (automation_name, execution_message)
+            if state_id == "refused"
+            else (automation_name,)
+        )
 
         _set_preparation_card_text(
             outcome_card,
             title=state.title,
-            summary=state.emotional_treatment,
-            details=(automation_name,),
+            summary=(
+                "Paused before or during Auto1 execution."
+                if state_id == "refused"
+                else state.emotional_treatment
+            ),
+            details=outcome_details,
         )
         _set_preparation_card_text(
             summary_card,
-            title=state.summary,
+            title=("Reason" if state_id == "refused" else state.summary),
             summary=profile_name,
-            details=("Prototype-only lifecycle state. No automation result was produced.",),
+            details=(execution_message,),
         )
         _set_preparation_card_text(
             next_step_card,
@@ -2237,6 +2645,29 @@ def _style_secondary_button(button, shell_spec: PrototypeShellSpec) -> None:
         QPushButton:disabled {{
             color: {COLOR_TEXT_FAINT};
             background-color: transparent;
+            border: 1px solid {COLOR_BORDER_SUBTLE};
+        }}
+        """
+    )
+
+
+def _style_runtime_spinbox(spinbox, shell_spec: PrototypeShellSpec) -> None:
+    spinbox.setStyleSheet(
+        f"""
+        QDoubleSpinBox {{
+            font-size: {shell_spec.typography.summary_size}px;
+            font-weight: 600;
+            color: {COLOR_TEXT_PRIMARY};
+            background-color: {COLOR_SURFACE_RECESSED};
+            border: 1px solid {COLOR_BORDER_SUBTLE};
+            border-radius: 10px;
+            padding: 6px 8px;
+        }}
+        QDoubleSpinBox:focus {{
+            border: 1px solid {COLOR_ACCENT_PRIMARY};
+        }}
+        QDoubleSpinBox:disabled {{
+            color: {COLOR_TEXT_FAINT};
             border: 1px solid {COLOR_BORDER_SUBTLE};
         }}
         """
