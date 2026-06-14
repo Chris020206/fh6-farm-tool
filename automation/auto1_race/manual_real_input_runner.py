@@ -32,8 +32,9 @@ def run_manual_real_input_auto1(
     use_fast_timings: bool,
     logger: ProjectLogger,
     profile_data: dict[str, Any] | None = None,
+    stop_manager: StopManager | None = None,
 ) -> Auto1LoopResult:
-    stop_manager = StopManager()
+    stop_manager = stop_manager or StopManager()
 
     try:
         profile_data = load_manual_profile(use_fast_timings, profile_data)
