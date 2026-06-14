@@ -175,6 +175,37 @@ class PrototypeTopBar:
 
 
 @dataclass(frozen=True)
+class PrototypeCompanionMode:
+    title: str
+    primary_intention: str
+    status_label: str
+    operation_label: str
+    focus_label: str
+    stop_label: str
+    is_simpler_than_automation_environment: bool
+    introduces_execution: bool
+
+
+@dataclass(frozen=True)
+class PrototypeCompletionState:
+    state_id: str
+    title: str
+    summary: str
+    reassurance: str
+    suggested_next_step: str
+    emotional_treatment: str
+
+
+@dataclass(frozen=True)
+class PrototypeCompletionLifecycle:
+    title: str
+    primary_intention: str
+    states: tuple[PrototypeCompletionState, ...]
+    always_returns_to_preparation: bool
+    introduces_execution: bool
+
+
+@dataclass(frozen=True)
 class PrototypeShellSpec:
     window_title: str
     window_width: int
@@ -190,6 +221,8 @@ class PrototypeShellSpec:
     typography: PrototypeTypographyHierarchy
     visual_composition: PrototypeVisualComposition
     top_bar: PrototypeTopBar
+    companion_mode: PrototypeCompanionMode
+    completion_lifecycle: PrototypeCompletionLifecycle
 
 
 def build_prototype_shell_spec() -> PrototypeShellSpec:
@@ -213,6 +246,8 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         typography=_build_prototype_typography_hierarchy(),
         visual_composition=_build_prototype_visual_composition(),
         top_bar=_build_prototype_top_bar(),
+        companion_mode=_build_prototype_companion_mode(),
+        completion_lifecycle=_build_prototype_completion_lifecycle(),
     )
 
 
@@ -297,6 +332,7 @@ def launch_pyside6_shell_prototype() -> int:
     main_area_layout.addWidget(stacked_screens)
     automation_environment_index = len(shell_spec.screens)
     companion_mode_index = automation_environment_index + 1
+    completion_state_index = companion_mode_index + 1
 
     for index, screen in enumerate(shell_spec.screens):
         collapsed_button = _build_navigation_button(
@@ -322,10 +358,22 @@ def launch_pyside6_shell_prototype() -> int:
             )
         )
 
+    completion_state_widget, update_completion_state = _build_completion_state_widget(
+        shell_spec=shell_spec,
+        return_to_preparation=lambda: stacked_screens.setCurrentIndex(
+            automation_environment_index
+        ),
+    )
     companion_mode_widget, update_companion_mode = _build_companion_mode_widget(
         shell_spec=shell_spec,
         return_to_preparation=lambda: stacked_screens.setCurrentIndex(
             automation_environment_index
+        ),
+        open_completion_state=(
+            lambda state_id, companion_state: (
+                update_completion_state(state_id, companion_state),
+                stacked_screens.setCurrentIndex(completion_state_index),
+            )
         ),
     )
     stacked_screens.addWidget(
@@ -341,6 +389,7 @@ def launch_pyside6_shell_prototype() -> int:
         )
     )
     stacked_screens.addWidget(companion_mode_widget)
+    stacked_screens.addWidget(completion_state_widget)
 
     overlay_navigation = QWidget(body)
     overlay_navigation.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
@@ -700,6 +749,54 @@ def _build_prototype_top_bar() -> PrototypeTopBar:
     )
 
 
+def _build_prototype_companion_mode() -> PrototypeCompanionMode:
+    return PrototypeCompanionMode(
+        title="Companion Mode",
+        primary_intention="Supervise confidently during a prepared operation.",
+        status_label="Running",
+        operation_label="Supervised operation",
+        focus_label="FH6 focus handoff ready",
+        stop_label="F8 emergency stop available",
+        is_simpler_than_automation_environment=True,
+        introduces_execution=False,
+    )
+
+
+def _build_prototype_completion_lifecycle() -> PrototypeCompletionLifecycle:
+    return PrototypeCompletionLifecycle(
+        title="Post-Run State",
+        primary_intention="Conclude calmly, recover trust, and choose the next step.",
+        states=(
+            PrototypeCompletionState(
+                state_id="completed",
+                title="Run completed",
+                summary="The supervised operation reached its requested endpoint.",
+                reassurance="No follow-up action is required unless you want another run.",
+                suggested_next_step="Prepare another supervised run",
+                emotional_treatment="professional completion",
+            ),
+            PrototypeCompletionState(
+                state_id="stopped",
+                title="Stopped safely",
+                summary="The operation was interrupted intentionally and safely.",
+                reassurance="A manual stop is a controlled outcome, not a failure.",
+                suggested_next_step="Resume preparation",
+                emotional_treatment="reassuring interruption",
+            ),
+            PrototypeCompletionState(
+                state_id="refused",
+                title="Operation paused",
+                summary="The prepared operation should be reviewed before continuing.",
+                reassurance="Protective refusal keeps the system aligned with trust-first use.",
+                suggested_next_step="Review Automation Environment",
+                emotional_treatment="calm refusal",
+            ),
+        ),
+        always_returns_to_preparation=True,
+        introduces_execution=False,
+    )
+
+
 def _global_stylesheet() -> str:
     return f"""
     QWidget {{
@@ -921,7 +1018,7 @@ def _build_automation_environment_widget(
     selected_automation_id = {"value": active_automations[0].automation_id}
     selected_companion_state = {"value": None}
 
-    selector_label = QLabel("Choose automation to prepare")
+    selector_label = QLabel("Select supervised operation")
     _style_eyebrow_label(selector_label, primary=False)
     layout.addWidget(selector_label)
 
@@ -930,7 +1027,7 @@ def _build_automation_environment_widget(
     selector_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
     selector_buttons = {}
     for definition in active_automations:
-        button = QPushButton(_short_automation_label(definition.automation_id))
+        button = QPushButton(_automation_selector_label(definition.automation_id))
         _style_automation_selector_button(
             button,
             shell_spec=shell_spec,
@@ -939,45 +1036,45 @@ def _build_automation_environment_widget(
         selector_buttons[definition.automation_id] = button
         selector_row.addWidget(button)
     layout.addLayout(selector_row)
-    layout.addSpacing(8)
+    layout.addSpacing(6)
 
     overview = _build_preparation_text_card(
-        eyebrow="WHAT AM I RUNNING?",
+        eyebrow="SELECTED AUTOMATION",
         shell_spec=shell_spec,
-        treatment="primary orientation",
+        treatment="primary action",
     )
     profile = _build_preparation_text_card(
-        eyebrow="WHAT PROFILE?",
+        eyebrow="ACTIVE PROFILE",
         shell_spec=shell_spec,
         treatment="primary behavior summary",
     )
     readiness = _build_preparation_text_card(
-        eyebrow="AM I READY?",
+        eyebrow="READINESS",
         shell_spec=shell_spec,
         treatment="primary confidence check",
     )
     warnings = _build_preparation_text_card(
-        eyebrow="WARNINGS THAT MATTER",
+        eyebrow="CONTEXTUAL WARNINGS",
         shell_spec=shell_spec,
         treatment="secondary contextual support",
     )
     run = _build_preparation_text_card(
-        eyebrow="PREPARE RUN",
+        eyebrow="RUN PREPARATION",
         shell_spec=shell_spec,
         treatment="primary action",
     )
 
     layout.addWidget(overview["card"])
-    layout.addSpacing(8)
+    layout.addSpacing(6)
     layout.addLayout(
         _build_card_row(
             cards=(profile["card"], readiness["card"]),
             shell_spec=shell_spec,
         )
     )
-    layout.addSpacing(8)
+    layout.addSpacing(6)
     layout.addWidget(warnings["card"])
-    layout.addSpacing(8)
+    layout.addSpacing(6)
 
     prepare_button = QPushButton("Prepare Run")
     _style_primary_button(prepare_button, shell_spec=shell_spec)
@@ -1021,9 +1118,9 @@ def _build_automation_environment_widget(
         if not plan.accepted:
             _set_preparation_card_text(
                 preparation_cards["overview"],
-                title=definition.display_name,
-                summary="Run preparation is currently refused.",
-                details=(plan.refusal_message or "Review the selected automation.",),
+                title=f"{definition.display_name} cannot be prepared",
+                summary="The request was refused before any operation could begin.",
+                details=(plan.refusal_message or "Review readiness before continuing.",),
             )
             return
 
@@ -1032,48 +1129,58 @@ def _build_automation_environment_widget(
         _set_preparation_card_text(
             preparation_cards["overview"],
             title=definition.display_name,
-            summary=definition.short_purpose,
+            summary=_compact_text(definition.short_purpose, 96),
             details=(
-                f"Validated scope: {definition.validated_scope}",
-                definition.expected_baseline,
+                f"Validated scope: {_compact_text(definition.validated_scope, 72)}",
+                _compact_text(definition.expected_baseline, 112),
             ),
         )
         _set_preparation_card_text(
             preparation_cards["profile"],
             title=profile_metadata.profile_name,
-            summary=_compact_text(profile_metadata.behavior_summary, 118),
+            summary=_compact_text(profile_metadata.behavior_summary, 94),
             details=(
-                _compact_text(profile_metadata.reliability_posture, 92),
+                _compact_text(profile_metadata.reliability_posture, 78),
                 f"Confidence: {profile_metadata.validation_confidence.value}",
             ),
         )
         _set_preparation_card_text(
             preparation_cards["readiness"],
-            title=_compact_text(readiness_model.readiness_wording, 98),
-            summary=_compact_text(readiness_model.focus_requirement, 82),
-            details=tuple(_compact_text(note, 88) for note in readiness_model.confidence_notes[:2]),
+            title=_compact_text(readiness_model.readiness_wording, 76),
+            summary=_compact_text(readiness_model.focus_requirement, 74),
+            details=tuple(_compact_text(note, 78) for note in readiness_model.confidence_notes[:2]),
         )
         _set_preparation_card_text(
             preparation_cards["warnings"],
             title="Contextual warnings",
             summary=_format_warning_summary(plan.warnings),
-            details=plan.warnings[1:2],
+            details=(
+                (
+                    plan.warnings[1]
+                    if len(plan.warnings) > 1
+                    else "Warnings are informational until preparation is confirmed."
+                ),
+            ),
         )
         _set_preparation_card_text(
             preparation_cards["run"],
             title=(
                 "Prepared for supervised operation"
                 if prepared
-                else "Prepare a supervised run plan"
+                else "Prepare the run plan"
             ),
             summary=(
                 "Ready for focus handoff. No execution has started."
                 if prepared
-                else "Creates a prepared plan for one requested cycle."
+                else "Confirm the selected automation, profile, readiness and warnings."
             ),
             details=(
-                f"Selected: {definition.display_name}",
-                "Preparation only. No runner or real input is connected.",
+                f"Selected: {definition.display_name}. Requested cycles: 1.",
+                (
+                    "Prepared state only. Companion preview is available."
+                    if prepared
+                    else "Preparation only. No runner or real input is connected."
+                ),
             ),
         )
         if prepared:
@@ -1178,86 +1285,92 @@ def _build_home_screen_content(
     )
 
 
-def _build_companion_mode_widget(shell_spec: PrototypeShellSpec, return_to_preparation):
-    from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+def _build_companion_mode_widget(
+    shell_spec: PrototypeShellSpec,
+    return_to_preparation,
+    open_completion_state,
+):
+    from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
     container = QWidget()
     layout = QVBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(8)
+    layout.setSpacing(10)
 
-    title_label = QLabel("Companion Mode")
-    subtitle_label = QLabel("Supervise confidently while automation would be running.")
+    title_label = QLabel(shell_spec.companion_mode.title)
+    subtitle_label = QLabel(shell_spec.companion_mode.primary_intention)
     _style_screen_title(title_label, shell_spec=shell_spec)
     _style_summary_label(subtitle_label, shell_spec=shell_spec)
     layout.addWidget(title_label)
     layout.addWidget(subtitle_label)
-    layout.addSpacing(8)
+    layout.addSpacing(6)
 
-    state_card = _build_preparation_text_card(
-        eyebrow="RUNNING STATE",
+    status_card = _build_preparation_text_card(
+        eyebrow="AUTOMATION STATUS",
         shell_spec=shell_spec,
         treatment="commitment",
     )
-    automation_card = _build_preparation_text_card(
-        eyebrow="SELECTED AUTOMATION",
+    operation_card = _build_preparation_text_card(
+        eyebrow="CURRENT OPERATION",
         shell_spec=shell_spec,
         treatment="primary orientation",
     )
-    progress_card = _build_preparation_text_card(
-        eyebrow="SUPERVISION",
+    focus_card = _build_preparation_text_card(
+        eyebrow="FH6 FOCUS",
         shell_spec=shell_spec,
         treatment="primary confidence check",
+    )
+    profile_card = _build_preparation_text_card(
+        eyebrow="ACTIVE PROFILE",
+        shell_spec=shell_spec,
+        treatment="secondary contextual support",
+    )
+    reassurance_card = _build_preparation_text_card(
+        eyebrow="OPERATIONAL REASSURANCE",
+        shell_spec=shell_spec,
+        treatment="tertiary",
     )
     stop_card = _build_preparation_text_card(
         eyebrow="STOP SAFELY",
         shell_spec=shell_spec,
-        treatment="secondary contextual support",
+        treatment="primary action",
     )
 
-    layout.addWidget(state_card["card"])
-    layout.addSpacing(8)
-    layout.addWidget(automation_card["card"])
-    layout.addSpacing(8)
-    layout.addWidget(progress_card["card"])
-    layout.addSpacing(8)
+    layout.addWidget(status_card["card"])
+    layout.addSpacing(6)
+    layout.addWidget(operation_card["card"])
+    layout.addSpacing(6)
+    layout.addLayout(
+        _build_card_row(
+            cards=(focus_card["card"], profile_card["card"]),
+            shell_spec=shell_spec,
+        )
+    )
+    layout.addSpacing(6)
+    layout.addWidget(reassurance_card["card"])
+    layout.addSpacing(6)
     layout.addWidget(stop_card["card"])
 
     back_button = QPushButton("Return to Preparation")
     _style_secondary_button(back_button, shell_spec=shell_spec)
     back_button.clicked.connect(return_to_preparation)
-    layout.addSpacing(8)
+    layout.addSpacing(6)
+
+    prototype_outcome_row = QHBoxLayout()
+    prototype_outcome_row.setContentsMargins(0, 0, 0, 0)
+    prototype_outcome_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    completed_button = QPushButton("Preview Completed")
+    stopped_button = QPushButton("Preview Stopped")
+    refused_button = QPushButton("Preview Paused")
+    for button in (completed_button, stopped_button, refused_button):
+        _style_secondary_button(button, shell_spec=shell_spec)
+        prototype_outcome_row.addWidget(button)
+    layout.addLayout(prototype_outcome_row)
     layout.addWidget(back_button)
     layout.addStretch()
 
-    def update_companion_mode(companion_state: dict[str, str]) -> None:
-        _set_preparation_card_text(
-            state_card,
-            title=companion_state["status"],
-            summary="Supervised operation",
-            details=(companion_state["summary"],),
-        )
-        _set_preparation_card_text(
-            automation_card,
-            title=companion_state["automation_name"],
-            summary=companion_state["profile_name"],
-            details=("Profile assumptions remain active for this prepared run.",),
-        )
-        _set_preparation_card_text(
-            progress_card,
-            title=companion_state["progress"],
-            summary=companion_state["focus"],
-            details=("Current cycle/progress is a prototype placeholder.",),
-        )
-        _set_preparation_card_text(
-            stop_card,
-            title="Stop safely",
-            summary=companion_state["stop"],
-            details=("Keep supervision active. This screen does not execute automation.",),
-        )
-
-    update_companion_mode(
-        {
+    current_companion_state = {
+        "value": {
             "automation_name": "No prepared run",
             "profile_name": "Prepare a run first",
             "status": "Not running",
@@ -1266,9 +1379,159 @@ def _build_companion_mode_widget(shell_spec: PrototypeShellSpec, return_to_prepa
             "stop": "F8 guidance appears after preparation",
             "summary": "Companion Mode is waiting for a prepared run preview.",
         }
+    }
+
+    def update_companion_mode(companion_state: dict[str, str]) -> None:
+        current_companion_state["value"] = companion_state
+        _set_preparation_card_text(
+            status_card,
+            title=companion_state["status"],
+            summary=shell_spec.companion_mode.operation_label,
+            details=(companion_state["summary"],),
+        )
+        _set_preparation_card_text(
+            operation_card,
+            title=companion_state["automation_name"],
+            summary=companion_state["progress"],
+            details=("Prepared state only. No automation is executing from this UI.",),
+        )
+        _set_preparation_card_text(
+            focus_card,
+            title=companion_state["focus"],
+            summary="Focus handoff status placeholder",
+            details=("Automatic focus handoff can be represented here later.",),
+        )
+        _set_preparation_card_text(
+            profile_card,
+            title=companion_state["profile_name"],
+            summary="Safe default profile",
+            details=("Profile assumptions remain active for this prepared run.",),
+        )
+        _set_preparation_card_text(
+            reassurance_card,
+            title="Supervise confidently",
+            summary="Keep FH6 visible and the operation under observation.",
+            details=("Completion and recovery states will follow in a later milestone.",),
+        )
+        _set_preparation_card_text(
+            stop_card,
+            title="Stop safely",
+            summary=companion_state["stop"],
+            details=("Calm stop guidance only. This prototype does not send input.",),
+        )
+
+    completed_button.clicked.connect(
+        lambda: open_completion_state("completed", current_companion_state["value"])
     )
+    stopped_button.clicked.connect(
+        lambda: open_completion_state("stopped", current_companion_state["value"])
+    )
+    refused_button.clicked.connect(
+        lambda: open_completion_state("refused", current_companion_state["value"])
+    )
+    update_companion_mode(current_companion_state["value"])
 
     return container, update_companion_mode
+
+
+def _build_completion_state_widget(
+    shell_spec: PrototypeShellSpec,
+    return_to_preparation,
+):
+    from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(10)
+
+    title_label = QLabel(shell_spec.completion_lifecycle.title)
+    subtitle_label = QLabel(shell_spec.completion_lifecycle.primary_intention)
+    _style_screen_title(title_label, shell_spec=shell_spec)
+    _style_summary_label(subtitle_label, shell_spec=shell_spec)
+    layout.addWidget(title_label)
+    layout.addWidget(subtitle_label)
+    layout.addSpacing(8)
+
+    outcome_card = _build_preparation_text_card(
+        eyebrow="OUTCOME",
+        shell_spec=shell_spec,
+        treatment="primary orientation",
+    )
+    summary_card = _build_preparation_text_card(
+        eyebrow="WHAT HAPPENED",
+        shell_spec=shell_spec,
+        treatment="secondary contextual support",
+    )
+    next_step_card = _build_preparation_text_card(
+        eyebrow="SUGGESTED NEXT STEP",
+        shell_spec=shell_spec,
+        treatment="primary action",
+    )
+    reassurance_card = _build_preparation_text_card(
+        eyebrow="CONTROLLED RECOVERY",
+        shell_spec=shell_spec,
+        treatment="tertiary",
+    )
+
+    layout.addWidget(outcome_card["card"])
+    layout.addSpacing(6)
+    layout.addWidget(summary_card["card"])
+    layout.addSpacing(6)
+    layout.addWidget(next_step_card["card"])
+    layout.addSpacing(6)
+    layout.addWidget(reassurance_card["card"])
+    layout.addSpacing(8)
+
+    back_button = QPushButton("Return to Automation Environment")
+    _style_primary_button(back_button, shell_spec=shell_spec)
+    back_button.clicked.connect(return_to_preparation)
+    layout.addWidget(back_button)
+    layout.addStretch()
+
+    states_by_id = {
+        state.state_id: state for state in shell_spec.completion_lifecycle.states
+    }
+
+    def update_completion_state(state_id: str, companion_state: dict[str, str]) -> None:
+        state = states_by_id.get(state_id, states_by_id["refused"])
+        automation_name = companion_state.get("automation_name", "Prepared operation")
+        profile_name = companion_state.get("profile_name", "Selected profile")
+
+        _set_preparation_card_text(
+            outcome_card,
+            title=state.title,
+            summary=state.emotional_treatment,
+            details=(automation_name,),
+        )
+        _set_preparation_card_text(
+            summary_card,
+            title=state.summary,
+            summary=profile_name,
+            details=("Prototype-only lifecycle state. No automation result was produced.",),
+        )
+        _set_preparation_card_text(
+            next_step_card,
+            title=state.suggested_next_step,
+            summary="Return to preparation when ready.",
+            details=("No dead-end state. No execution is connected here.",),
+        )
+        _set_preparation_card_text(
+            reassurance_card,
+            title=state.reassurance,
+            summary="The interface remains in a controlled manual flow.",
+            details=("Review, prepare, or stop without mode shock.",),
+        )
+
+    update_completion_state(
+        "completed",
+        {
+            "automation_name": "No completed run",
+            "profile_name": "Prepare a run first",
+        },
+    )
+
+    return container, update_completion_state
 
 
 def _build_automation_environment_content(
@@ -1337,6 +1600,15 @@ def _short_automation_label(automation_id: str) -> str:
         "auto3": "Auto3",
     }
     return labels.get(automation_id, automation_id)
+
+
+def _automation_selector_label(automation_id: str) -> str:
+    labels = {
+        "auto1": "Auto1 Race",
+        "auto2": "Auto2 Buy",
+        "auto3": "Auto3 Skill",
+    }
+    return labels.get(automation_id, _short_automation_label(automation_id))
 
 
 def _build_preparation_text_card(

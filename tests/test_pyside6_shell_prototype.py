@@ -114,6 +114,42 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
 
+    def test_companion_mode_represents_running_supervision_without_execution(self) -> None:
+        companion_mode = self.shell_spec.companion_mode
+
+        self.assertEqual("Companion Mode", companion_mode.title)
+        self.assertIn("Supervise", companion_mode.primary_intention)
+        self.assertEqual("Running", companion_mode.status_label)
+        self.assertEqual("Supervised operation", companion_mode.operation_label)
+        self.assertEqual("FH6 focus handoff ready", companion_mode.focus_label)
+        self.assertEqual("F8 emergency stop available", companion_mode.stop_label)
+        self.assertTrue(companion_mode.is_simpler_than_automation_environment)
+        self.assertFalse(companion_mode.introduces_execution)
+
+    def test_completion_lifecycle_represents_calm_post_run_outcomes(self) -> None:
+        completion = self.shell_spec.completion_lifecycle
+        state_ids = tuple(state.state_id for state in completion.states)
+
+        self.assertEqual("Post-Run State", completion.title)
+        self.assertIn("Conclude calmly", completion.primary_intention)
+        self.assertEqual(("completed", "stopped", "refused"), state_ids)
+        self.assertTrue(completion.always_returns_to_preparation)
+        self.assertFalse(completion.introduces_execution)
+
+    def test_completion_states_keep_stop_and_refusal_trust_first(self) -> None:
+        states_by_id = {
+            state.state_id: state for state in self.shell_spec.completion_lifecycle.states
+        }
+
+        self.assertEqual("Run completed", states_by_id["completed"].title)
+        self.assertEqual("Stopped safely", states_by_id["stopped"].title)
+        self.assertIn("not a failure", states_by_id["stopped"].reassurance)
+        self.assertEqual("Operation paused", states_by_id["refused"].title)
+        self.assertIn("trust-first", states_by_id["refused"].reassurance)
+        for state in states_by_id.values():
+            self.assertNotIn("panic", state.emotional_treatment.lower())
+            self.assertNotIn("crash", state.emotional_treatment.lower())
+
     def test_vertical_rhythm_supports_digestible_single_frame_layout(self) -> None:
         rhythm = self.shell_spec.vertical_rhythm
 
