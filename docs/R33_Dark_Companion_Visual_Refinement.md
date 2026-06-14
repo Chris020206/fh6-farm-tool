@@ -6,7 +6,7 @@ This checkpoint records a reversible visual refinement pass on the PySide6 verti
 
 The goal was to make the prototype feel more cohesive, premium, and intentionally designed without changing behavior.
 
-It now also records the MVP Visual Completion Sprint that made the current dark direction coherent enough for MVP evaluation.
+It now also records the MVP Visual Completion Sprint and Home Page Implementation Pass that moved the current dark direction toward the approved visual brief.
 
 ## Direction
 
@@ -28,7 +28,7 @@ The prototype now uses:
 
 - dark companion canvas
 - dark navigation rail and hover overlay
-- restrained amber accent treatment
+- restrained pink accent treatment
 - layered dark utility cards
 - recessed secondary cards
 - calmer tertiary cards
@@ -39,16 +39,18 @@ The prototype now uses:
 - Home composed as a launch surface with paired operational signals
 - Automation Environment composed as a preparation flow ending in deliberate commitment
 - supporting screens moved onto the same card surface system
+- top product bar with quiet FH6 Farm Tool identity
+- Home ordered as title, opening statement, hero, recommended action, review path, context/status, footer metadata
 
 Home and Automation Environment remain structurally unchanged, but their presentation now feels more composed and less like default Qt scaffolding.
 
 Current composition principle:
 
-> MVP-coherent dark companion surface
+> brief-aligned graphite companion surface
 
 Current screen composition:
 
-- Home: launch surface with paired operational signals
+- Home: ordered launch surface with dominant recommended action
 - Automation Environment: preparation flow with deliberate commitment
 
 ## Preserved Boundaries

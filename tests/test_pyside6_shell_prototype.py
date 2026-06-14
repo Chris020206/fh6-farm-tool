@@ -41,13 +41,13 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertTrue(navigation_rail.is_miniature)
         self.assertTrue(navigation_rail.is_low_emphasis)
         self.assertEqual(64, navigation_rail.collapsed_width)
-        self.assertEqual(184, navigation_rail.expanded_width)
+        self.assertEqual(230, navigation_rail.expanded_width)
         self.assertEqual("hover", navigation_rail.expansion_trigger)
 
     def test_navigation_rail_visual_refinement_is_restrained(self) -> None:
         navigation_rail = self.shell_spec.navigation_rail
 
-        self.assertEqual(34, navigation_rail.item_height)
+        self.assertEqual(42, navigation_rail.item_height)
         self.assertEqual(8, navigation_rail.item_spacing)
         self.assertEqual(
             "soft filled selection with clear contrast",
@@ -105,6 +105,8 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
             self.shell_spec.window_title,
         )
         self.assertEqual(5, len(self.shell_spec.screens))
+        self.assertEqual(63, self.shell_spec.top_bar.height)
+        self.assertTrue(self.shell_spec.top_bar.reserves_identity_space)
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)
@@ -158,16 +160,16 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
             visual_composition.secondary_treatment,
         )
         self.assertEqual(
-            "restrained amber commitment",
+            "restrained pink commitment",
             visual_composition.commitment_treatment,
         )
         self.assertEqual(
-            "mvp-coherent dark companion surface",
+            "brief-aligned graphite companion surface",
             visual_composition.composition_principle,
         )
         self.assertEqual("dark companion canvas", visual_composition.background_treatment)
         self.assertEqual(
-            "launch surface with paired operational signals",
+            "ordered launch surface with dominant recommended action",
             visual_composition.home_layout_treatment,
         )
         self.assertEqual(
@@ -180,10 +182,10 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
 
         self.assertTrue(home.is_single_frame)
         self.assertFalse(home.is_dashboard_like)
-        self.assertIn("Quiet confidence", home.philosophy_statement)
-        self.assertIn("launchpad", home.opening_feel)
+        self.assertIn("baseline", home.philosophy_statement)
+        self.assertIn("supervised", home.opening_feel)
         self.assertEqual("recommended next step first", home.composition_principle)
-        self.assertEqual("Prepare Automation", home.primary_action_label)
+        self.assertEqual("Prepare a Run", home.primary_action_label)
 
     def test_home_concept_preserves_restrained_signal_set(self) -> None:
         signal_titles = tuple(signal.title for signal in self.shell_spec.home_concept.signals)
@@ -191,10 +193,10 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
 
         self.assertEqual(
             (
-                "Recommended Next Step",
-                "Prepare A Run",
-                "Recent Context",
-                "Quiet Status",
+                "RECOMMENDED NEXT STEP",
+                "REVIEW & PLAN",
+                "RECENT CONTEXT",
+                "QUIET STATUS",
             ),
             signal_titles,
         )

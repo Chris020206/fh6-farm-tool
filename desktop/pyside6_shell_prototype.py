@@ -28,6 +28,25 @@ from ui.shell import (
 )
 
 
+COLOR_SURFACE_ROOT = "#0F1115"
+COLOR_SURFACE_BASE = "#17191E"
+COLOR_SURFACE_RAIL = "#111318"
+COLOR_SURFACE_TOPBAR = "#101217"
+COLOR_SURFACE_CARD = "#1E2128"
+COLOR_SURFACE_CARD_RAISED = "#262B35"
+COLOR_SURFACE_CARD_SOFT = "#20242C"
+COLOR_SURFACE_RECESSED = "#191C22"
+COLOR_BORDER_SUBTLE = "#353A46"
+COLOR_BORDER_STRONG = "#444B59"
+COLOR_ACCENT_PRIMARY = "#F21A87"
+COLOR_ACCENT_HOVER = "#FF4FA5"
+COLOR_ACCENT_PRESSED = "#C8146D"
+COLOR_TEXT_PRIMARY = "#E7E9EE"
+COLOR_TEXT_SECONDARY = "#B1B8C4"
+COLOR_TEXT_MUTED = "#7C8593"
+COLOR_TEXT_FAINT = "#5F6673"
+
+
 @dataclass(frozen=True)
 class PrototypeZone:
     role: ZoneRole
@@ -202,10 +221,9 @@ def launch_pyside6_shell_prototype() -> int:
         from PySide6.QtWidgets import (
             QApplication,
             QFrame,
+            QGraphicsOpacityEffect,
             QHBoxLayout,
             QLabel,
-            QListWidget,
-            QListWidgetItem,
             QMainWindow,
             QPushButton,
             QSizePolicy,
@@ -229,7 +247,7 @@ def launch_pyside6_shell_prototype() -> int:
     window.setFixedSize(shell_spec.window_width, shell_spec.window_height)
 
     root = QWidget()
-    root.setStyleSheet("background-color: #111315;")
+    root.setStyleSheet(f"background-color: {COLOR_SURFACE_ROOT};")
     root_layout = QVBoxLayout(root)
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(0)
@@ -247,24 +265,25 @@ def launch_pyside6_shell_prototype() -> int:
         QSizePolicy.Policy.Fixed,
         QSizePolicy.Policy.Expanding,
     )
-    collapsed_rail.setStyleSheet(
-        "background-color: #101214; border-right: 1px solid #282b2d;"
-    )
+    collapsed_rail.setStyleSheet(f"background-color: {COLOR_SURFACE_RAIL};")
     collapsed_rail_layout = QVBoxLayout(collapsed_rail)
     collapsed_rail_layout.setContentsMargins(8, 12, 8, 12)
     collapsed_rail_layout.setSpacing(10)
 
-    collapsed_nav_list = QListWidget()
-    collapsed_nav_list.setFixedHeight(216)
-    collapsed_nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    _apply_navigation_list_refinement(
-        collapsed_nav_list,
-        shell_spec=shell_spec,
-        collapsed=True,
+    collapsed_nav_container = QWidget()
+    collapsed_nav_container.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Fixed,
     )
+    collapsed_nav_layout = QVBoxLayout(collapsed_nav_container)
+    collapsed_nav_layout.setContentsMargins(0, 0, 0, 0)
+    collapsed_nav_layout.setSpacing(shell_spec.navigation_rail.item_spacing)
+    collapsed_nav_buttons = []
+    overlay_nav_buttons = []
+    overlay_text_fade_animations = []
 
     main_area = QWidget()
-    main_area.setStyleSheet("background-color: #17191b;")
+    main_area.setStyleSheet(f"background-color: {COLOR_SURFACE_BASE};")
     main_area_layout = QVBoxLayout(main_area)
     main_area_layout.setContentsMargins(
         shell_spec.vertical_rhythm.content_margin,
@@ -276,10 +295,15 @@ def launch_pyside6_shell_prototype() -> int:
     stacked_screens = QStackedWidget()
     main_area_layout.addWidget(stacked_screens)
 
-    for screen in shell_spec.screens:
-        collapsed_item = QListWidgetItem(screen.title[:1])
-        collapsed_item.setData(256, screen.screen_id.value)
-        collapsed_nav_list.addItem(collapsed_item)
+    for index, screen in enumerate(shell_spec.screens):
+        collapsed_button = _build_navigation_button(
+            screen=screen,
+            shell_spec=shell_spec,
+            collapsed=True,
+        )
+        collapsed_button.mousePressEvent = lambda _event, row=index: set_navigation_index(row)
+        collapsed_nav_buttons.append(collapsed_button)
+        collapsed_nav_layout.addWidget(collapsed_button)
         stacked_screens.addWidget(
             _build_screen_widget(
                 screen,
@@ -302,36 +326,43 @@ def launch_pyside6_shell_prototype() -> int:
         )
     )
 
-    overlay_navigation = QWidget(main_area)
+    overlay_navigation = QWidget(body)
     overlay_navigation.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
-    overlay_navigation.setGeometry(QRect(0, 0, 0, main_area.height()))
-    overlay_navigation.setStyleSheet(
-        "background-color: #151719; border-right: 1px solid #333638;"
-    )
+    overlay_navigation.setGeometry(QRect(0, 0, 0, body.height()))
+    overlay_navigation.setStyleSheet(f"background-color: {COLOR_SURFACE_RAIL};")
     overlay_navigation.raise_()
 
     overlay_layout = QVBoxLayout(overlay_navigation)
-    overlay_layout.setContentsMargins(14, 16, 14, 14)
-    overlay_layout.setSpacing(12)
-    overlay_title = QLabel(shell_spec.sidebar_composition.navigation_block_label)
-    _style_navigation_label(overlay_title, shell_spec=shell_spec)
-    overlay_layout.addWidget(overlay_title)
+    overlay_layout.setContentsMargins(8, 12, 14, 14)
+    overlay_layout.setSpacing(10)
 
-    overlay_nav_list = QListWidget()
-    overlay_nav_list.setFixedHeight(216)
-    overlay_nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    _apply_navigation_list_refinement(
-        overlay_nav_list,
-        shell_spec=shell_spec,
-        collapsed=False,
+    overlay_nav_container = QWidget()
+    overlay_nav_container.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Fixed,
     )
+    overlay_nav_layout = QVBoxLayout(overlay_nav_container)
+    overlay_nav_layout.setContentsMargins(0, 0, 0, 0)
+    overlay_nav_layout.setSpacing(shell_spec.navigation_rail.item_spacing)
 
-    for screen in shell_spec.screens:
-        item = QListWidgetItem(screen.title)
-        item.setData(256, screen.screen_id.value)
-        overlay_nav_list.addItem(item)
+    for index, screen in enumerate(shell_spec.screens):
+        overlay_button = _build_navigation_button(
+            screen=screen,
+            shell_spec=shell_spec,
+            collapsed=False,
+        )
+        overlay_button.mousePressEvent = lambda _event, row=index: set_navigation_index(row)
+        overlay_nav_buttons.append(overlay_button)
+        overlay_nav_layout.addWidget(overlay_button)
+        if overlay_button._navigation_text_label is not None:
+            opacity_effect = QGraphicsOpacityEffect(overlay_button)
+            opacity_effect.setOpacity(0)
+            overlay_button._navigation_text_label.setGraphicsEffect(opacity_effect)
+            text_animation = QPropertyAnimation(opacity_effect, b"opacity")
+            text_animation.setDuration(shell_spec.navigation_rail.animation_duration_ms)
+            overlay_text_fade_animations.append(text_animation)
 
-    overlay_layout.addWidget(overlay_nav_list)
+    overlay_layout.addWidget(overlay_nav_container)
     overlay_layout.addStretch()
     overlay_footer_status = QLabel(shell_spec.sidebar_composition.footer_status)
     overlay_footer_detail = QLabel(shell_spec.sidebar_composition.footer_detail)
@@ -347,53 +378,69 @@ def launch_pyside6_shell_prototype() -> int:
         if index < 0:
             return
         stacked_screens.setCurrentIndex(index)
-        if collapsed_nav_list.currentRow() != index:
-            collapsed_nav_list.setCurrentRow(index)
-        if overlay_nav_list.currentRow() != index:
-            overlay_nav_list.setCurrentRow(index)
+        for row, button in enumerate(collapsed_nav_buttons):
+            _style_navigation_button(
+                button,
+                shell_spec=shell_spec,
+                collapsed=True,
+                selected=row == index,
+            )
+        for row, button in enumerate(overlay_nav_buttons):
+            _style_navigation_button(
+                button,
+                shell_spec=shell_spec,
+                collapsed=False,
+                selected=row == index,
+            )
+
+    def animate_overlay_text_opacity(target_opacity: float) -> None:
+        for animation in overlay_text_fade_animations:
+            animation.stop()
+            animation.setStartValue(animation.targetObject().opacity())
+            animation.setEndValue(target_opacity)
+            animation.start()
 
     def expand_navigation_overlay() -> None:
         navigation_animation.stop()
         overlay_navigation.show()
         overlay_navigation.raise_()
+        animate_overlay_text_opacity(1)
         navigation_animation.setStartValue(overlay_navigation.geometry())
         navigation_animation.setEndValue(
             QRect(
                 0,
                 0,
                 shell_spec.navigation_rail.expanded_width,
-                main_area.height(),
+                body.height(),
             )
         )
         navigation_animation.start()
 
     def collapse_navigation_overlay() -> None:
         navigation_animation.stop()
+        animate_overlay_text_opacity(0)
         navigation_animation.setStartValue(overlay_navigation.geometry())
-        navigation_animation.setEndValue(QRect(0, 0, 0, main_area.height()))
+        navigation_animation.setEndValue(QRect(0, 0, 0, body.height()))
         navigation_animation.start()
 
-    collapsed_nav_list.currentRowChanged.connect(set_navigation_index)
-    overlay_nav_list.currentRowChanged.connect(set_navigation_index)
-    collapsed_nav_list.setCurrentRow(0)
-    overlay_nav_list.setCurrentRow(0)
+    set_navigation_index(0)
 
     collapsed_rail.enterEvent = lambda _event: expand_navigation_overlay()
     overlay_navigation.leaveEvent = lambda _event: collapse_navigation_overlay()
+    root.leaveEvent = lambda _event: collapse_navigation_overlay()
 
-    collapsed_rail_layout.addWidget(collapsed_nav_list)
+    collapsed_rail_layout.addWidget(collapsed_nav_container)
     collapsed_rail_layout.addStretch()
     footer_label = QLabel(shell_spec.sidebar_composition.footer_status)
     _style_footer_label(footer_label, shell_spec=shell_spec)
     collapsed_rail_layout.addWidget(footer_label)
 
     body_layout.addWidget(collapsed_rail)
-    body_layout.addWidget(_vertical_separator(QFrame))
     body_layout.addWidget(main_area)
     root_layout.addWidget(body)
 
-    main_area.resizeEvent = lambda _event: overlay_navigation.setGeometry(
-        QRect(0, 0, overlay_navigation.width(), main_area.height())
+    body.resizeEvent = lambda _event: overlay_navigation.setGeometry(
+        QRect(0, 0, overlay_navigation.width(), body.height())
     )
 
     window.setCentralWidget(root)
@@ -525,31 +572,31 @@ def _build_automation_section(
 def _build_prototype_home_concept() -> PrototypeHomeConcept:
     return PrototypeHomeConcept(
         title="Home",
-        philosophy_statement="Quiet confidence before operational commitment.",
-        opening_feel="A restrained launchpad that presents what matters now.",
+        philosophy_statement="Ready when the baseline is clear.",
+        opening_feel="Controlled preparation before supervised operation.",
         composition_principle="recommended next step first",
-        primary_action_label="Prepare Automation",
+        primary_action_label="Prepare a Run",
         is_single_frame=True,
         is_dashboard_like=False,
         signals=(
             PrototypeHomeSignal(
-                title="Recommended Next Step",
-                summary="Prepare a supervised run when FH6 is at a known baseline.",
+                title="RECOMMENDED NEXT STEP",
+                summary="Prepare a supervised run",
                 zone_role=ZoneRole.PRIMARY,
             ),
             PrototypeHomeSignal(
-                title="Prepare A Run",
-                summary="Review profile, readiness, warnings, and commitment in one focused place.",
+                title="REVIEW & PLAN",
+                summary="Review profile and readiness",
                 zone_role=ZoneRole.PRIMARY,
             ),
             PrototypeHomeSignal(
-                title="Recent Context",
-                summary="Recent activity stays lightweight: reassurance, not a dashboard.",
+                title="RECENT CONTEXT",
+                summary="Last prepared: Auto1 / supervised baseline",
                 zone_role=ZoneRole.SECONDARY,
             ),
             PrototypeHomeSignal(
-                title="Quiet Status",
-                summary="Controlled MVP ready for supervised developer/manual use.",
+                title="QUIET STATUS",
+                summary="Controlled MVP - Manual operation ready",
                 zone_role=ZoneRole.TERTIARY,
             ),
         ),
@@ -569,10 +616,10 @@ def _build_prototype_sidebar_composition() -> PrototypeSidebarComposition:
 def _build_prototype_navigation_rail() -> PrototypeNavigationRail:
     return PrototypeNavigationRail(
         collapsed_width=64,
-        expanded_width=184,
+        expanded_width=230,
         expansion_trigger="hover",
         animation_duration_ms=200,
-        item_height=34,
+        item_height=42,
         item_spacing=8,
         active_state_treatment="soft filled selection with clear contrast",
         overlay_treatment="quiet floating panel with restrained hierarchy",
@@ -620,10 +667,10 @@ def _build_prototype_visual_composition() -> PrototypeVisualComposition:
         home_hero_treatment="dark quiet launch surface",
         card_treatment="layered dark utility card",
         secondary_treatment="recessed contextual support",
-        commitment_treatment="restrained amber commitment",
+        commitment_treatment="restrained pink commitment",
         background_treatment="dark companion canvas",
-        composition_principle="mvp-coherent dark companion surface",
-        home_layout_treatment="launch surface with paired operational signals",
+        composition_principle="brief-aligned graphite companion surface",
+        home_layout_treatment="ordered launch surface with dominant recommended action",
         automation_layout_treatment="preparation flow with deliberate commitment",
     )
 
@@ -631,24 +678,28 @@ def _build_prototype_visual_composition() -> PrototypeVisualComposition:
 def _build_prototype_top_bar() -> PrototypeTopBar:
     return PrototypeTopBar(
         title="FH6 Farm Tool",
-        height=42,
+        height=63,
         treatment="restrained product identity bar",
         reserves_identity_space=True,
     )
 
 
 def _global_stylesheet() -> str:
-    return """
-    QWidget {
+    return f"""
+    QWidget {{
         font-family: "Segoe UI";
-    }
-    QMainWindow {
-        background-color: #111315;
-    }
-    QStackedWidget {
+    }}
+    QLabel {{
         background: transparent;
         border: none;
-    }
+    }}
+    QMainWindow {{
+        background-color: {COLOR_SURFACE_ROOT};
+    }}
+    QStackedWidget {{
+        background: transparent;
+        border: none;
+    }}
     """
 
 
@@ -658,65 +709,124 @@ def _build_top_bar_widget(shell_spec: PrototypeShellSpec, label_type):
     top_bar = QWidget()
     top_bar.setFixedHeight(shell_spec.top_bar.height)
     top_bar.setStyleSheet(
-        "background-color: #0f1113; border-bottom: 1px solid #2d3032;"
+        f"background-color: {COLOR_SURFACE_TOPBAR}; "
+        f"border-bottom: 1px solid {COLOR_BORDER_SUBTLE};"
     )
     layout = QHBoxLayout(top_bar)
-    layout.setContentsMargins(16, 0, 16, 0)
-    layout.setSpacing(8)
+    layout.setContentsMargins(18, 0, 18, 0)
+    layout.setSpacing(6)
 
-    title_label = label_type(shell_spec.top_bar.title)
-    title_label.setStyleSheet("font-size: 13px; font-weight: 650; color: #f1e6d2;")
-    layout.addWidget(title_label)
+    product_prefix_label = label_type("FH6")
+    product_prefix_label.setStyleSheet(
+        f"font-size: 14px; font-weight: 700; color: {COLOR_ACCENT_PRIMARY};"
+    )
+    product_name_label = label_type("Farm Tool")
+    product_name_label.setStyleSheet(
+        f"font-size: 14px; font-weight: 650; color: {COLOR_TEXT_PRIMARY};"
+    )
+    layout.addWidget(product_prefix_label)
+    layout.addWidget(product_name_label)
     layout.addStretch()
 
     return top_bar
 
 
-def _apply_navigation_list_refinement(
-    navigation_list,
+def _navigation_icon_for_screen(screen_id: ScreenId) -> str:
+    icons = {
+        ScreenId.HOME: "⌂",
+        ScreenId.PROFILES: "◎",
+        ScreenId.HISTORY: "◷",
+        ScreenId.HELP: "?",
+        ScreenId.SETTINGS: "⚙",
+    }
+    return icons[screen_id]
+
+
+def _build_navigation_button(
+    screen: PrototypeScreen,
     shell_spec: PrototypeShellSpec,
     collapsed: bool,
+):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy
+
+    button = QFrame()
+    button.setObjectName("NavigationItem")
+    button.setFixedHeight(shell_spec.navigation_rail.item_height)
+    button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    layout = QHBoxLayout(button)
+    layout.setContentsMargins(0 if collapsed else 10, 0, 0 if collapsed else 12, 0)
+    layout.setSpacing(8)
+
+    icon_label = QLabel(_navigation_icon_for_screen(screen.screen_id))
+    icon_label.setFixedWidth(shell_spec.navigation_rail.item_height)
+    icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    icon_label.setObjectName("NavigationIcon")
+    layout.addWidget(icon_label)
+
+    text_label = None
+    if not collapsed:
+        text_label = QLabel(screen.title)
+        text_label.setObjectName("NavigationText")
+        text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        layout.addWidget(text_label)
+
+    button._navigation_icon_label = icon_label
+    button._navigation_text_label = text_label
+    _style_navigation_button(
+        button,
+        shell_spec=shell_spec,
+        collapsed=collapsed,
+        selected=False,
+    )
+    return button
+
+
+def _style_navigation_button(
+    button,
+    shell_spec: PrototypeShellSpec,
+    collapsed: bool,
+    selected: bool,
 ) -> None:
-    navigation_list.setSpacing(shell_spec.navigation_rail.item_spacing)
-    navigation_list.setStyleSheet(
-        """
-        QListWidget {
+    icon_size = 24
+    label_size = shell_spec.typography.navigation_size + 1
+    color = COLOR_ACCENT_PRIMARY if selected else COLOR_TEXT_SECONDARY
+    background = "rgba(242, 26, 135, 36)" if selected else "transparent"
+    border = (
+        f"1px solid rgba(242, 26, 135, 76)"
+        if selected
+        else "1px solid transparent"
+    )
+    font_weight = 650 if selected else 500
+
+    button.setStyleSheet(
+        f"""
+        QFrame#NavigationItem {{
+            background-color: {background};
+            border: {border};
+            border-radius: 12px;
+        }}
+        QFrame#NavigationItem:hover {{
+            background-color: {COLOR_SURFACE_CARD_SOFT};
+            border: 1px solid transparent;
+        }}
+        QLabel#NavigationIcon {{
+            color: {color};
             background: transparent;
             border: none;
-            outline: none;
-        }
-        QScrollBar:vertical, QScrollBar:horizontal {
-            width: 0px;
-            height: 0px;
+            font-size: {icon_size}px;
+            font-weight: {font_weight};
+        }}
+        QLabel#NavigationText {{
+            color: {color};
             background: transparent;
-        }
-        QListWidget::item {
-            min-height: 34px;
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-size: 12px;
-            color: #bdb6aa;
-        }
-        QListWidget::item:selected {
-            background: #303337;
-            color: #f2e7d2;
-            font-weight: 600;
-        }
-        QListWidget::item:hover {
-            background: #25282b;
-        }
+            border: none;
+            font-size: {label_size}px;
+            font-weight: {font_weight};
+        }}
         """
     )
-    if collapsed:
-        navigation_list.setStyleSheet(
-            navigation_list.styleSheet()
-            + """
-            QListWidget::item {
-                text-align: center;
-                padding: 4px 0;
-            }
-            """
-        )
 
 
 def _build_screen_widget(
@@ -732,7 +842,12 @@ def _build_screen_widget(
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(shell_spec.vertical_rhythm.header_spacing)
     title_label = QLabel(screen.title)
-    primary_intention_label = QLabel(screen.primary_intention)
+    primary_intention_text = (
+        "Overview and next steps for your farming operations."
+        if home_concept is not None
+        else screen.primary_intention
+    )
+    primary_intention_label = QLabel(primary_intention_text)
     _style_screen_title(title_label, shell_spec=shell_spec)
     _style_summary_label(primary_intention_label, shell_spec=shell_spec)
     layout.addWidget(title_label)
@@ -798,38 +913,41 @@ def _build_home_screen_content(
     shell_spec: PrototypeShellSpec,
     open_automation_environment,
 ) -> None:
-    from PySide6.QtWidgets import QPushButton
-
     layout.addWidget(
         _build_visual_card(
             title="Ready when the baseline is clear",
-            summary=home_concept.philosophy_statement,
-            details=(home_concept.opening_feel,),
+            summary="Controlled preparation before supervised operation.",
+            details=("System ready",),
             shell_spec=shell_spec,
             treatment="hero",
         )
     )
     layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
 
-    layout.addLayout(
-        _build_card_row(
-            cards=(
-                _build_visual_card(
-                    title=home_concept.signals[0].title,
-                    summary=home_concept.signals[0].summary,
-                    details=(),
-                    shell_spec=shell_spec,
-                    treatment="primary",
-                ),
-                _build_visual_card(
-                    title=home_concept.signals[1].title,
-                    summary=home_concept.signals[1].summary,
-                    details=(),
-                    shell_spec=shell_spec,
-                    treatment="primary",
-                ),
-            ),
+    layout.addWidget(
+        _build_action_card(
+            eyebrow=home_concept.signals[0].title,
+            title=home_concept.signals[0].summary,
+            summary="Review baseline, requirements and environment before starting.",
+            button_text=home_concept.primary_action_label,
             shell_spec=shell_spec,
+            treatment="primary action",
+            primary=True,
+            action_callback=open_automation_environment,
+        )
+    )
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+
+    layout.addWidget(
+        _build_action_card(
+            eyebrow=home_concept.signals[1].title,
+            title=home_concept.signals[1].summary,
+            summary="Check profile, readiness, warnings and commitment before proceeding.",
+            button_text="Open Review",
+            shell_spec=shell_spec,
+            treatment="secondary action",
+            primary=False,
+            action_callback=open_automation_environment,
         )
     )
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
@@ -855,14 +973,6 @@ def _build_home_screen_content(
             shell_spec=shell_spec,
         )
     )
-
-    if open_automation_environment is not None:
-        button = QPushButton(home_concept.primary_action_label)
-        _style_primary_button(button, shell_spec=shell_spec)
-        button.clicked.connect(open_automation_environment)
-        layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
-        layout.addWidget(button)
-
 
 def _build_automation_environment_content(
     layout,
@@ -923,6 +1033,70 @@ def _build_section_card(
     )
 
 
+def _build_action_card(
+    eyebrow: str,
+    title: str,
+    summary: str,
+    button_text: str,
+    shell_spec: PrototypeShellSpec,
+    treatment: str,
+    primary: bool,
+    action_callback,
+):
+    from PySide6.QtWidgets import (
+        QFrame,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QSizePolicy,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    card = QFrame()
+    card.setObjectName("PrototypeCard")
+    card.setFrameShape(QFrame.Shape.NoFrame)
+    card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(card, treatment=treatment)
+
+    card_layout = QHBoxLayout(card)
+    card_layout.setContentsMargins(14, 12, 14, 12)
+    card_layout.setSpacing(10)
+
+    if _uses_accent_strip(treatment):
+        card_layout.addWidget(_build_accent_strip(QFrame))
+
+    content = QWidget()
+    content.setStyleSheet("background: transparent; border: none;")
+    content_layout = QVBoxLayout(content)
+    content_layout.setContentsMargins(0, 0, 0, 0)
+    content_layout.setSpacing(6)
+
+    eyebrow_label = QLabel(eyebrow)
+    _style_eyebrow_label(eyebrow_label, primary=primary)
+    title_label = QLabel(title)
+    _style_action_title(title_label, primary=primary)
+    summary_label = QLabel(summary)
+    _style_detail_label(summary_label, shell_spec=shell_spec)
+
+    button = QPushButton(button_text)
+    if primary:
+        _style_primary_button(button, shell_spec=shell_spec)
+    else:
+        _style_secondary_button(button, shell_spec=shell_spec)
+
+    if action_callback is not None:
+        button.clicked.connect(action_callback)
+
+    content_layout.addWidget(eyebrow_label)
+    content_layout.addWidget(title_label)
+    content_layout.addWidget(summary_label)
+    content_layout.addWidget(button)
+    card_layout.addWidget(content)
+
+    return card
+
+
 def _build_card_row(cards: tuple[object, object], shell_spec: PrototypeShellSpec):
     from PySide6.QtWidgets import QHBoxLayout
 
@@ -935,6 +1109,14 @@ def _build_card_row(cards: tuple[object, object], shell_spec: PrototypeShellSpec
     return row
 
 
+def _build_footer_metadata_label(text: str, shell_spec: PrototypeShellSpec):
+    from PySide6.QtWidgets import QLabel
+
+    label = QLabel(text)
+    _style_footer_label(label, shell_spec=shell_spec)
+    return label
+
+
 def _build_visual_card(
     title: str,
     summary: str,
@@ -942,109 +1124,190 @@ def _build_visual_card(
     shell_spec: PrototypeShellSpec,
     treatment: str,
 ):
-    from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout
+    from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
     card = QFrame()
+    card.setObjectName("PrototypeCard")
     card.setFrameShape(QFrame.Shape.NoFrame)
     card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
     _style_visual_card(card, treatment=treatment)
 
-    card_layout = QVBoxLayout(card)
+    card_layout = QHBoxLayout(card)
     card_layout.setContentsMargins(
         shell_spec.vertical_rhythm.group_inner_margin + 2,
         shell_spec.vertical_rhythm.group_inner_margin,
         shell_spec.vertical_rhythm.group_inner_margin + 2,
         shell_spec.vertical_rhythm.group_inner_margin,
     )
-    card_layout.setSpacing(6)
+    card_layout.setSpacing(10)
+
+    if _uses_accent_strip(treatment):
+        card_layout.addWidget(_build_accent_strip(QFrame))
+
+    content = QWidget()
+    content.setStyleSheet("background: transparent; border: none;")
+    content_layout = QVBoxLayout(content)
+    content_layout.setContentsMargins(0, 0, 0, 0)
+    content_layout.setSpacing(6)
 
     title_label = QLabel(title)
     summary_label = QLabel(summary)
     _style_card_title(title_label, shell_spec=shell_spec, treatment=treatment)
     _style_summary_label(summary_label, shell_spec=shell_spec)
-    card_layout.addWidget(title_label)
-    card_layout.addWidget(summary_label)
+    content_layout.addWidget(title_label)
+    content_layout.addWidget(summary_label)
 
     for detail in details:
         detail_label = QLabel(detail)
         _style_detail_label(detail_label, shell_spec=shell_spec)
-        card_layout.addWidget(detail_label)
+        content_layout.addWidget(detail_label)
+
+    card_layout.addWidget(content)
 
     return card
+
+
+def _uses_accent_strip(treatment: str) -> bool:
+    return (
+        treatment == "hero"
+        or "primary action" in treatment
+        or "commitment" in treatment
+    )
+
+
+def _build_accent_strip(frame_type):
+    strip = frame_type()
+    strip.setFixedWidth(4)
+    strip.setStyleSheet(
+        f"""
+        QFrame {{
+            background-color: {COLOR_ACCENT_PRIMARY};
+            border: none;
+            border-radius: 2px;
+        }}
+        """
+    )
+    return strip
 
 
 def _style_visual_card(card, treatment: str) -> None:
     if treatment == "hero":
         card.setStyleSheet(
+            f"""
+            QFrame#PrototypeCard {{
+                background-color: {COLOR_SURFACE_CARD_RAISED};
+                border: 1px solid {COLOR_BORDER_SUBTLE};
+                border-radius: 18px;
+            }}
             """
-            QFrame {
-                background-color: #202327;
-                border: 1px solid #3e3b34;
-                border-left: 4px solid #a9905f;
-                border-radius: 8px;
-            }
+        )
+        return
+
+    if "primary action" in treatment:
+        card.setStyleSheet(
+            f"""
+            QFrame#PrototypeCard {{
+                background-color: {COLOR_SURFACE_CARD_RAISED};
+                border: 1px solid {COLOR_ACCENT_PRIMARY};
+                border-radius: 18px;
+            }}
+            """
+        )
+        return
+
+    if "secondary action" in treatment:
+        card.setStyleSheet(
+            f"""
+            QFrame#PrototypeCard {{
+                background-color: {COLOR_SURFACE_CARD};
+                border: 1px solid {COLOR_BORDER_SUBTLE};
+                border-radius: 16px;
+            }}
             """
         )
         return
 
     if "tertiary" in treatment:
         card.setStyleSheet(
-            """
-            QFrame {
-                background-color: #1b1d20;
-                border: 1px solid #2d3032;
-                border-radius: 7px;
-            }
+            f"""
+            QFrame#PrototypeCard {{
+                background-color: {COLOR_SURFACE_RECESSED};
+                border: 1px solid {COLOR_BORDER_SUBTLE};
+                border-radius: 14px;
+            }}
             """
         )
         return
 
     if "secondary" in treatment:
         card.setStyleSheet(
-            """
-            QFrame {
-                background-color: #1d2023;
-                border: 1px solid #313436;
-                border-radius: 7px;
-            }
+            f"""
+            QFrame#PrototypeCard {{
+                background-color: {COLOR_SURFACE_CARD_SOFT};
+                border: 1px solid {COLOR_BORDER_SUBTLE};
+                border-radius: 14px;
+            }}
             """
         )
         return
 
     if "commitment" in treatment:
         card.setStyleSheet(
-            """
-            QFrame {
-                background-color: #242018;
-                border: 1px solid #514632;
-                border-left: 4px solid #b79a63;
-                border-radius: 8px;
-            }
+            f"""
+            QFrame#PrototypeCard {{
+                background-color: {COLOR_SURFACE_CARD_RAISED};
+                border: 1px solid {COLOR_ACCENT_PRIMARY};
+                border-radius: 18px;
+            }}
             """
         )
         return
 
     card.setStyleSheet(
-        """
-        QFrame {
-            background-color: #202326;
-            border: 1px solid #35383a;
-            border-radius: 7px;
-        }
+        f"""
+        QFrame#PrototypeCard {{
+            background-color: {COLOR_SURFACE_CARD};
+            border: 1px solid {COLOR_BORDER_SUBTLE};
+            border-radius: 16px;
+        }}
         """
     )
 
 
 def _style_card_title(label, shell_spec: PrototypeShellSpec, treatment: str) -> None:
-    color = "#f4ead7"
+    color = COLOR_TEXT_PRIMARY
     weight = 620
+    size = shell_spec.typography.section_title_size
+    if treatment == "hero":
+        size = 18
+        weight = 680
     if "secondary" in treatment or "tertiary" in treatment:
-        color = "#c8beac"
+        color = COLOR_TEXT_SECONDARY
         weight = 560
 
     label.setStyleSheet(
-        f"font-size: {shell_spec.typography.section_title_size}px; "
-        f"font-weight: {weight}; color: {color};"
+        f"font-size: {size}px; "
+        f"font-weight: {weight}; color: {color}; "
+        "background: transparent; border: none;"
+    )
+    label.setWordWrap(True)
+
+
+def _style_eyebrow_label(label, primary: bool) -> None:
+    color = COLOR_ACCENT_PRIMARY if primary else COLOR_TEXT_MUTED
+    label.setStyleSheet(
+        f"font-size: 10px; font-weight: 700; color: {color}; "
+        "letter-spacing: 1px; background: transparent; border: none;"
+    )
+    label.setWordWrap(True)
+
+
+def _style_action_title(label, primary: bool) -> None:
+    size = 18 if primary else 16
+    weight = 680 if primary else 620
+    label.setStyleSheet(
+        f"font-size: {size}px; font-weight: {weight}; "
+        f"color: {COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
     )
     label.setWordWrap(True)
 
@@ -1052,7 +1315,8 @@ def _style_card_title(label, shell_spec: PrototypeShellSpec, treatment: str) -> 
 def _style_screen_title(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.screen_title_size}px; "
-        "font-weight: 650; color: #f5ead8;"
+        f"font-weight: 650; color: {COLOR_TEXT_PRIMARY}; "
+        "background: transparent; border: none;"
     )
     label.setWordWrap(True)
 
@@ -1060,7 +1324,8 @@ def _style_screen_title(label, shell_spec: PrototypeShellSpec) -> None:
 def _style_summary_label(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.summary_size}px; "
-        "font-weight: 500; color: #d6c9b6;"
+        f"font-weight: 500; color: {COLOR_TEXT_SECONDARY}; "
+        "background: transparent; border: none;"
     )
     label.setWordWrap(True)
 
@@ -1068,7 +1333,8 @@ def _style_summary_label(label, shell_spec: PrototypeShellSpec) -> None:
 def _style_detail_label(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.detail_size}px; "
-        "font-weight: 400; color: #948b7c;"
+        f"font-weight: 400; color: {COLOR_TEXT_MUTED}; "
+        "background: transparent; border: none;"
     )
     label.setWordWrap(True)
 
@@ -1076,14 +1342,16 @@ def _style_detail_label(label, shell_spec: PrototypeShellSpec) -> None:
 def _style_navigation_label(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.navigation_size}px; "
-        "font-weight: 600; color: #f0e3ca;"
+        f"font-weight: 600; color: {COLOR_TEXT_PRIMARY}; "
+        "background: transparent; border: none;"
     )
 
 
 def _style_footer_label(label, shell_spec: PrototypeShellSpec) -> None:
     label.setStyleSheet(
         f"font-size: {shell_spec.typography.footer_size}px; "
-        "font-weight: 400; color: #8f8778;"
+        f"font-weight: 400; color: {COLOR_TEXT_MUTED}; "
+        "background: transparent; border: none;"
     )
     label.setWordWrap(True)
 
@@ -1094,17 +1362,40 @@ def _style_primary_button(button, shell_spec: PrototypeShellSpec) -> None:
         QPushButton {{
             font-size: {shell_spec.typography.summary_size}px;
             font-weight: 620;
-            color: #181613;
-            background-color: #ad9362;
-            border: 1px solid #c2a873;
-            border-radius: 7px;
+            color: #ffffff;
+            background-color: {COLOR_ACCENT_PRIMARY};
+            border: 1px solid {COLOR_ACCENT_PRIMARY};
+            border-radius: 12px;
             padding: 8px 10px;
         }}
         QPushButton:hover {{
-            background-color: #bca36f;
+            background-color: {COLOR_ACCENT_HOVER};
         }}
         QPushButton:pressed {{
-            background-color: #967d50;
+            background-color: {COLOR_ACCENT_PRESSED};
+        }}
+        """
+    )
+
+
+def _style_secondary_button(button, shell_spec: PrototypeShellSpec) -> None:
+    button.setStyleSheet(
+        f"""
+        QPushButton {{
+            font-size: {shell_spec.typography.summary_size}px;
+            font-weight: 600;
+            color: {COLOR_TEXT_PRIMARY};
+            background-color: transparent;
+            border: 1px solid {COLOR_BORDER_STRONG};
+            border-radius: 12px;
+            padding: 8px 10px;
+        }}
+        QPushButton:hover {{
+            background-color: {COLOR_SURFACE_CARD_SOFT};
+            border: 1px solid {COLOR_TEXT_MUTED};
+        }}
+        QPushButton:pressed {{
+            background-color: {COLOR_SURFACE_RECESSED};
         }}
         """
     )
