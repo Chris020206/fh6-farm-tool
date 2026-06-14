@@ -259,7 +259,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
     sidebar_destinations = get_sidebar_destinations()
 
     return PrototypeShellSpec(
-        window_title="FH6 Farm Tool - PySide6 Shell Prototype",
+        window_title="FH6 Farm Tool",
         window_width=640,
         window_height=864,
         is_fixed_size=True,
@@ -301,7 +301,7 @@ def launch_pyside6_shell_prototype() -> int:
         )
     except ImportError as error:
         raise SystemExit(
-            "PySide6 is not installed. Install PySide6 before launching the prototype."
+            "PySide6 is not installed. Install PySide6 before launching the desktop app."
         ) from error
 
     import sys
@@ -615,7 +615,7 @@ def _build_prototype_screen(screen_descriptor: ScreenDescriptor) -> PrototypeScr
 
 def _build_prototype_automation_environment() -> PrototypeAutomationEnvironment:
     controller = FrontendAutomationController(
-        session_id_provider=lambda: "prototype-preview-session",
+        session_id_provider=lambda: "desktop-preview-session",
     )
     run_plan = controller.prepare_run_plan(
         AutomationRunRequest(
@@ -1353,7 +1353,7 @@ def _build_automation_environment_widget(
     layout.addSpacing(4)
 
     controller = FrontendAutomationController(
-        session_id_provider=lambda: "prototype-prepared-session",
+        session_id_provider=lambda: "desktop-prepared-session",
     )
     active_automations = tuple(get_active_automation_definitions())
     selected_automation_id = {"value": active_automations[0].automation_id}
@@ -1554,7 +1554,7 @@ def _build_automation_environment_widget(
                 (
                     "Prepared state only. Supervision mode is available."
                     if prepared
-                    else "Preparation only. No runner or real input is connected."
+                    else "Preparation only. No operation begins until commitment."
                 ),
             ),
         )
@@ -2090,7 +2090,7 @@ def _build_completion_state_widget(
         profile_name = companion_state.get("profile_name", "Selected profile")
         execution_message = companion_state.get(
             "execution_message",
-            "Prototype-only lifecycle state. No automation result was produced.",
+            "No automation result has been produced for this state.",
         )
         outcome_details = (
             (automation_name, execution_message)
@@ -2711,6 +2711,17 @@ def _vertical_separator(frame_type):
     separator.setFrameShadow(frame_type.Shadow.Sunken)
     separator.setStyleSheet("color: #292c2d; background-color: #292c2d;")
     return separator
+
+
+DesktopShellSpec = PrototypeShellSpec
+
+
+def build_desktop_app_spec() -> DesktopShellSpec:
+    return build_prototype_shell_spec()
+
+
+def launch_desktop_app() -> int:
+    return launch_pyside6_shell_prototype()
 
 
 def main() -> int:

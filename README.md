@@ -5,12 +5,14 @@ hardening.
 
 The project is organized as small modules with clear ownership boundaries. This
 stage includes shared runtime systems, guarded manual operator commands,
-profile tooling, and documentation for validated Auto1/Auto2/Auto3 behavior.
-It is not a broad production release.
+profile tooling, a PySide6 desktop UI foundation, and documentation for
+validated Auto1/Auto2/Auto3 behavior. It is not a broad production release.
 
-The current command surface is for controlled developer/manual operation. It is
-not the intended public paid launch UX; M11 strategy requires a restrained
-premium desktop UI before public paid launch.
+The current command surface and desktop UI are for controlled developer/manual
+operation. The desktop shell now provides the real UI foundation for Home,
+Automation Environment, commitment, supervision, and completion states, but it
+is not public launch-ready. M11 strategy still requires a restrained premium
+desktop UI to be hardened before public paid launch.
 
 Normal `main.py` startup remains safe: it loads configuration, logs startup,
 and exits without running automation or sending keyboard input.
@@ -23,7 +25,8 @@ and exits without running automation or sending keyboard input.
 - `profiles/` official/custom profile storage, validation, and commands
 - `settings/` future configuration handling
 - `app_logging/` application logging support
-- `ui/` future user interface modules
+- `ui/` product-facing non-visual UI structure
+- `desktop/` PySide6 desktop UI application foundation
 - `assets/` static project assets
 - `tests/` test suite
 - `config/` configuration files
@@ -110,6 +113,25 @@ where real input is used.
 Auto4 is not part of the current MVP hardening scope. M11 strategy treats it as
 a conditional pre-launch candidate only if a future safety milestone proves it
 can be strongly guarded, clearly explained, and trust-preserving.
+
+## Desktop UI
+
+The PySide6 desktop UI foundation can be launched with:
+
+```powershell
+python -B -m desktop.app
+```
+
+The desktop UI currently supports navigation through the Home launch surface,
+Automation Environment preparation, commitment countdown, Companion Mode, and
+post-run completion states. Visible controls either navigate/update UI state or
+refuse unsupported execution calmly.
+
+Real automation remains safety-bound. Auto1 has a guarded UI execution path
+with focus handoff, F8 stop preservation, and an Auto1-only race drive duration
+adjustment. Auto2 and Auto3 are not executable from the desktop UI. They remain
+available only through their existing guarded/manual commands until a future
+integration milestone explicitly changes that boundary.
 
 ## Engineering Standards
 

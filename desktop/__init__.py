@@ -1,1 +1,1 @@
-"""Desktop frontend prototype modules."""
+"""Desktop UI application modules."""

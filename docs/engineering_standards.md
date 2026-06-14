@@ -32,7 +32,21 @@ These standards define the baseline rules for future FH6 Farm Tool work.
 
 ## Current Boundaries
 
-- No automation behavior exists yet.
-- No UI behavior exists yet.
-- No shared runtime systems are implemented yet.
-- No profile management is implemented yet.
+- Auto1, Auto2, and Auto3 automation modules exist and must remain separated.
+- Shared runtime systems exist for input control, timing, sequence execution,
+  stop handling, logging, settings, profiles, product metadata, readiness, and
+  session/history modeling.
+- The PySide6 desktop UI foundation exists under `desktop/` and launches via
+  `python -B -m desktop.app`.
+- Normal `main.py` startup remains safe and must not run automation or send
+  keyboard input.
+- Real input remains guarded. Do not instantiate real keyboard input or register
+  hotkeys from ordinary import paths.
+- Auto1 has a guarded desktop UI execution path. Preserve focus handoff, F8
+  stop behavior, fail-closed handling, and the Auto1-only race drive duration
+  runtime adjustment.
+- Auto2 and Auto3 must not execute from the desktop UI until a future milestone
+  explicitly wires and validates them.
+- Official profiles remain protected. Runtime UI adjustments must stay narrow,
+  explicit, and automation-specific.
+- Auto4/remove-car behavior remains outside current implementation boundaries.

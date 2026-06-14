@@ -8,9 +8,10 @@ run automation.
 ## Command Output
 
 Manual commands use structured operator output for refusals and run summaries.
-The CLI is the current consumer of this result layer; future desktop UI can use
-the same status, reason, risk, required-action, and summary concepts for
-warning cards, pre-flight panels, and completion summaries.
+The CLI remains the primary guarded/manual automation surface. The PySide6
+desktop UI foundation now uses the same status, reason, risk, required-action,
+and summary concepts for warning cards, preparation panels, supervision states,
+and completion summaries, but it is not public launch-ready.
 
 Refusals are expected to show:
 
@@ -20,6 +21,23 @@ Refusals are expected to show:
 - required action
 - suggested next step where useful
 - risk level
+
+## Desktop UI Foundation
+
+Launches the PySide6 desktop UI foundation:
+
+```powershell
+python -B -m desktop.app
+```
+
+Current boundary:
+
+- Home, Automation Environment, commitment, Companion Mode, and completion
+  states are represented.
+- Auto1 has a guarded UI execution path.
+- Auto2 and Auto3 do not execute from the desktop UI.
+- Normal startup through `main.py` remains safe.
+- The desktop UI is not public launch-ready.
 
 ## Auto1 Official Manual Run
 

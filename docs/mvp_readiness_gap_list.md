@@ -93,9 +93,10 @@ Postponed after MVP:
 
 Public paid launch requirement:
 
-- Build a restrained premium desktop UI/dashboard. The current CLI remains the
-  controlled developer/manual operator surface, not the intended public paid
-  UX.
+- Harden the existing restrained PySide6 desktop UI foundation into a
+  public-ready desktop product. The current CLI remains the primary
+  controlled/manual operator surface, and the current desktop UI is not yet
+  public launch-ready.
 
 ## 5. Profile / Settings
 

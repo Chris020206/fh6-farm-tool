@@ -8,7 +8,8 @@ This means the validated command surface is ready for careful, supervised
 developer/operator use.
 
 This does not mean broad public/customer release readiness. The project is not
-packaged, not UI-driven, and not ready for unattended automation.
+packaged, the desktop UI is not public launch-ready, and the project is not
+ready for unattended automation.
 
 ---
 
@@ -20,6 +21,7 @@ Current priorities:
 
 - operator runbooks
 - CLI polish
+- desktop UI foundation hardening
 - safety hardening
 - documentation consistency
 - additional refusal/profile tests
@@ -28,16 +30,15 @@ Current priorities:
 Not current priorities:
 
 - Auto4
-- UI implementation during the immediate command-hardening pass
 - new automation capability
 - timing optimization
 - expanding Auto3 boundaries
 
 Strategic note:
 
-M11 doctrine treats UI as trust infrastructure. The current controlled MVP is
-CLI/manual oriented, but a restrained premium desktop UI is mandatory before
-public paid launch.
+M11 doctrine treats UI as trust infrastructure. The PySide6 desktop UI
+foundation now exists for controlled developer/manual use, but it must be
+hardened before public paid launch.
 
 ---
 

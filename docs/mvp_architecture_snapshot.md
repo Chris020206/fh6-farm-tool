@@ -262,5 +262,6 @@ Do not expand Auto3 counts above 4, add start-row flexibility, or promote an
 Auto3 production command without a separate milestone and review.
 
 In parallel strategic planning, preserve the M11 direction that public paid
-launch requires a restrained premium desktop UI. The current CLI/manual command
-surface is an operator/developer surface, not the intended public launch UX.
+launch requires a restrained premium desktop UI. The PySide6 desktop UI
+foundation now exists, but it remains an operator/developer hardening surface
+until a future milestone validates it for public launch.

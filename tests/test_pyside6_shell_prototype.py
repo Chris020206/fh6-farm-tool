@@ -119,7 +119,7 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
 
     def test_smoke_spec_does_not_require_gui_launch(self) -> None:
         self.assertEqual(
-            "FH6 Farm Tool - PySide6 Shell Prototype",
+            "FH6 Farm Tool",
             self.shell_spec.window_title,
         )
         self.assertEqual(5, len(self.shell_spec.screens))
