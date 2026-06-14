@@ -126,6 +126,18 @@ class PySide6ShellPrototypeTest(unittest.TestCase):
         self.assertTrue(companion_mode.is_simpler_than_automation_environment)
         self.assertFalse(companion_mode.introduces_execution)
 
+    def test_commitment_layer_is_last_safe_checkpoint_without_execution(self) -> None:
+        commitment = self.shell_spec.commitment_layer
+
+        self.assertEqual("Commit to Supervision", commitment.title)
+        self.assertIn("Confirm readiness", commitment.primary_intention)
+        self.assertEqual((3, 2, 1), commitment.countdown_values)
+        self.assertLess(len(commitment.countdown_values), 4)
+        self.assertTrue(commitment.is_last_safe_exit)
+        self.assertFalse(commitment.introduces_execution)
+        self.assertIn("FH6 focus handoff", commitment.focus_label)
+        self.assertIn("F8", commitment.stop_label)
+
     def test_completion_lifecycle_represents_calm_post_run_outcomes(self) -> None:
         completion = self.shell_spec.completion_lifecycle
         state_ids = tuple(state.state_id for state in completion.states)

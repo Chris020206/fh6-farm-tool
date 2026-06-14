@@ -187,6 +187,19 @@ class PrototypeCompanionMode:
 
 
 @dataclass(frozen=True)
+class PrototypeCommitmentLayer:
+    title: str
+    primary_intention: str
+    readiness_label: str
+    focus_label: str
+    profile_label: str
+    stop_label: str
+    countdown_values: tuple[int, ...]
+    is_last_safe_exit: bool
+    introduces_execution: bool
+
+
+@dataclass(frozen=True)
 class PrototypeCompletionState:
     state_id: str
     title: str
@@ -221,6 +234,7 @@ class PrototypeShellSpec:
     typography: PrototypeTypographyHierarchy
     visual_composition: PrototypeVisualComposition
     top_bar: PrototypeTopBar
+    commitment_layer: PrototypeCommitmentLayer
     companion_mode: PrototypeCompanionMode
     completion_lifecycle: PrototypeCompletionLifecycle
 
@@ -246,6 +260,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
         typography=_build_prototype_typography_hierarchy(),
         visual_composition=_build_prototype_visual_composition(),
         top_bar=_build_prototype_top_bar(),
+        commitment_layer=_build_prototype_commitment_layer(),
         companion_mode=_build_prototype_companion_mode(),
         completion_lifecycle=_build_prototype_completion_lifecycle(),
     )
@@ -253,7 +268,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
 
 def launch_pyside6_shell_prototype() -> int:
     try:
-        from PySide6.QtCore import QPropertyAnimation, QRect
+        from PySide6.QtCore import QPropertyAnimation, QRect, QTimer
         from PySide6.QtWidgets import (
             QApplication,
             QFrame,
@@ -331,7 +346,8 @@ def launch_pyside6_shell_prototype() -> int:
     stacked_screens = QStackedWidget()
     main_area_layout.addWidget(stacked_screens)
     automation_environment_index = len(shell_spec.screens)
-    companion_mode_index = automation_environment_index + 1
+    commitment_layer_index = automation_environment_index + 1
+    companion_mode_index = commitment_layer_index + 1
     completion_state_index = companion_mode_index + 1
 
     for index, screen in enumerate(shell_spec.screens):
@@ -377,18 +393,32 @@ def launch_pyside6_shell_prototype() -> int:
             )
         ),
     )
+    commitment_layer_widget, update_commitment_layer = _build_commitment_layer_widget(
+        shell_spec=shell_spec,
+        timer_type=QTimer,
+        return_to_preparation=lambda: stacked_screens.setCurrentIndex(
+            automation_environment_index
+        ),
+        open_companion_mode=(
+            lambda companion_state: (
+                update_companion_mode(companion_state),
+                stacked_screens.setCurrentIndex(companion_mode_index),
+            )
+        ),
+    )
     stacked_screens.addWidget(
         _build_automation_environment_widget(
             shell_spec.automation_environment,
             shell_spec=shell_spec,
-            open_companion_mode=(
+            open_commitment_layer=(
                 lambda companion_state: (
-                    update_companion_mode(companion_state),
-                    stacked_screens.setCurrentIndex(companion_mode_index),
+                    update_commitment_layer(companion_state),
+                    stacked_screens.setCurrentIndex(commitment_layer_index),
                 )
             ),
         )
     )
+    stacked_screens.addWidget(commitment_layer_widget)
     stacked_screens.addWidget(companion_mode_widget)
     stacked_screens.addWidget(completion_state_widget)
 
@@ -750,6 +780,20 @@ def _build_prototype_top_bar() -> PrototypeTopBar:
     )
 
 
+def _build_prototype_commitment_layer() -> PrototypeCommitmentLayer:
+    return PrototypeCommitmentLayer(
+        title="Commit to Supervision",
+        primary_intention="Confirm readiness before supervised operation begins.",
+        readiness_label="You are about to begin supervised operation.",
+        focus_label="FH6 focus handoff ready",
+        profile_label="Safe default profile loaded",
+        stop_label="Emergency stop available (F8)",
+        countdown_values=(3, 2, 1),
+        is_last_safe_exit=True,
+        introduces_execution=False,
+    )
+
+
 def _build_prototype_companion_mode() -> PrototypeCompanionMode:
     return PrototypeCompanionMode(
         title="Companion Mode",
@@ -996,7 +1040,7 @@ def _build_screen_widget(
 def _build_automation_environment_widget(
     automation_environment: PrototypeAutomationEnvironment,
     shell_spec: PrototypeShellSpec,
-    open_companion_mode,
+    open_commitment_layer,
 ):
     from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -1208,7 +1252,7 @@ def _build_automation_environment_widget(
         lambda: render_preparation_state(selected_automation_id["value"], prepared=True)
     )
     companion_button.clicked.connect(
-        lambda: open_companion_mode(selected_companion_state["value"])
+        lambda: open_commitment_layer(selected_companion_state["value"])
         if selected_companion_state["value"] is not None
         else None
     )
@@ -1216,6 +1260,144 @@ def _build_automation_environment_widget(
 
     layout.addStretch()
     return container
+
+
+def _build_commitment_layer_widget(
+    shell_spec: PrototypeShellSpec,
+    timer_type,
+    return_to_preparation,
+    open_companion_mode,
+):
+    from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(10)
+
+    title_label = QLabel(shell_spec.commitment_layer.title)
+    subtitle_label = QLabel(shell_spec.commitment_layer.primary_intention)
+    _style_screen_title(title_label, shell_spec=shell_spec)
+    _style_summary_label(subtitle_label, shell_spec=shell_spec)
+    layout.addWidget(title_label)
+    layout.addWidget(subtitle_label)
+    layout.addSpacing(8)
+
+    readiness_card = _build_preparation_text_card(
+        eyebrow="LAST SAFE CHECKPOINT",
+        shell_spec=shell_spec,
+        treatment="primary action",
+    )
+    focus_card = _build_preparation_text_card(
+        eyebrow="FOCUS HANDOFF",
+        shell_spec=shell_spec,
+        treatment="primary confidence check",
+    )
+    profile_card = _build_preparation_text_card(
+        eyebrow="PROFILE",
+        shell_spec=shell_spec,
+        treatment="secondary contextual support",
+    )
+    countdown_card = _build_preparation_text_card(
+        eyebrow="COMMITMENT COUNTDOWN",
+        shell_spec=shell_spec,
+        treatment="commitment",
+    )
+
+    layout.addWidget(readiness_card["card"])
+    layout.addSpacing(6)
+    layout.addLayout(
+        _build_card_row(
+            cards=(focus_card["card"], profile_card["card"]),
+            shell_spec=shell_spec,
+        )
+    )
+    layout.addSpacing(6)
+    layout.addWidget(countdown_card["card"])
+    layout.addSpacing(8)
+
+    action_row = QHBoxLayout()
+    action_row.setContentsMargins(0, 0, 0, 0)
+    action_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    continue_button = QPushButton("Continue")
+    return_button = QPushButton("Return to Preparation")
+    _style_primary_button(continue_button, shell_spec=shell_spec)
+    _style_secondary_button(return_button, shell_spec=shell_spec)
+    action_row.addWidget(continue_button)
+    action_row.addWidget(return_button)
+    layout.addLayout(action_row)
+    layout.addStretch()
+
+    countdown_timer = timer_type(container)
+    countdown_timer.setInterval(900)
+    current_companion_state = {"value": None}
+    countdown_position = {"value": 0}
+
+    def set_waiting_state(companion_state: dict[str, str]) -> None:
+        current_companion_state["value"] = companion_state
+        countdown_timer.stop()
+        countdown_position["value"] = 0
+        continue_button.setEnabled(True)
+        _set_preparation_card_text(
+            readiness_card,
+            title=shell_spec.commitment_layer.readiness_label,
+            summary=companion_state.get("automation_name", "Prepared operation"),
+            details=("Confirm readiness before continuing.",),
+        )
+        _set_preparation_card_text(
+            focus_card,
+            title=shell_spec.commitment_layer.focus_label,
+            summary="Final focus handoff checkpoint",
+            details=("No automation begins from this prototype layer.",),
+        )
+        _set_preparation_card_text(
+            profile_card,
+            title=companion_state.get("profile_name", "Selected profile"),
+            summary=shell_spec.commitment_layer.profile_label,
+            details=(shell_spec.commitment_layer.stop_label,),
+        )
+        _set_preparation_card_text(
+            countdown_card,
+            title="Ready when you are",
+            summary="Supervised operation begins after a calm countdown.",
+            details=("Continue or return to preparation.",),
+        )
+
+    def advance_countdown() -> None:
+        values = shell_spec.commitment_layer.countdown_values
+        index = countdown_position["value"]
+        if index >= len(values):
+            countdown_timer.stop()
+            if current_companion_state["value"] is not None:
+                open_companion_mode(current_companion_state["value"])
+            return
+
+        value = values[index]
+        countdown_position["value"] = index + 1
+        _set_preparation_card_text(
+            countdown_card,
+            title=str(value),
+            summary="Supervised operation begins in",
+            details=("No runner or real input is connected.",),
+        )
+
+    def begin_countdown() -> None:
+        continue_button.setEnabled(False)
+        countdown_position["value"] = 0
+        advance_countdown()
+        countdown_timer.start()
+
+    countdown_timer.timeout.connect(advance_countdown)
+    continue_button.clicked.connect(begin_countdown)
+    return_button.clicked.connect(return_to_preparation)
+    set_waiting_state(
+        {
+            "automation_name": "Prepared operation",
+            "profile_name": "Selected profile",
+        }
+    )
+
+    return container, set_waiting_state
 
 
 def _build_home_screen_content(
