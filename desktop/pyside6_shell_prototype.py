@@ -363,6 +363,7 @@ def launch_pyside6_shell_prototype() -> int:
         return_to_preparation=lambda: stacked_screens.setCurrentIndex(
             automation_environment_index
         ),
+        return_home=lambda: stacked_screens.setCurrentIndex(0),
     )
     companion_mode_widget, update_companion_mode = _build_companion_mode_widget(
         shell_spec=shell_spec,
@@ -1079,7 +1080,7 @@ def _build_automation_environment_widget(
     prepare_button = QPushButton("Prepare Run")
     _style_primary_button(prepare_button, shell_spec=shell_spec)
     run["layout"].addWidget(prepare_button)
-    companion_button = QPushButton("Open Companion Mode Preview")
+    companion_button = QPushButton("Move to Supervision")
     companion_button.setEnabled(False)
     _style_secondary_button(companion_button, shell_spec=shell_spec)
     run["layout"].addWidget(companion_button)
@@ -1177,7 +1178,7 @@ def _build_automation_environment_widget(
             details=(
                 f"Selected: {definition.display_name}. Requested cycles: 1.",
                 (
-                    "Prepared state only. Companion preview is available."
+                    "Prepared state only. Supervision mode is available."
                     if prepared
                     else "Preparation only. No runner or real input is connected."
                 ),
@@ -1191,7 +1192,7 @@ def _build_automation_environment_widget(
                 "progress": "Cycle 1 of 1 - supervision placeholder",
                 "focus": "FH6 focus handoff ready",
                 "stop": "F8 emergency stop available",
-                "summary": "Supervised operation preview. No automation is executing.",
+                "summary": "Supervised operation state. No automation is executing.",
             }
             companion_button.setEnabled(True)
 
@@ -1253,7 +1254,7 @@ def _build_home_screen_content(
             eyebrow=home_concept.signals[1].title,
             title=home_concept.signals[1].summary,
             summary="Check profile, readiness, warnings and commitment before proceeding.",
-            button_text="Open Review",
+            button_text="Review & Prepare",
             shell_spec=shell_spec,
             treatment="secondary action",
             primary=False,
@@ -1359,9 +1360,9 @@ def _build_companion_mode_widget(
     prototype_outcome_row = QHBoxLayout()
     prototype_outcome_row.setContentsMargins(0, 0, 0, 0)
     prototype_outcome_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-    completed_button = QPushButton("Preview Completed")
-    stopped_button = QPushButton("Preview Stopped")
-    refused_button = QPushButton("Preview Paused")
+    completed_button = QPushButton("Mark Completed")
+    stopped_button = QPushButton("Stopped Safely")
+    refused_button = QPushButton("Paused / Refused")
     for button in (completed_button, stopped_button, refused_button):
         _style_secondary_button(button, shell_spec=shell_spec)
         prototype_outcome_row.addWidget(button)
@@ -1377,7 +1378,7 @@ def _build_companion_mode_widget(
             "progress": "No cycle active",
             "focus": "FH6 focus handoff not active",
             "stop": "F8 guidance appears after preparation",
-            "summary": "Companion Mode is waiting for a prepared run preview.",
+            "summary": "Companion Mode is waiting for a prepared run.",
         }
     }
 
@@ -1437,8 +1438,9 @@ def _build_companion_mode_widget(
 def _build_completion_state_widget(
     shell_spec: PrototypeShellSpec,
     return_to_preparation,
+    return_home,
 ):
-    from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
     container = QWidget()
     layout = QVBoxLayout(container)
@@ -1483,10 +1485,22 @@ def _build_completion_state_widget(
     layout.addWidget(reassurance_card["card"])
     layout.addSpacing(8)
 
-    back_button = QPushButton("Return to Automation Environment")
-    _style_primary_button(back_button, shell_spec=shell_spec)
-    back_button.clicked.connect(return_to_preparation)
-    layout.addWidget(back_button)
+    action_row = QHBoxLayout()
+    action_row.setContentsMargins(0, 0, 0, 0)
+    action_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    prepare_again_button = QPushButton("Prepare Again")
+    return_preparation_button = QPushButton("Automation Environment")
+    return_home_button = QPushButton("Return Home")
+    _style_primary_button(prepare_again_button, shell_spec=shell_spec)
+    _style_secondary_button(return_preparation_button, shell_spec=shell_spec)
+    _style_secondary_button(return_home_button, shell_spec=shell_spec)
+    prepare_again_button.clicked.connect(return_to_preparation)
+    return_preparation_button.clicked.connect(return_to_preparation)
+    return_home_button.clicked.connect(return_home)
+    action_row.addWidget(prepare_again_button)
+    action_row.addWidget(return_preparation_button)
+    action_row.addWidget(return_home_button)
+    layout.addLayout(action_row)
     layout.addStretch()
 
     states_by_id = {
@@ -1513,7 +1527,7 @@ def _build_completion_state_widget(
         _set_preparation_card_text(
             next_step_card,
             title=state.suggested_next_step,
-            summary="Return to preparation when ready.",
+            summary="Choose the next safe step when ready.",
             details=("No dead-end state. No execution is connected here.",),
         )
         _set_preparation_card_text(
