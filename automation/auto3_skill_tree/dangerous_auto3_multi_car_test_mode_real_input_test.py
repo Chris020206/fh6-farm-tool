@@ -38,6 +38,10 @@ MAX_CARS = 4
 FAST_TIMINGS = {
     "startup_delay": 0.1,
     "menu_key_delay": 0.1,
+    "safety_navigation_key_delay": 0.1,
+    "grid_transition_key_delay": 0.1,
+    "escape_key_delay": 0.1,
+    "return_menu_transition_delay": 0.1,
     "skill_tree_key_delay": 0.1,
     "wait_after_get_in": 0.1,
     "wait_after_get_in_next_car": 0.1,

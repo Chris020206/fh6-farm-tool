@@ -22,6 +22,10 @@ from profiles.profile_selection import ProfileSelectionError, load_profile_for_a
 FAST_TIMINGS = {
     "startup_delay": 0.0,
     "menu_key_delay": 0.0,
+    "safety_navigation_key_delay": 0.0,
+    "grid_transition_key_delay": 0.0,
+    "escape_key_delay": 0.0,
+    "return_menu_transition_delay": 0.0,
     "skill_tree_key_delay": 0.0,
     "wait_after_get_in": 0.0,
     "wait_after_get_in_next_car": 0.0,

@@ -16,6 +16,7 @@ from automation.auto3_skill_tree.auto3_sequence import (
     build_auto3_post_get_in_car_mastery_navigation_actions,
     build_auto3_real_input_normal_next_car_test_actions,
     build_auto3_return_and_resort_actions,
+    build_auto3_sort_setup_actions,
     build_auto3_test_mode_return_to_grid_actions,
     build_auto3_unlock_perks_actions,
 )
@@ -51,17 +52,17 @@ class Auto3SequenceTests(unittest.TestCase):
         actions = build_auto3_cycle_actions(self.profile_data, is_first_car=False)
         key_presses = _key_presses(actions)
 
-        self.assertEqual(key_presses[:3], ["down", "enter", "enter"])
+        self.assertEqual(key_presses[: len(_normal_next_car_get_in())], _normal_next_car_get_in())
 
     def test_get_in_next_car_sequence_matches_locked_flow(self) -> None:
         actions = build_auto3_get_in_next_car_actions(self.profile_data)
 
-        self.assertEqual(_key_presses(actions), ["down", "enter", "enter"])
+        self.assertEqual(_key_presses(actions), _normal_next_car_get_in())
 
     def test_get_in_hovered_car_sequence_excludes_movement(self) -> None:
         actions = build_auto3_get_in_hovered_car_actions(self.profile_data)
 
-        self.assertEqual(_key_presses(actions), ["enter", "enter"])
+        self.assertEqual(_key_presses(actions), _hovered_car_get_in())
 
     def test_post_get_in_navigation_uses_transition_recovery_path(self) -> None:
         actions = build_auto3_post_get_in_car_mastery_navigation_actions(
@@ -70,7 +71,7 @@ class Auto3SequenceTests(unittest.TestCase):
 
         self.assertEqual(
             _key_presses(actions),
-            ["esc"] + ["up"] * 6 + ["down", "enter"] + ["down"] * 7 + ["enter"],
+            _normal_next_car_menu_navigation(),
         )
 
     def test_unlock_sequence_includes_perk_confirmations_in_locked_order(self) -> None:
@@ -91,21 +92,59 @@ class Auto3SequenceTests(unittest.TestCase):
             self.assertIsInstance(actions[action_index + 1], WaitAction)
             self.assertEqual(actions[action_index + 1].duration_seconds, 1.5)
 
-    def test_menu_navigation_still_uses_menu_key_delay(self) -> None:
+    def test_menu_navigation_uses_specific_safety_and_hover_delays(self) -> None:
         actions = build_auto3_first_car_exception_test_actions(self.profile_data)
-        first_down_index = _find_key_path_start(actions, ["esc", "down", "enter"])
+        durations = _wait_durations_for_key_path(actions, _first_car_menu_navigation())
 
-        self.assertIsInstance(actions[first_down_index + 1], WaitAction)
-        self.assertEqual(actions[first_down_index + 1].duration_seconds, 1.0)
-        self.assertIsInstance(actions[first_down_index + 3], WaitAction)
-        self.assertEqual(actions[first_down_index + 3].duration_seconds, 1.0)
+        self.assertEqual(0.8, durations[0])
+        self.assertEqual([0.3] * 6, durations[1:7])
+        self.assertEqual(0.8, durations[7])
+        self.assertEqual(1.0, durations[8])
+        self.assertEqual([0.3] * 7, durations[9:16])
+        self.assertEqual([0.8] * 7, durations[16:23])
+        self.assertEqual(1.0, durations[23])
+
+    def test_initial_sort_setup_uses_requested_up_and_down_delays(self) -> None:
+        actions = build_auto3_sort_setup_actions(self.profile_data)
+        durations = _wait_durations_for_key_path(actions, _sort_setup_path())
+
+        self.assertEqual(0.8, durations[0])
+        self.assertEqual([0.3] * 6, durations[1:7])
+        self.assertEqual([0.8] * 6, durations[7:13])
+        self.assertEqual(0.8, durations[13])
+
+    def test_normal_get_in_uses_requested_up_safety_delay_only(self) -> None:
+        actions = build_auto3_get_in_next_car_actions(self.profile_data)
+        durations = _wait_durations_for_key_path(actions, _normal_next_car_get_in())
+
+        self.assertEqual(0.8, durations[0])
+        self.assertEqual(0.8, durations[1])
+        self.assertEqual([0.3] * 5, durations[2:7])
+        self.assertEqual(0.8, durations[7])
+
+    def test_return_and_resort_uses_requested_transition_delays(self) -> None:
+        actions = build_auto3_return_and_resort_actions(self.profile_data)
+        durations = _wait_durations_for_key_path(actions, _return_and_resort_path())
+
+        self.assertEqual([0.3] * 6, durations[0:6])
+        self.assertEqual(1.0, durations[6])
+        self.assertEqual(1.0, durations[7])
+        self.assertEqual([0.3] * 6, durations[8:14])
+        self.assertEqual([0.8] * 6, durations[14:20])
+        self.assertEqual(1.0, durations[20])
+
+    def test_unlock_exit_esc_presses_use_one_second_delay(self) -> None:
+        actions = build_auto3_unlock_perks_actions(self.profile_data)
+        durations = _wait_durations_for_key_path(actions, ["esc", "esc"])
+
+        self.assertEqual([1.0, 1.0], durations)
 
     def test_return_and_resort_sequence_matches_locked_flow(self) -> None:
         actions = build_auto3_return_and_resort_actions(self.profile_data)
 
         self.assertEqual(
             _key_presses(actions),
-            ["up"] * 7 + ["enter", "x"] + ["down"] * 6 + ["enter"],
+            _return_and_resort_path(),
         )
 
     def test_invalid_profile_fails_clearly(self) -> None:
@@ -135,7 +174,10 @@ class Auto3SequenceTests(unittest.TestCase):
         perk_path = _perk_path()
 
         self.assertEqual(key_presses[0], "x")
-        self.assertIn(_first_car_menu_navigation(), _windows(key_presses, 11))
+        self.assertIn(
+            _first_car_menu_navigation(),
+            _windows(key_presses, len(_first_car_menu_navigation())),
+        )
         self.assertNotIn(perk_path, _windows(key_presses, len(perk_path)))
         self.assertNotIn(1.5, _wait_durations(actions))
 
@@ -143,7 +185,10 @@ class Auto3SequenceTests(unittest.TestCase):
         actions = build_auto3_first_car_exception_test_actions(self.profile_data)
         key_presses = _key_presses(actions)
 
-        self.assertIn(_first_car_menu_navigation(), _windows(key_presses, 11))
+        self.assertIn(
+            _first_car_menu_navigation(),
+            _windows(key_presses, len(_first_car_menu_navigation())),
+        )
 
     def test_full_normal_next_car_sequence_includes_get_in_and_perk_unlock_actions(
         self,
@@ -152,7 +197,7 @@ class Auto3SequenceTests(unittest.TestCase):
         key_presses = _key_presses(actions)
         perk_path = _perk_path()
 
-        self.assertEqual(key_presses[:3], ["down", "enter", "enter"])
+        self.assertEqual(key_presses[: len(_normal_next_car_get_in())], _normal_next_car_get_in())
         self.assertIn(perk_path, _windows(key_presses, len(perk_path)))
 
     def test_test_normal_next_car_sequence_includes_get_in_and_excludes_perk_unlock(
@@ -162,8 +207,11 @@ class Auto3SequenceTests(unittest.TestCase):
         key_presses = _key_presses(actions)
         perk_path = _perk_path()
 
-        self.assertEqual(key_presses[:3], ["down", "enter", "enter"])
-        self.assertIn(_normal_next_car_menu_navigation(), _windows(key_presses, 10))
+        self.assertEqual(key_presses[: len(_normal_next_car_get_in())], _normal_next_car_get_in())
+        self.assertIn(
+            _normal_next_car_menu_navigation(),
+            _windows(key_presses, len(_normal_next_car_menu_navigation())),
+        )
         self.assertNotIn(perk_path, _windows(key_presses, len(perk_path)))
         self.assertNotIn(1.5, _wait_durations(actions))
 
@@ -173,8 +221,8 @@ class Auto3SequenceTests(unittest.TestCase):
         actions = build_auto3_normal_next_car_test_actions(self.profile_data)
         key_presses = _key_presses(actions)
 
-        self.assertEqual(key_presses[:3], ["down", "enter", "enter"])
-        self.assertEqual(key_presses[3:], _normal_next_car_menu_navigation())
+        self.assertEqual(key_presses[: len(_normal_next_car_get_in())], _normal_next_car_get_in())
+        self.assertEqual(key_presses[len(_normal_next_car_get_in()) :], _normal_next_car_menu_navigation())
 
     def test_real_input_normal_next_car_test_starts_with_sort_setup_before_get_in(
         self,
@@ -184,23 +232,31 @@ class Auto3SequenceTests(unittest.TestCase):
         )
         key_presses = _key_presses(actions)
 
-        self.assertEqual(key_presses[:8], ["x"] + ["down"] * 6 + ["enter"])
-        self.assertEqual(key_presses[8:11], ["down", "enter", "enter"])
-        self.assertEqual(key_presses[11:], _normal_next_car_menu_navigation())
+        sort_setup = _sort_setup_path()
+        get_in = _normal_next_car_get_in()
+        self.assertEqual(key_presses[: len(sort_setup)], sort_setup)
+        self.assertEqual(key_presses[len(sort_setup) : len(sort_setup) + len(get_in)], get_in)
+        self.assertEqual(key_presses[len(sort_setup) + len(get_in) :], _normal_next_car_menu_navigation())
         self.assertNotIn(_perk_path(), _windows(key_presses, len(_perk_path())))
 
     def test_full_first_car_uses_escape_navigation_variant(self) -> None:
         actions = build_auto3_cycle_actions(self.profile_data, is_first_car=True)
         key_presses = _key_presses(actions)
 
-        self.assertIn(_first_car_menu_navigation(), _windows(key_presses, 11))
+        self.assertIn(
+            _first_car_menu_navigation(),
+            _windows(key_presses, len(_first_car_menu_navigation())),
+        )
 
     def test_full_normal_next_car_uses_no_escape_navigation_variant(self) -> None:
         actions = build_auto3_cycle_actions(self.profile_data, is_first_car=False)
         key_presses = _key_presses(actions)
 
-        self.assertEqual(key_presses[:3], ["down", "enter", "enter"])
-        self.assertEqual(key_presses[3:13], _normal_next_car_menu_navigation())
+        self.assertEqual(key_presses[: len(_normal_next_car_get_in())], _normal_next_car_get_in())
+        self.assertEqual(
+            key_presses[len(_normal_next_car_get_in()) : len(_normal_next_car_get_in()) + len(_normal_next_car_menu_navigation())],
+            _normal_next_car_menu_navigation(),
+        )
 
     def test_multi_car_test_count_one_uses_first_car_test_path_only(self) -> None:
         actions = build_auto3_multi_car_test_actions(1, self.profile_data)
@@ -228,7 +284,7 @@ class Auto3SequenceTests(unittest.TestCase):
         expected_after_first_car = (
             reset_keys
             + ["down"]
-            + _key_presses(build_auto3_get_in_hovered_car_actions(self.profile_data))
+            + _hovered_car_get_in()
             + _normal_next_car_menu_navigation()
             + reset_keys
         )
@@ -246,12 +302,12 @@ class Auto3SequenceTests(unittest.TestCase):
         )
 
         self.assertIn(
-            reset_keys + ["down", "enter", "enter"],
-            _windows(key_presses, len(reset_keys) + 3),
+            reset_keys + ["down"] + _hovered_car_get_in(),
+            _windows(key_presses, len(reset_keys) + 1 + len(_hovered_car_get_in())),
         )
         self.assertNotIn(
-            reset_keys + ["down", "down", "enter", "enter"],
-            _windows(key_presses, len(reset_keys) + 4),
+            reset_keys + ["down", "down"] + _hovered_car_get_in(),
+            _windows(key_presses, len(reset_keys) + 2 + len(_hovered_car_get_in())),
         )
 
     def test_multi_car_test_count_three_does_not_duplicate_b1_to_c1_down(
@@ -264,12 +320,12 @@ class Auto3SequenceTests(unittest.TestCase):
         )
 
         self.assertIn(
-            reset_keys + ["down", "enter", "enter"],
-            _windows(key_presses, len(reset_keys) + 3),
+            reset_keys + ["down"] + _hovered_car_get_in(),
+            _windows(key_presses, len(reset_keys) + 1 + len(_hovered_car_get_in())),
         )
         self.assertNotIn(
-            reset_keys + ["down", "down", "enter", "enter"],
-            _windows(key_presses, len(reset_keys) + 4),
+            reset_keys + ["down", "down"] + _hovered_car_get_in(),
+            _windows(key_presses, len(reset_keys) + 2 + len(_hovered_car_get_in())),
         )
 
     def test_multi_car_test_count_four_uses_column_transition_then_get_in(
@@ -283,8 +339,8 @@ class Auto3SequenceTests(unittest.TestCase):
 
         self.assertIn(["right", "up", "up"], _windows(key_presses, 3))
         self.assertIn(
-            reset_keys + ["right", "up", "up", "enter", "enter"],
-            _windows(key_presses, len(reset_keys) + 5),
+            reset_keys + ["right", "up", "up"] + _hovered_car_get_in(),
+            _windows(key_presses, len(reset_keys) + 3 + len(_hovered_car_get_in())),
         )
 
     def test_multi_car_test_excludes_perk_unlock_path(self) -> None:
@@ -328,7 +384,7 @@ class Auto3SequenceTests(unittest.TestCase):
         expected_key_presses = (
             _key_presses(build_auto3_first_car_exception_actions(self.profile_data))
             + ["down"]
-            + ["enter", "enter"]
+            + _hovered_car_get_in()
             + _key_presses(
                 build_auto3_post_get_in_car_mastery_navigation_actions(
                     self.profile_data
@@ -341,44 +397,41 @@ class Auto3SequenceTests(unittest.TestCase):
 
         self.assertEqual(key_presses, expected_key_presses)
         self.assertIn(
-            reset_keys + ["down", "enter", "enter", "esc"] + ["up"] * 6,
-            _windows(key_presses, len(reset_keys) + 10),
+            reset_keys + ["down"] + _hovered_car_get_in() + _normal_next_car_menu_navigation(),
+            _windows(key_presses, len(reset_keys) + 1 + len(_hovered_car_get_in()) + len(_normal_next_car_menu_navigation())),
         )
         self.assertTrue(key_presses[-len(reset_keys) :] == reset_keys)
         self.assertNotIn(
-            reset_keys + ["down", "enter", "enter"],
-            _windows(key_presses[-len(reset_keys) :], len(reset_keys) + 3),
+            reset_keys + ["down"] + _hovered_car_get_in(),
+            _windows(key_presses[-len(reset_keys) :], len(reset_keys) + 1 + len(_hovered_car_get_in())),
         )
         self.assertNotIn(
-            ["down", "enter", "enter"] + _normal_next_car_menu_navigation(),
-            _windows(key_presses, 13),
+            ["down", "enter", "enter", "esc"] + ["up"] * 6,
+            _windows(key_presses, 10),
         )
         self.assertEqual(2, _count_perk_paths(actions))
 
-    def test_multi_car_unlock_count_two_waits_after_later_car_get_in(self) -> None:
+    def test_multi_car_unlock_count_two_uses_requested_later_car_get_in_path(self) -> None:
         actions = build_auto3_multi_car_unlock_actions(2, self.profile_data)
         later_car_start = _find_key_path_start(
             actions,
-            ["down", "enter", "enter", "esc"] + ["up"] * 6,
+            ["down"] + _hovered_car_get_in() + _normal_next_car_menu_navigation(),
         )
 
         self.assertIsInstance(actions[later_car_start], KeyPressAction)
         self.assertEqual(actions[later_car_start].key, "down")
         self.assertIsInstance(actions[later_car_start + 1], WaitAction)
+        self.assertEqual(actions[later_car_start + 1].duration_seconds, 0.8)
         self.assertIsInstance(actions[later_car_start + 2], KeyPressAction)
         self.assertEqual(actions[later_car_start + 2].key, "enter")
         self.assertIsInstance(actions[later_car_start + 3], WaitAction)
-        self.assertEqual(actions[later_car_start + 3].duration_seconds, 1.0)
-        self.assertIsInstance(actions[later_car_start + 4], KeyPressAction)
-        self.assertEqual(actions[later_car_start + 4].key, "enter")
-        self.assertIsInstance(actions[later_car_start + 5], WaitAction)
-        self.assertEqual(actions[later_car_start + 5].duration_seconds, 12.0)
+        self.assertEqual(actions[later_car_start + 3].duration_seconds, 0.8)
 
     def test_multi_car_unlock_count_four_includes_column_transition(self) -> None:
         actions = build_auto3_multi_car_unlock_actions(4, self.profile_data)
         key_presses = _key_presses(actions)
 
-        self.assertIn(["right", "up", "up", "enter", "enter"], _windows(key_presses, 5))
+        self.assertIn(["right", "up", "up"] + _hovered_car_get_in(), _windows(key_presses, 3 + len(_hovered_car_get_in())))
         self.assertEqual(4, _count_perk_paths(actions))
 
     def test_multi_car_unlock_uses_skill_tree_delay_only_inside_unlock_path(
@@ -478,6 +531,22 @@ def _wait_durations(actions) -> list[float]:
     ]
 
 
+def _wait_durations_for_key_path(actions, expected_keys: list[str]) -> list[float]:
+    action_index = _find_key_path_start(actions, expected_keys)
+    durations = []
+    key_count = 0
+
+    while action_index < len(actions) and key_count < len(expected_keys):
+        action = actions[action_index]
+        if isinstance(action, KeyPressAction):
+            key_count += 1
+            if action_index + 1 < len(actions) and isinstance(actions[action_index + 1], WaitAction):
+                durations.append(actions[action_index + 1].duration_seconds)
+        action_index += 1
+
+    return durations
+
+
 def _find_key_path_start(actions, expected_keys: list[str]) -> int:
     for action_index in range(len(actions)):
         if not isinstance(actions[action_index], KeyPressAction):
@@ -540,12 +609,28 @@ def _perk_path() -> list[str]:
     ]
 
 
+def _sort_setup_path() -> list[str]:
+    return ["x"] + ["up"] * 6 + ["down"] * 6 + ["enter"]
+
+
 def _first_car_menu_navigation() -> list[str]:
-    return ["esc", "down", "enter"] + ["down"] * 7 + ["enter"]
+    return ["esc"] + ["up"] * 6 + ["down", "enter"] + ["up"] * 7 + ["down"] * 7 + ["enter"]
 
 
 def _normal_next_car_menu_navigation() -> list[str]:
-    return ["down", "enter"] + ["down"] * 7 + ["enter"]
+    return ["up"] * 6 + ["down", "enter"] + ["up"] * 7 + ["down"] * 7 + ["enter"]
+
+
+def _normal_next_car_get_in() -> list[str]:
+    return ["down", "enter"] + ["up"] * 5 + ["enter"]
+
+
+def _hovered_car_get_in() -> list[str]:
+    return ["enter"] + ["up"] * 5 + ["enter"]
+
+
+def _return_and_resort_path() -> list[str]:
+    return ["up"] * 6 + ["enter", "x"] + ["up"] * 6 + ["down"] * 6 + ["enter"]
 
 
 if __name__ == "__main__":

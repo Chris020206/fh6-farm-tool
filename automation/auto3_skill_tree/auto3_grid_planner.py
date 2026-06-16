@@ -61,6 +61,11 @@ def build_auto3_grid_movement_actions(
     }
 
     actions: list[BaseAction] = []
+    delay_seconds = (
+        timings["grid_transition_key_delay"]
+        if movement_tokens == ["right", "up", "up"]
+        else timings["menu_key_delay"]
+    )
     for movement_token in movement_tokens:
         if movement_token not in token_to_key:
             raise ValueError(f"Unknown Auto3 grid movement token: {movement_token}")
@@ -68,7 +73,7 @@ def build_auto3_grid_movement_actions(
         actions.extend(
             [
                 KeyPressAction(token_to_key[movement_token]),
-                WaitAction(timings["menu_key_delay"]),
+                WaitAction(delay_seconds),
             ]
         )
 

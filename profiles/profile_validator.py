@@ -58,8 +58,11 @@ REQUIRED_AUTO3_KEY_FIELDS = {
     "up_key",
 }
 REQUIRED_AUTO3_NAVIGATION_COUNT_FIELDS = {
+    "sort_up_presses",
     "sort_down_presses",
+    "get_in_action_up_presses",
     "down_to_upgrades",
+    "car_mastery_up_reset_presses",
     "down_to_car_mastery",
     "post_get_in_up_reset_presses",
     "return_up_to_my_cars",
@@ -67,6 +70,10 @@ REQUIRED_AUTO3_NAVIGATION_COUNT_FIELDS = {
 REQUIRED_AUTO3_TIMING_FIELDS = {
     "startup_delay",
     "menu_key_delay",
+    "safety_navigation_key_delay",
+    "grid_transition_key_delay",
+    "escape_key_delay",
+    "return_menu_transition_delay",
     "skill_tree_key_delay",
     "wait_after_get_in",
     "wait_after_get_in_next_car",

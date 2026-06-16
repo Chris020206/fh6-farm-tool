@@ -17,15 +17,22 @@
     "up_key": "up"
   },
   "navigation_counts": {
+    "sort_up_presses": 6,
     "sort_down_presses": 6,
+    "get_in_action_up_presses": 5,
     "down_to_upgrades": 1,
+    "car_mastery_up_reset_presses": 7,
     "down_to_car_mastery": 7,
     "post_get_in_up_reset_presses": 6,
-    "return_up_to_my_cars": 7
+    "return_up_to_my_cars": 6
   },
   "timings": {
     "startup_delay": 1.0,
-    "menu_key_delay": 1.0,
+    "menu_key_delay": 0.8,
+    "safety_navigation_key_delay": 0.3,
+    "grid_transition_key_delay": 1.0,
+    "escape_key_delay": 1.0,
+    "return_menu_transition_delay": 1.0,
     "skill_tree_key_delay": 1.5,
     "wait_after_get_in": 3.0,
     "wait_after_get_in_next_car": 12.0,

@@ -30,6 +30,13 @@ def build_auto3_sort_setup_actions(profile_data: dict[str, Any]) -> list[BaseAct
     ]
     actions.extend(
         _repeat_key_press(
+            keys["up_key"],
+            navigation_counts["sort_up_presses"],
+            timings["safety_navigation_key_delay"],
+        )
+    )
+    actions.extend(
+        _repeat_key_press(
             keys["down_key"],
             navigation_counts["sort_down_presses"],
             timings["menu_key_delay"],
@@ -143,25 +150,22 @@ def build_auto3_multi_car_unlock_actions(
 def build_auto3_get_in_hovered_car_for_unlock_actions(
     profile_data: dict[str, Any],
 ) -> list[BaseAction]:
-    keys, _, timings = _load_auto3_profile_sections(profile_data)
-
-    return (
-        _press_with_delay(keys["confirm_key"], timings["menu_key_delay"])
-        + [
-            KeyPressAction(keys["confirm_key"]),
-            WaitAction(timings["wait_after_get_in_next_car"]),
-        ]
-    )
+    return build_auto3_get_in_hovered_car_actions(profile_data)
 
 
 def build_auto3_get_in_hovered_car_actions(
     profile_data: dict[str, Any],
 ) -> list[BaseAction]:
-    keys, _, timings = _load_auto3_profile_sections(profile_data)
+    keys, navigation_counts, timings = _load_auto3_profile_sections(profile_data)
 
     return (
         _press_with_delay(keys["confirm_key"], timings["menu_key_delay"])
-        + _press_with_delay(keys["confirm_key"], timings["wait_after_get_in"])
+        + _repeat_key_press(
+            keys["up_key"],
+            navigation_counts["get_in_action_up_presses"],
+            timings["safety_navigation_key_delay"],
+        )
+        + _press_with_delay(keys["confirm_key"], timings["menu_key_delay"])
     )
 
 
@@ -170,13 +174,23 @@ def build_auto3_post_get_in_car_mastery_navigation_actions(
 ) -> list[BaseAction]:
     keys, navigation_counts, timings = _load_auto3_profile_sections(profile_data)
 
-    actions = _press_with_delay(keys["escape_key"], timings["menu_key_delay"])
-    actions.extend(
-        _repeat_key_press(
-            keys["up_key"],
-            navigation_counts["post_get_in_up_reset_presses"],
-            timings["menu_key_delay"],
-        )
+    actions = _build_auto3_upgrades_and_mastery_navigation_actions(
+        keys,
+        navigation_counts,
+        timings,
+    )
+    return actions
+
+
+def _build_auto3_upgrades_and_mastery_navigation_actions(
+    keys: dict[str, Any],
+    navigation_counts: dict[str, Any],
+    timings: dict[str, Any],
+) -> list[BaseAction]:
+    actions = _repeat_key_press(
+        keys["up_key"],
+        navigation_counts["post_get_in_up_reset_presses"],
+        timings["safety_navigation_key_delay"],
     )
     actions.extend(
         _repeat_key_press(
@@ -186,6 +200,13 @@ def build_auto3_post_get_in_car_mastery_navigation_actions(
         )
     )
     actions.extend(_press_with_delay(keys["confirm_key"], timings["wait_after_menu_open"]))
+    actions.extend(
+        _repeat_key_press(
+            keys["up_key"],
+            navigation_counts["car_mastery_up_reset_presses"],
+            timings["safety_navigation_key_delay"],
+        )
+    )
     actions.extend(
         _repeat_key_press(
             keys["down_key"],
@@ -220,12 +241,17 @@ def _validate_car_count(car_count: int) -> None:
 def build_auto3_get_in_next_car_actions(
     profile_data: dict[str, Any],
 ) -> list[BaseAction]:
-    keys, _, timings = _load_auto3_profile_sections(profile_data)
+    keys, navigation_counts, timings = _load_auto3_profile_sections(profile_data)
 
     return (
         _press_with_delay(keys["down_key"], timings["menu_key_delay"])
         + _press_with_delay(keys["confirm_key"], timings["menu_key_delay"])
-        + _press_with_delay(keys["confirm_key"], timings["wait_after_get_in"])
+        + _repeat_key_press(
+            keys["up_key"],
+            navigation_counts["get_in_action_up_presses"],
+            timings["safety_navigation_key_delay"],
+        )
+        + _press_with_delay(keys["confirm_key"], timings["menu_key_delay"])
     )
 
 
@@ -247,21 +273,12 @@ def build_auto3_navigate_to_car_mastery_actions(
         )
 
     actions.extend(
-        _repeat_key_press(
-            keys["down_key"],
-            navigation_counts["down_to_upgrades"],
-            timings["menu_key_delay"],
+        _build_auto3_upgrades_and_mastery_navigation_actions(
+            keys,
+            navigation_counts,
+            timings,
         )
     )
-    actions.extend(_press_with_delay(keys["confirm_key"], timings["wait_after_menu_open"]))
-    actions.extend(
-        _repeat_key_press(
-            keys["down_key"],
-            navigation_counts["down_to_car_mastery"],
-            timings["menu_key_delay"],
-        )
-    )
-    actions.extend(_press_with_delay(keys["confirm_key"], timings["wait_after_menu_open"]))
     return actions
 
 
@@ -288,9 +305,9 @@ def build_auto3_unlock_perks_actions(
         [
             WaitAction(timings["wait_after_unlock"]),
             KeyPressAction(keys["escape_key"]),
-            WaitAction(timings["menu_key_delay"]),
+            WaitAction(timings["escape_key_delay"]),
             KeyPressAction(keys["escape_key"]),
-            WaitAction(timings["menu_key_delay"]),
+            WaitAction(timings["escape_key_delay"]),
         ]
     )
     return actions
@@ -304,10 +321,17 @@ def build_auto3_return_and_resort_actions(
     actions = _repeat_key_press(
         keys["up_key"],
         navigation_counts["return_up_to_my_cars"],
-        timings["menu_key_delay"],
+        timings["safety_navigation_key_delay"],
     )
-    actions.extend(_press_with_delay(keys["confirm_key"], timings["menu_key_delay"]))
-    actions.extend(_press_with_delay(keys["sort_menu_key"], timings["menu_key_delay"]))
+    actions.extend(_press_with_delay(keys["confirm_key"], timings["return_menu_transition_delay"]))
+    actions.extend(_press_with_delay(keys["sort_menu_key"], timings["return_menu_transition_delay"]))
+    actions.extend(
+        _repeat_key_press(
+            keys["up_key"],
+            navigation_counts["sort_up_presses"],
+            timings["safety_navigation_key_delay"],
+        )
+    )
     actions.extend(
         _repeat_key_press(
             keys["down_key"],

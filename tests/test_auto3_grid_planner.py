@@ -56,7 +56,7 @@ class Auto3GridPlannerTest(unittest.TestCase):
         actions = build_auto3_grid_movement_actions(["down"], self.profile_data)
 
         self.assertEqual(["down"], _key_presses(actions))
-        self.assertEqual([1.0], _wait_durations(actions))
+        self.assertEqual([0.8], _wait_durations(actions))
 
     def test_column_transition_tokens_build_key_presses_and_delays(self) -> None:
         actions = build_auto3_grid_movement_actions(
