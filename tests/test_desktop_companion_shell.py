@@ -1,19 +1,32 @@
 import unittest
 
 from desktop.companion_shell import (
+    AUTO1_LOOP_COUNT_MAX,
+    AUTO1_LOOP_COUNT_MIN,
+    AUTO1_RACE_DURATION_EXECUTION_BUFFER_SECONDS,
     AUTO1_RACE_DURATION_MAX_SECONDS,
     AUTO1_RACE_DURATION_MIN_SECONDS,
     DEFAULT_FH6_TARGET_TITLE,
+    DESKTOP_BRAND_LOGO_MAX_HEIGHT,
+    DESKTOP_BRAND_LOGO_MAX_WIDTH,
+    DESKTOP_BRAND_LOGO_PATH,
+    NAVIGATION_ICON_SLOT_WIDTH,
     _build_commitment_readiness_details,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
+    _auto1_execution_race_duration,
     _desktop_execution_confirmation_summary,
     _desktop_execution_refusal_details,
     _format_ui_focus_failure_message,
+    _format_auto1_loop_count_for_display,
     _format_auto1_race_duration_for_display,
+    _has_specialized_desktop_screen_content,
+    _is_desktop_preparation_available,
     _is_desktop_execution_supported,
     _is_real_auto1_execution_state,
     _parse_auto1_race_duration_override,
+    _parse_auto1_loop_count,
+    _parse_auto2_purchase_count,
     _request_auto1_ui_stop,
     _should_show_auto1_runtime_adjustment,
     _summarize_auto1_ui_execution_error,
@@ -56,8 +69,8 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertTrue(sidebar.is_compact_navigation)
         self.assertTrue(sidebar.has_structural_closure)
         self.assertEqual("FH6 Farm Tool", sidebar.navigation_block_label)
-        self.assertEqual("Controlled MVP", sidebar.footer_status)
-        self.assertEqual("Manual operation ready", sidebar.footer_detail)
+        self.assertEqual("", sidebar.footer_status)
+        self.assertEqual("", sidebar.footer_detail)
 
     def test_navigation_rail_is_hover_overlay_only(self) -> None:
         navigation_rail = self.shell_spec.navigation_rail
@@ -72,6 +85,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
         navigation_rail = self.shell_spec.navigation_rail
 
         self.assertEqual(42, navigation_rail.item_height)
+        self.assertEqual(42, NAVIGATION_ICON_SLOT_WIDTH)
         self.assertEqual(8, navigation_rail.item_spacing)
         self.assertEqual(
             "soft filled selection with clear contrast",
@@ -96,7 +110,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertLessEqual(navigation_rail.animation_duration_ms, 220)
         self.assertLess(navigation_rail.animation_duration_ms, 1000)
 
-    def test_placeholder_screens_match_sidebar_destinations(self) -> None:
+    def test_sidebar_screens_match_sidebar_destinations(self) -> None:
         sidebar_screen_ids = tuple(
             destination.screen_id
             for destination in self.shell_spec.sidebar_destinations
@@ -108,6 +122,16 @@ class DesktopCompanionShellTest(unittest.TestCase):
 
         self.assertEqual(sidebar_screen_ids, prototype_screen_ids)
         self.assertNotIn(ScreenId.AUTOMATION_ENVIRONMENT, prototype_screen_ids)
+
+    def test_sidebar_support_screens_have_real_desktop_content_paths(self) -> None:
+        self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HOME))
+        self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.PROFILES))
+        self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HISTORY))
+        self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HELP))
+        self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.SETTINGS))
+        self.assertFalse(
+            _has_specialized_desktop_screen_content(ScreenId.AUTOMATION_ENVIRONMENT)
+        )
 
     def test_weighted_zones_are_represented_for_each_screen(self) -> None:
         for screen in self.shell_spec.screens:
@@ -132,9 +156,15 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertEqual(63, self.shell_spec.top_bar.height)
         self.assertTrue(self.shell_spec.top_bar.reserves_identity_space)
 
+    def test_desktop_brand_logo_asset_contract(self) -> None:
+        self.assertTrue(DESKTOP_BRAND_LOGO_PATH.exists())
+        self.assertEqual("fh6_farm_tool_logo.png", DESKTOP_BRAND_LOGO_PATH.name)
+        self.assertEqual(252, DESKTOP_BRAND_LOGO_MAX_WIDTH)
+        self.assertEqual(46, DESKTOP_BRAND_LOGO_MAX_HEIGHT)
+
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)
-        self.assertEqual(864, self.shell_spec.window_height)
+        self.assertEqual(960, self.shell_spec.window_height)
         self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
 
@@ -162,12 +192,12 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertIn("FH6 focus handoff", commitment.focus_label)
         self.assertIn("F8", commitment.stop_label)
 
-    def test_execution_wiring_is_auto1_only_and_fails_closed(self) -> None:
+    def test_execution_wiring_supports_mvp_automations_and_fails_closed_for_auto4(self) -> None:
         execution_wiring = self.shell_spec.execution_wiring
 
-        self.assertEqual(("auto1",), execution_wiring.enabled_automation_ids)
-        self.assertEqual(("auto2", "auto3"), execution_wiring.refused_automation_ids)
-        self.assertTrue(execution_wiring.uses_existing_guarded_auto1_path)
+        self.assertEqual(("auto1", "auto2", "auto3"), execution_wiring.enabled_automation_ids)
+        self.assertEqual(("auto4",), execution_wiring.refused_automation_ids)
+        self.assertTrue(execution_wiring.uses_existing_guarded_paths)
         self.assertTrue(execution_wiring.preserves_f8_stop)
         self.assertTrue(execution_wiring.fail_closed_for_unsupported_automations)
         self.assertEqual("Forza Horizon 6", DEFAULT_FH6_TARGET_TITLE)
@@ -175,8 +205,10 @@ class DesktopCompanionShellTest(unittest.TestCase):
     def test_auto1_race_duration_override_is_single_bounded_basic_runtime_value(self) -> None:
         self.assertEqual(5.0, AUTO1_RACE_DURATION_MIN_SECONDS)
         self.assertEqual(180.0, AUTO1_RACE_DURATION_MAX_SECONDS)
+        self.assertEqual(5.0, AUTO1_RACE_DURATION_EXECUTION_BUFFER_SECONDS)
         self.assertEqual(40.0, _parse_auto1_race_duration_override("40.0"))
         self.assertEqual("40.0 seconds", _format_auto1_race_duration_for_display("40.0"))
+        self.assertEqual(45.0, _auto1_execution_race_duration(40.0))
 
         with self.assertRaises(ValueError):
             _parse_auto1_race_duration_override("4.9")
@@ -187,37 +219,72 @@ class DesktopCompanionShellTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             _parse_auto1_race_duration_override("not-a-number")
 
+    def test_auto1_loop_count_is_bounded_basic_runtime_value(self) -> None:
+        self.assertEqual(1, AUTO1_LOOP_COUNT_MIN)
+        self.assertEqual(25, AUTO1_LOOP_COUNT_MAX)
+        self.assertEqual(1, _parse_auto1_loop_count("1"))
+        self.assertEqual(25, _parse_auto1_loop_count("25"))
+        self.assertEqual("1 loop", _format_auto1_loop_count_for_display("1"))
+        self.assertEqual("3 loops", _format_auto1_loop_count_for_display("3"))
+
+        with self.assertRaises(ValueError):
+            _parse_auto1_loop_count("0")
+
+        with self.assertRaises(ValueError):
+            _parse_auto1_loop_count("26")
+
+        with self.assertRaises(ValueError):
+            _parse_auto1_loop_count("not-a-number")
+
+    def test_auto2_purchase_count_is_bounded_runtime_value(self) -> None:
+        self.assertEqual(1, _parse_auto2_purchase_count("1"))
+        self.assertEqual(25, _parse_auto2_purchase_count("25"))
+
+        with self.assertRaises(ValueError):
+            _parse_auto2_purchase_count("0")
+
+        with self.assertRaises(ValueError):
+            _parse_auto2_purchase_count("26")
+
+        with self.assertRaises(ValueError):
+            _parse_auto2_purchase_count("not-a-number")
+
     def test_auto1_runtime_adjustment_is_visible_only_for_auto1(self) -> None:
         self.assertTrue(_should_show_auto1_runtime_adjustment("auto1"))
         self.assertFalse(_should_show_auto1_runtime_adjustment("auto2"))
         self.assertFalse(_should_show_auto1_runtime_adjustment("auto3"))
 
-    def test_desktop_execution_support_is_auto1_only(self) -> None:
+    def test_desktop_execution_supports_mvp_automations_only(self) -> None:
         self.assertTrue(_is_desktop_execution_supported("auto1"))
-        self.assertFalse(_is_desktop_execution_supported("auto2"))
-        self.assertFalse(_is_desktop_execution_supported("auto3"))
+        self.assertTrue(_is_desktop_execution_supported("auto2"))
+        self.assertTrue(_is_desktop_execution_supported("auto3"))
         self.assertFalse(_is_desktop_execution_supported("auto4"))
         self.assertFalse(_is_desktop_execution_supported("unknown"))
 
-    def test_auto2_desktop_refusal_mentions_guarded_confirmations(self) -> None:
+    def test_desktop_preparation_supports_mvp_automations_only(self) -> None:
+        self.assertTrue(_is_desktop_preparation_available("auto1"))
+        self.assertTrue(_is_desktop_preparation_available("auto2"))
+        self.assertTrue(_is_desktop_preparation_available("auto3"))
+        self.assertFalse(_is_desktop_preparation_available("auto4"))
+        self.assertFalse(_is_desktop_preparation_available("unknown"))
+
+    def test_auto2_desktop_boundary_mentions_guarded_bounded_execution(self) -> None:
         details = " ".join(_desktop_execution_refusal_details("auto2"))
         summary = _desktop_execution_confirmation_summary("auto2")
 
-        self.assertIn("Auto2 desktop execution is not wired", details)
-        self.assertIn("test-mode navigation", details)
-        self.assertIn("one-car purchase validation", details)
-        self.assertIn("real-input and purchase confirmations", details)
-        self.assertIn("guarded manual confirmations", summary)
+        self.assertIn("Auto2 is available", details)
+        self.assertIn("bounded", details)
+        self.assertIn("F8 stop", details)
+        self.assertIn("guarded Auto2", summary)
 
-    def test_auto3_desktop_refusal_mentions_guarded_confirmations(self) -> None:
+    def test_auto3_desktop_boundary_mentions_guarded_bounded_execution(self) -> None:
         details = " ".join(_desktop_execution_refusal_details("auto3"))
         summary = _desktop_execution_confirmation_summary("auto3")
 
-        self.assertIn("Auto3 desktop execution is not wired", details)
-        self.assertIn("test-mode traversal", details)
-        self.assertIn("bounded unlock validation", details)
-        self.assertIn("real-input and unlock confirmations", details)
-        self.assertIn("guarded manual confirmations", summary)
+        self.assertIn("Auto3 is available", details)
+        self.assertIn("validated car limit", details)
+        self.assertIn("F8 stop", details)
+        self.assertIn("guarded Auto3", summary)
 
     def test_unknown_desktop_execution_refuses_without_enabling_real_input(self) -> None:
         details = " ".join(_desktop_execution_refusal_details("auto4"))
@@ -232,12 +299,14 @@ class DesktopCompanionShellTest(unittest.TestCase):
             {
                 "automation_id": "auto1",
                 "race_duration_seconds": "55.0",
+                "requested_cycles": "4",
             }
         )
 
         joined = " ".join(details)
         self.assertIn("Auto1 selected", joined)
         self.assertIn("Race drive duration: 55.0 seconds", joined)
+        self.assertIn("Requested loops: 4 loops", joined)
         self.assertIn("Expected baseline", joined)
         self.assertIn("F8 emergency stop", joined)
 
@@ -250,24 +319,46 @@ class DesktopCompanionShellTest(unittest.TestCase):
                 }
             )
 
-    def test_non_auto1_commitment_readiness_remains_refused(self) -> None:
+    def test_auto2_commitment_readiness_is_real_input_ready(self) -> None:
         details = _build_commitment_readiness_details(
             {
                 "automation_id": "auto2",
+                "automation_name": "Auto2 Buy Car",
+                "auto2_mode": "purchase",
+                "auto2_purchase_count": "6",
                 "race_duration_seconds": "55.0",
             }
         )
 
         joined = " ".join(details)
-        self.assertIn("Only Auto1 can execute", joined)
-        self.assertIn("Auto2 and Auto3 remain refused", joined)
+        self.assertIn("Auto2 selected", joined)
+        self.assertIn("Purchase cars", joined)
+        self.assertIn("Purchases: 6", joined)
+        self.assertIn("Expected baseline", joined)
+        self.assertIn("F8 emergency stop", joined)
 
-    def test_auto1_ui_execution_profile_overrides_only_race_duration(self) -> None:
+    def test_auto3_commitment_readiness_is_real_input_ready(self) -> None:
+        details = _build_commitment_readiness_details(
+            {
+                "automation_id": "auto3",
+                "automation_name": "Auto3 Skill Tree",
+                "auto3_mode": "unlock",
+                "auto3_cars": "4",
+            }
+        )
+
+        joined = " ".join(details)
+        self.assertIn("Auto3 selected", joined)
+        self.assertIn("Multi-car unlock", joined)
+        self.assertIn("Cars: 4", joined)
+        self.assertIn("A1 -> B1 -> C1 -> A2", joined)
+
+    def test_auto1_ui_execution_profile_adds_hidden_race_duration_buffer(self) -> None:
         profile = _build_auto1_ui_execution_profile(
             {"race_duration_seconds": "55.0"}
         )
 
-        self.assertEqual(55.0, profile["timings"]["race_duration"])
+        self.assertEqual(60.0, profile["timings"]["race_duration"])
         self.assertEqual(5.0, profile["timings"]["startup_delay"])
         self.assertEqual(2.0, profile["timings"]["wait_after_restart"])
         self.assertEqual(10.0, profile["timings"]["wait_after_first_confirm"])
@@ -335,7 +426,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
             RuntimeError("real input dependency unavailable")
         )
 
-        self.assertIn("Auto1 manual run unavailable", summary)
+        self.assertIn("Auto1 guarded run unavailable", summary)
         self.assertIn("RuntimeError", summary)
         self.assertIn("real input dependency unavailable", summary)
 
@@ -493,10 +584,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
             ),
             section_ids,
         )
-        self.assertEqual(
-            "Orient, confirm, then commit.",
-            self.shell_spec.automation_environment.primary_intention,
-        )
+        self.assertEqual("", self.shell_spec.automation_environment.primary_intention)
 
     def test_automation_environment_represents_weighted_zones(self) -> None:
         sections_by_id = {
@@ -549,6 +637,12 @@ class DesktopCompanionShellTest(unittest.TestCase):
             sections_by_id[
                 AutomationEnvironmentSectionId.READINESS
             ].readability_treatment,
+        )
+        self.assertEqual(
+            "Baseline requirements before operation.",
+            sections_by_id[
+                AutomationEnvironmentSectionId.READINESS
+            ].summary,
         )
         self.assertEqual(
             "secondary contextual support",

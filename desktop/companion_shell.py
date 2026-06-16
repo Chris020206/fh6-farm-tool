@@ -1,6 +1,9 @@
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 import threading
+from typing import Any
 
 from frontend.automation_controller import (
     AutomationRunRequest,
@@ -8,9 +11,14 @@ from frontend.automation_controller import (
 )
 from automation.auto1_race.auto1_runner import DEFAULT_AUTO1_PROFILE_PATH
 from product.automation_registry import get_automation_definition
+from product.automation_registry import get_all_automation_definitions
 from product.automation_registry import get_active_automation_definitions
+from product.profile_metadata_registry import get_all_profile_metadata
 from product.profile_metadata_registry import get_profile_metadata
+from product.readiness_registry import get_all_readiness_models
 from product.readiness_registry import get_readiness_model
+from sessions.operational_history import OperationalHistoryEntry
+from sessions.session_status import SessionStatus
 from ui.automation_environment import (
     AdvancedSection,
     AutomationEnvironmentScreen,
@@ -22,6 +30,10 @@ from ui.automation_environment import (
     RunSection,
     build_automation_environment_screen,
 )
+from ui.help_screen import build_help_screen
+from ui.history_screen import build_history_screen
+from ui.profiles_screen import build_profiles_screen
+from ui.settings_screen import build_settings_screen
 from ui.shell import (
     ScreenDescriptor,
     ScreenId,
@@ -51,7 +63,14 @@ COLOR_TEXT_MUTED = "#7C8593"
 COLOR_TEXT_FAINT = "#5F6673"
 AUTO1_RACE_DURATION_MIN_SECONDS = 5.0
 AUTO1_RACE_DURATION_MAX_SECONDS = 180.0
+AUTO1_RACE_DURATION_EXECUTION_BUFFER_SECONDS = 5.0
+AUTO1_LOOP_COUNT_MIN = 1
+AUTO1_LOOP_COUNT_MAX = 25
 DEFAULT_FH6_TARGET_TITLE = "Forza Horizon 6"
+DESKTOP_BRAND_LOGO_PATH = Path(__file__).with_name("assets") / "fh6_farm_tool_logo.png"
+DESKTOP_BRAND_LOGO_MAX_WIDTH = 252
+DESKTOP_BRAND_LOGO_MAX_HEIGHT = 46
+NAVIGATION_ICON_SLOT_WIDTH = 42
 
 
 @dataclass(frozen=True)
@@ -209,7 +228,7 @@ class PrototypeCommitmentLayer:
 class PrototypeExecutionWiring:
     enabled_automation_ids: tuple[str, ...]
     refused_automation_ids: tuple[str, ...]
-    uses_existing_guarded_auto1_path: bool
+    uses_existing_guarded_paths: bool
     preserves_f8_stop: bool
     fail_closed_for_unsupported_automations: bool
 
@@ -272,7 +291,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
     return PrototypeShellSpec(
         window_title="FH6 Farm Tool",
         window_width=640,
-        window_height=864,
+        window_height=960,
         is_fixed_size=True,
         sidebar_destinations=sidebar_destinations,
         screens=tuple(
@@ -409,6 +428,11 @@ def launch_pyside6_shell_prototype() -> int:
                 )
                 if screen.screen_id == ScreenId.HOME
                 else None,
+                open_profiles=(
+                    lambda: stacked_screens.setCurrentIndex(1)
+                )
+                if screen.screen_id == ScreenId.HOME
+                else None,
             )
         )
 
@@ -434,47 +458,72 @@ def launch_pyside6_shell_prototype() -> int:
         stacked_screens.setCurrentIndex(completion_state_index)
 
     def begin_supervised_operation(companion_state: dict[str, str]) -> None:
-        from core.stop import StopManager
-
         running_state = dict(companion_state)
-        running_state["status"] = "Running"
-        running_state["execution_active"] = "true"
-        running_state["progress"] = "Cycle 1 of 1 - Auto1 guarded run active"
-        running_state["focus"] = "FH6 focus confirmed"
-        running_state["stop"] = "F8 emergency stop available. UI stop request available."
+        automation_id = companion_state.get("automation_id")
+        real_execution_supported = _is_desktop_execution_supported(automation_id)
+        running_state["status"] = "Running" if real_execution_supported else "Unavailable"
+        running_state["execution_active"] = "true" if real_execution_supported else "false"
+        running_state["progress"] = (
+            _desktop_running_progress_label(running_state)
+            if real_execution_supported
+            else "Desktop execution is not available for this automation"
+        )
+        running_state["focus"] = (
+            "FH6 focus confirmed"
+            if real_execution_supported
+            else "Focus handoff unavailable"
+        )
+        running_state["stop"] = (
+            _desktop_stop_guidance(automation_id)
+            if real_execution_supported
+            else "No desktop real input is active."
+        )
         running_state["summary"] = (
-            "Auto1 real-input operation is active. Keep FH6 supervised."
-            if companion_state.get("automation_id") == "auto1"
-            else "Operation refused before execution. Unsupported automation selected."
+            f"{running_state.get('automation_name', 'Selected automation')} guarded operation is active. Keep FH6 supervised."
+            if real_execution_supported
+            else "No automation keys are being sent."
         )
         update_companion_mode(running_state)
         stacked_screens.setCurrentIndex(companion_mode_index)
 
-        if companion_state.get("automation_id") != "auto1":
-            running_state["execution_active"] = "false"
-            open_completion_from_execution(
-                "refused",
-                running_state,
-                "UI execution is currently wired for Auto1 only.",
-            )
+        if not real_execution_supported:
             return
 
-        stop_manager = StopManager()
-        execution_control["stop_manager"] = stop_manager
-        execution_control["companion_state"] = running_state
-        _start_auto1_ui_execution(
-            companion_state=running_state,
-            parent=body,
-            timer_type=QTimer,
-            on_result=open_completion_from_execution,
-            stop_manager=stop_manager,
-        )
+        from core.stop import StopManager
 
-    def request_auto1_stop_from_ui() -> str:
+        stop_manager = StopManager()
+        execution_control["companion_state"] = running_state
+        if automation_id == "auto1":
+            execution_control["stop_manager"] = stop_manager
+            _start_auto1_ui_execution(
+                companion_state=running_state,
+                parent=body,
+                timer_type=QTimer,
+                on_result=open_completion_from_execution,
+                stop_manager=stop_manager,
+            )
+        elif automation_id == "auto2":
+            execution_control["stop_manager"] = None
+            _start_auto2_ui_execution(
+                companion_state=running_state,
+                parent=body,
+                timer_type=QTimer,
+                on_result=open_completion_from_execution,
+            )
+        elif automation_id == "auto3":
+            execution_control["stop_manager"] = None
+            _start_auto3_ui_execution(
+                companion_state=running_state,
+                parent=body,
+                timer_type=QTimer,
+                on_result=open_completion_from_execution,
+            )
+
+    def request_stop_from_ui() -> str:
         stop_manager = execution_control["stop_manager"]
         companion_state = execution_control["companion_state"]
         if stop_manager is None or companion_state is None:
-            return "No active Auto1 desktop run is available to stop."
+            return "Use F8 emergency stop for this guarded run. The desktop stop bridge is only available for Auto1."
 
         return _request_auto1_ui_stop(stop_manager, companion_state)
 
@@ -483,13 +532,7 @@ def launch_pyside6_shell_prototype() -> int:
         return_to_preparation=lambda: stacked_screens.setCurrentIndex(
             automation_environment_index
         ),
-        request_stop=request_auto1_stop_from_ui,
-        open_completion_state=(
-            lambda state_id, companion_state: (
-                update_completion_state(state_id, companion_state),
-                stacked_screens.setCurrentIndex(completion_state_index),
-            )
-        ),
+        request_stop=request_stop_from_ui,
     )
     commitment_layer_widget, update_commitment_layer = _build_commitment_layer_widget(
         shell_spec=shell_spec,
@@ -562,12 +605,6 @@ def launch_pyside6_shell_prototype() -> int:
 
     overlay_layout.addWidget(overlay_nav_container)
     overlay_layout.addStretch()
-    overlay_footer_status = QLabel(shell_spec.sidebar_composition.footer_status)
-    overlay_footer_detail = QLabel(shell_spec.sidebar_composition.footer_detail)
-    _style_footer_label(overlay_footer_status, shell_spec=shell_spec)
-    _style_footer_label(overlay_footer_detail, shell_spec=shell_spec)
-    overlay_layout.addWidget(overlay_footer_status)
-    overlay_layout.addWidget(overlay_footer_detail)
 
     navigation_animation = QPropertyAnimation(overlay_navigation, b"geometry")
     navigation_animation.setDuration(shell_spec.navigation_rail.animation_duration_ms)
@@ -629,9 +666,6 @@ def launch_pyside6_shell_prototype() -> int:
 
     collapsed_rail_layout.addWidget(collapsed_nav_container)
     collapsed_rail_layout.addStretch()
-    footer_label = QLabel(shell_spec.sidebar_composition.footer_status)
-    _style_footer_label(footer_label, shell_spec=shell_spec)
-    collapsed_rail_layout.addWidget(footer_label)
 
     body_layout.addWidget(collapsed_rail)
     body_layout.addWidget(main_area)
@@ -687,7 +721,7 @@ def _build_automation_environment_prototype_screen(
 ) -> PrototypeAutomationEnvironment:
     return PrototypeAutomationEnvironment(
         title="Automation Environment",
-        primary_intention="Orient, confirm, then commit.",
+        primary_intention="",
         sections=tuple(_build_automation_section(section) for section in screen.sections),
     )
 
@@ -726,9 +760,8 @@ def _build_automation_section(
         return PrototypeAutomationEnvironmentSection(
             section_id=section.section_id,
             title="Readiness",
-            summary=section.readiness_wording,
-            details=(section.expected_baseline, section.focus_requirement)
-            + section.confidence_notes[:1],
+            summary="Baseline requirements before operation.",
+            details=(section.expected_baseline, section.manual_positioning_assumption),
             zone_role=ZoneRole.PRIMARY,
             readability_treatment="primary confidence check",
         )
@@ -738,7 +771,7 @@ def _build_automation_section(
             section_id=section.section_id,
             title="Contextual Warnings",
             summary="Warnings remain contextual and secondary.",
-            details=section.warnings or ("No contextual warnings for this placeholder.",),
+            details=section.warnings or ("No contextual warnings for this section.",),
             zone_role=ZoneRole.SECONDARY,
             readability_treatment="secondary contextual support",
         )
@@ -748,7 +781,7 @@ def _build_automation_section(
             section_id=section.section_id,
             title="Advanced / Refinement",
             summary=section.purpose,
-            details=section.available_refinements or ("Collapsed placeholder only.",),
+            details=section.available_refinements or ("Advanced refinements remain secondary.",),
             zone_role=ZoneRole.TERTIARY,
             readability_treatment="tertiary collapsed refinement",
             is_collapsed_feeling=section.is_collapsed_by_default,
@@ -794,7 +827,7 @@ def _build_prototype_home_concept() -> PrototypeHomeConcept:
             ),
             PrototypeHomeSignal(
                 title="QUIET STATUS",
-                summary="Controlled MVP - Manual operation ready",
+                summary="Ready for supervised operation",
                 zone_role=ZoneRole.TERTIARY,
             ),
         ),
@@ -804,8 +837,8 @@ def _build_prototype_home_concept() -> PrototypeHomeConcept:
 def _build_prototype_sidebar_composition() -> PrototypeSidebarComposition:
     return PrototypeSidebarComposition(
         navigation_block_label="FH6 Farm Tool",
-        footer_status="Controlled MVP",
-        footer_detail="Manual operation ready",
+        footer_status="",
+        footer_detail="",
         is_compact_navigation=True,
         has_structural_closure=True,
     )
@@ -898,9 +931,9 @@ def _build_prototype_commitment_layer() -> PrototypeCommitmentLayer:
 
 def _build_prototype_execution_wiring() -> PrototypeExecutionWiring:
     return PrototypeExecutionWiring(
-        enabled_automation_ids=("auto1",),
-        refused_automation_ids=("auto2", "auto3"),
-        uses_existing_guarded_auto1_path=True,
+        enabled_automation_ids=("auto1", "auto2", "auto3"),
+        refused_automation_ids=("auto4",),
+        uses_existing_guarded_paths=True,
         preserves_f8_stop=True,
         fail_closed_for_unsupported_automations=True,
     )
@@ -917,11 +950,11 @@ def _build_prototype_workflow_contract() -> PrototypeWorkflowContract:
             ("completion", "automation_environment"),
             ("completion", "home"),
         ),
-        dead_button_policy="visible controls navigate, prepare, record outcome, or refuse with reason",
-        unsupported_execution_policy="Auto2 and Auto3 refuse before execution from desktop UI",
+        dead_button_policy="visible controls navigate, prepare, start guarded execution, or refuse with reason",
+        unsupported_execution_policy="Auto4 is inactive; Auto1, Auto2, and Auto3 use bounded guarded desktop paths",
         state_reset_policy="returning home clears prepared desktop run state",
-        real_input_boundary="Auto1 only through guarded focus handoff and existing manual runner path",
-        stop_policy="F8 and desktop Request Stop share the guarded Auto1 StopManager",
+        real_input_boundary="Auto1, Auto2, and Auto3 start only after preparation, focus handoff, and commitment",
+        stop_policy="F8 is available for guarded real-input runs; UI Request Stop is available where a shared StopManager exists",
     )
 
 
@@ -1023,7 +1056,9 @@ def _start_auto1_ui_execution(
             )
 
             result = run_manual_real_input_auto1(
-                cycle_count=int(companion_state.get("requested_cycles", "1")),
+                cycle_count=_parse_auto1_loop_count(
+                    companion_state.get("requested_cycles")
+                ),
                 use_fast_timings=False,
                 logger=logger,
                 profile_data=_build_auto1_ui_execution_profile(companion_state),
@@ -1048,6 +1083,187 @@ def _start_auto1_ui_execution(
             execution_state["message"] = _summarize_auto1_ui_execution_error(error)
             logger.error(
                 "UI-triggered Auto1 execution failed closed: %s",
+                execution_state["message"],
+                category="error",
+            )
+        finally:
+            execution_state["done"] = True
+
+    def poll_for_result() -> None:
+        if not execution_state["done"]:
+            return
+
+        poll_timer.stop()
+        on_result(
+            execution_state["state_id"],
+            companion_state,
+            execution_state["message"],
+        )
+
+    poll_timer.timeout.connect(poll_for_result)
+    threading.Thread(target=worker, daemon=True).start()
+    poll_timer.start()
+
+
+def _start_auto2_ui_execution(
+    companion_state: dict[str, str],
+    parent,
+    timer_type,
+    on_result,
+) -> None:
+    execution_state = {
+        "done": False,
+        "state_id": "refused",
+        "message": "Auto2 execution did not start.",
+    }
+    poll_timer = timer_type(parent)
+    poll_timer.setInterval(250)
+
+    def worker() -> None:
+        from app_logging.log_manager import configure_logging
+
+        logger = configure_logging()
+        mode = companion_state.get("auto2_mode", "test")
+        logger.warning(
+            "UI-triggered Auto2 execution attempt starting. mode=%s profile=%s",
+            mode,
+            companion_state.get("profile_id", "default"),
+            category="sequence",
+        )
+        try:
+            purchase_count = _parse_auto2_purchase_count(
+                companion_state.get("auto2_purchase_count")
+            )
+            if mode == "purchase":
+                from automation.auto2_buy_car.dangerous_auto2_one_car_purchase_test import (
+                    load_purchase_test_profile,
+                    run_auto2_one_car_purchase_test,
+                )
+
+                profile_data = load_purchase_test_profile(None)
+                result = run_auto2_one_car_purchase_test(
+                    cycle_count=purchase_count,
+                    profile_data=profile_data,
+                    logger=logger,
+                )
+            else:
+                from automation.auto2_buy_car.dangerous_auto2_test_mode_real_input_test import (
+                    load_test_mode_profile,
+                    run_auto2_test_mode_real_input,
+                )
+
+                profile_data = load_test_mode_profile(False, None)
+                result = run_auto2_test_mode_real_input(
+                    cycle_count=1,
+                    profile_data=profile_data,
+                    logger=logger,
+                )
+
+            execution_state["state_id"] = _completion_state_id_for_status(result.status)
+            execution_state["message"] = (
+                f"{result.message} Completed cycles: "
+                f"{result.completed_cycles}/{result.requested_cycles}."
+            )
+            logger.warning(
+                "UI-triggered Auto2 execution returned status=%s completed_cycles=%s/%s.",
+                result.status,
+                result.completed_cycles,
+                result.requested_cycles,
+                category="sequence",
+            )
+        except Exception as error:
+            execution_state["state_id"] = "refused"
+            execution_state["message"] = _summarize_ui_execution_error("Auto2", error)
+            logger.error(
+                "UI-triggered Auto2 execution failed closed: %s",
+                execution_state["message"],
+                category="error",
+            )
+        finally:
+            execution_state["done"] = True
+
+    def poll_for_result() -> None:
+        if not execution_state["done"]:
+            return
+
+        poll_timer.stop()
+        on_result(
+            execution_state["state_id"],
+            companion_state,
+            execution_state["message"],
+        )
+
+    poll_timer.timeout.connect(poll_for_result)
+    threading.Thread(target=worker, daemon=True).start()
+    poll_timer.start()
+
+
+def _start_auto3_ui_execution(
+    companion_state: dict[str, str],
+    parent,
+    timer_type,
+    on_result,
+) -> None:
+    execution_state = {
+        "done": False,
+        "state_id": "refused",
+        "message": "Auto3 execution did not start.",
+    }
+    poll_timer = timer_type(parent)
+    poll_timer.setInterval(250)
+
+    def worker() -> None:
+        from app_logging.log_manager import configure_logging
+
+        logger = configure_logging()
+        mode = companion_state.get("auto3_mode", "test")
+        try:
+            car_count = _parse_auto3_car_count(companion_state.get("auto3_cars"))
+            logger.warning(
+                "UI-triggered Auto3 execution attempt starting. mode=%s cars=%s profile=%s",
+                mode,
+                car_count,
+                companion_state.get("profile_id", "default"),
+                category="sequence",
+            )
+            if mode == "unlock":
+                from automation.auto3_skill_tree.dangerous_auto3_multi_car_unlock_test import (
+                    load_unlock_test_profile,
+                    run_auto3_multi_car_unlock_test,
+                )
+
+                profile_data = load_unlock_test_profile(False, None)
+                result = run_auto3_multi_car_unlock_test(
+                    car_count=car_count,
+                    profile_data=profile_data,
+                    logger=logger,
+                )
+            else:
+                from automation.auto3_skill_tree.dangerous_auto3_multi_car_test_mode_real_input_test import (
+                    load_multi_car_test_mode_profile,
+                    run_auto3_multi_car_test_mode_real_input,
+                )
+
+                profile_data = load_multi_car_test_mode_profile(False, None)
+                result = run_auto3_multi_car_test_mode_real_input(
+                    car_count=car_count,
+                    profile_data=profile_data,
+                    logger=logger,
+                )
+
+            execution_state["state_id"] = _completion_state_id_for_status(result.status)
+            execution_state["message"] = result.message
+            logger.warning(
+                "UI-triggered Auto3 execution returned status=%s cars=%s.",
+                result.status,
+                car_count,
+                category="sequence",
+            )
+        except Exception as error:
+            execution_state["state_id"] = "refused"
+            execution_state["message"] = _summarize_ui_execution_error("Auto3", error)
+            logger.error(
+                "UI-triggered Auto3 execution failed closed: %s",
                 execution_state["message"],
                 category="error",
             )
@@ -1120,14 +1336,14 @@ def _attempt_ui_focus_handoff(companion_state: dict[str, str]):
     return result
 
 
-def _format_ui_focus_failure_message(focus_result) -> str:
+def _format_ui_focus_failure_message(focus_result, automation_name: str = "operation") -> str:
     active_title = (
         focus_result.active_candidate.title
         if focus_result.active_candidate is not None and focus_result.active_candidate.title
         else "unavailable"
     )
     return (
-        "FH6 focus handoff failed before Auto1 start. "
+        f"FH6 focus handoff failed before {automation_name} start. "
         f"Reason: {focus_result.message} "
         f"Target title: {DEFAULT_FH6_TARGET_TITLE}. "
         f"Active window: {active_title}. "
@@ -1139,13 +1355,15 @@ def _format_ui_focus_failure_message(focus_result) -> str:
 def _build_auto1_ui_execution_profile(companion_state: dict[str, str]) -> dict:
     from profiles import ProfileManager
 
-    race_duration = _parse_auto1_race_duration_override(
+    displayed_race_duration = _parse_auto1_race_duration_override(
         companion_state.get("race_duration_seconds")
     )
     profile_data = ProfileManager().load_profile(DEFAULT_AUTO1_PROFILE_PATH)
     execution_profile = deepcopy(profile_data)
     execution_profile["timings"] = dict(profile_data["timings"])
-    execution_profile["timings"]["race_duration"] = race_duration
+    execution_profile["timings"]["race_duration"] = _auto1_execution_race_duration(
+        displayed_race_duration
+    )
     return execution_profile
 
 
@@ -1172,27 +1390,49 @@ def _parse_auto1_race_duration_override(raw_value: str | None) -> float:
     return race_duration
 
 
+def _parse_auto1_loop_count(raw_value: str | None) -> int:
+    try:
+        loop_count = int(raw_value or str(AUTO1_LOOP_COUNT_MIN))
+    except (TypeError, ValueError) as error:
+        raise ValueError("Auto1 loop count must be an integer.") from error
+
+    if not AUTO1_LOOP_COUNT_MIN <= loop_count <= AUTO1_LOOP_COUNT_MAX:
+        raise ValueError(
+            f"Auto1 loop count must be between {AUTO1_LOOP_COUNT_MIN} and {AUTO1_LOOP_COUNT_MAX}."
+        )
+
+    return loop_count
+
+
+def _auto1_execution_race_duration(displayed_race_duration: float) -> float:
+    return displayed_race_duration + AUTO1_RACE_DURATION_EXECUTION_BUFFER_SECONDS
+
+
 def _should_show_auto1_runtime_adjustment(automation_id: str) -> bool:
     return automation_id == "auto1"
 
 
 def _is_desktop_execution_supported(automation_id: str) -> bool:
-    return automation_id == "auto1"
+    return automation_id in {"auto1", "auto2", "auto3"}
+
+
+def _is_desktop_preparation_available(automation_id: str) -> bool:
+    return automation_id in {"auto1", "auto2", "auto3"}
 
 
 def _desktop_execution_refusal_details(automation_id: str) -> tuple[str, ...]:
     if automation_id == "auto2":
         return (
-            "Auto2 desktop execution is not wired yet.",
-            "Use guarded manual Auto2 commands for test-mode navigation or one-car purchase validation.",
-            "Required confirmations remain command-specific, including real-input and purchase confirmations.",
+            "Auto2 is available through the guarded desktop flow.",
+            "Test navigation and finite purchase modes remain bounded.",
+            "F8 stop is registered by the guarded Auto2 runner.",
         )
 
     if automation_id == "auto3":
         return (
-            "Auto3 desktop execution is not wired yet.",
-            "Use guarded manual Auto3 commands for test-mode traversal or bounded unlock validation.",
-            "Required confirmations remain command-specific, including real-input and unlock confirmations.",
+            "Auto3 is available through the guarded desktop flow.",
+            "Traversal and unlock modes remain bounded to the validated car limit.",
+            "F8 stop is registered by the guarded Auto3 runner.",
         )
 
     return (
@@ -1206,10 +1446,10 @@ def _desktop_execution_confirmation_summary(automation_id: str) -> str:
         return "Desktop path uses focus handoff, countdown, F8 stop, and guarded Auto1 cleanup."
 
     if automation_id == "auto2":
-        return "Auto2 requires guarded manual confirmations outside the desktop UI."
+        return "Desktop path uses focus handoff, countdown, F8 stop, and guarded Auto2 bounded execution."
 
     if automation_id == "auto3":
-        return "Auto3 requires guarded manual confirmations outside the desktop UI."
+        return "Desktop path uses focus handoff, countdown, F8 stop, and guarded Auto3 bounded execution."
 
     return "Execution is unavailable from the desktop UI."
 
@@ -1218,18 +1458,47 @@ def _format_auto1_race_duration_for_display(raw_value: str | None) -> str:
     return f"{_parse_auto1_race_duration_override(raw_value):.1f} seconds"
 
 
+def _format_auto1_loop_count_for_display(raw_value: str | None) -> str:
+    loop_count = _parse_auto1_loop_count(raw_value)
+    return f"{loop_count} loop" if loop_count == 1 else f"{loop_count} loops"
+
+
 def _build_commitment_readiness_details(companion_state: dict[str, str]) -> tuple[str, ...]:
-    if companion_state.get("automation_id") != "auto1":
+    automation_id = companion_state.get("automation_id")
+    if automation_id == "auto1":
         return (
-            "Only Auto1 can execute from this UI path.",
-            "Auto2 and Auto3 remain refused before execution.",
+            "Auto1 selected for supervised real-input operation.",
+            f"Race drive duration: {_format_auto1_race_duration_for_display(companion_state.get('race_duration_seconds'))}.",
+            f"Requested loops: {_format_auto1_loop_count_for_display(companion_state.get('requested_cycles'))}.",
+            "Expected baseline: FH6 focused at the validated Auto1 race restart state.",
+            "F8 emergency stop available.",
+        )
+
+    if automation_id == "auto2":
+        purchase_count = _parse_auto2_purchase_count(
+            companion_state.get("auto2_purchase_count")
+        )
+        return (
+            "Auto2 selected for supervised real-input operation.",
+            (
+                f"Mode: {_auto2_mode_label(companion_state.get('auto2_mode', 'test'))}. "
+                f"Purchases: {purchase_count}."
+            ),
+            "Expected baseline: FH6 focused at the validated Autoshow/buy-car menu state.",
+            "F8 emergency stop available.",
+        )
+
+    if automation_id == "auto3":
+        return (
+            "Auto3 selected for supervised real-input operation.",
+            f"Mode: {_auto3_mode_label(companion_state.get('auto3_mode', 'test'))}. Cars: {_parse_auto3_car_count(companion_state.get('auto3_cars'))}.",
+            "Expected baseline: start row A with validated A1 -> B1 -> C1 -> A2 traversal.",
+            "F8 emergency stop available.",
         )
 
     return (
-        "Auto1 selected for supervised real-input operation.",
-        f"Race drive duration: {_format_auto1_race_duration_for_display(companion_state.get('race_duration_seconds'))}.",
-        "Expected baseline: FH6 focused at the validated Auto1 race restart state.",
-        "F8 emergency stop available.",
+        f"{companion_state.get('automation_name', 'Selected automation')} is not available for desktop execution.",
+        "No automation keys will be sent.",
     )
 
 
@@ -1240,7 +1509,7 @@ def _load_auto1_default_race_duration() -> float:
     return float(profile_data["timings"]["race_duration"])
 
 
-def _completion_state_id_for_auto1_status(status: str) -> str:
+def _completion_state_id_for_status(status: str) -> str:
     if status == "completed":
         return "completed"
 
@@ -1250,9 +1519,17 @@ def _completion_state_id_for_auto1_status(status: str) -> str:
     return "refused"
 
 
+def _completion_state_id_for_auto1_status(status: str) -> str:
+    return _completion_state_id_for_status(status)
+
+
 def _summarize_auto1_ui_execution_error(error: Exception) -> str:
+    return _summarize_ui_execution_error("Auto1", error)
+
+
+def _summarize_ui_execution_error(automation_label: str, error: Exception) -> str:
     message = str(error).strip() or error.__class__.__name__
-    return f"Auto1 manual run unavailable: {error.__class__.__name__}: {message}"
+    return f"{automation_label} guarded run unavailable: {error.__class__.__name__}: {message}"
 
 
 def _is_real_auto1_execution_state(companion_state: dict[str, str]) -> bool:
@@ -1280,22 +1557,73 @@ def _build_top_bar_widget(shell_spec: PrototypeShellSpec, label_type):
         f"border-bottom: 1px solid {COLOR_BORDER_SUBTLE};"
     )
     layout = QHBoxLayout(top_bar)
-    layout.setContentsMargins(18, 0, 18, 0)
+    layout.setContentsMargins(14, 0, 18, 0)
     layout.setSpacing(6)
 
-    product_prefix_label = label_type("FH6")
-    product_prefix_label.setStyleSheet(
-        f"font-size: 14px; font-weight: 700; color: {COLOR_ACCENT_PRIMARY};"
-    )
-    product_name_label = label_type("Farm Tool")
-    product_name_label.setStyleSheet(
-        f"font-size: 14px; font-weight: 650; color: {COLOR_TEXT_PRIMARY};"
-    )
-    layout.addWidget(product_prefix_label)
-    layout.addWidget(product_name_label)
+    layout.addWidget(_build_branding_logo_widget(label_type))
     layout.addStretch()
 
     return top_bar
+
+
+def _build_branding_logo_widget(label_type):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QImage, QPixmap
+    from PySide6.QtWidgets import QLabel
+
+    image = QImage(str(DESKTOP_BRAND_LOGO_PATH))
+    if not image.isNull():
+        bounds = _visible_image_bounds(image)
+        if bounds is not None:
+            image = image.copy(bounds)
+
+        pixmap = QPixmap.fromImage(image)
+        scaled_pixmap = pixmap.scaled(
+            DESKTOP_BRAND_LOGO_MAX_WIDTH,
+            DESKTOP_BRAND_LOGO_MAX_HEIGHT,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+        logo_label = QLabel()
+        logo_label.setObjectName("DesktopBrandLogo")
+        logo_label.setPixmap(scaled_pixmap)
+        logo_label.setFixedSize(scaled_pixmap.size())
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        logo_label.setStyleSheet("background: transparent; border: none;")
+        return logo_label
+
+    fallback_label = label_type("FH6 Farm Tool")
+    fallback_label.setObjectName("DesktopBrandFallback")
+    fallback_label.setStyleSheet(
+        f"font-size: 14px; font-weight: 700; color: {COLOR_TEXT_PRIMARY}; "
+        "background: transparent; border: none;"
+    )
+    return fallback_label
+
+
+def _visible_image_bounds(image):
+    from PySide6.QtCore import QRect
+
+    width = image.width()
+    height = image.height()
+    left = width
+    right = -1
+    top = height
+    bottom = -1
+
+    for y in range(height):
+        for x in range(width):
+            if image.pixelColor(x, y).alpha() > 4:
+                left = min(left, x)
+                right = max(right, x)
+                top = min(top, y)
+                bottom = max(bottom, y)
+
+    if right < left or bottom < top:
+        return None
+
+    return QRect(left, top, right - left + 1, bottom - top + 1)
 
 
 def _navigation_icon_for_screen(screen_id: ScreenId) -> str:
@@ -1323,11 +1651,11 @@ def _build_navigation_button(
     button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     layout = QHBoxLayout(button)
-    layout.setContentsMargins(0 if collapsed else 10, 0, 0 if collapsed else 12, 0)
+    layout.setContentsMargins(0, 0, 0 if collapsed else 12, 0)
     layout.setSpacing(8)
 
     icon_label = QLabel(_navigation_icon_for_screen(screen.screen_id))
-    icon_label.setFixedWidth(shell_spec.navigation_rail.item_height)
+    icon_label.setFixedWidth(NAVIGATION_ICON_SLOT_WIDTH)
     icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     icon_label.setObjectName("NavigationIcon")
     layout.addWidget(icon_label)
@@ -1401,6 +1729,7 @@ def _build_screen_widget(
     shell_spec: PrototypeShellSpec,
     home_concept: PrototypeHomeConcept | None = None,
     open_automation_environment=None,
+    open_profiles=None,
 ):
     from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
@@ -1426,7 +1755,28 @@ def _build_screen_widget(
             home_concept=home_concept,
             shell_spec=shell_spec,
             open_automation_environment=open_automation_environment,
+            open_profiles=open_profiles,
         )
+        layout.addStretch()
+        return container
+
+    if screen.screen_id == ScreenId.PROFILES:
+        _build_profiles_screen_content(layout, shell_spec=shell_spec)
+        layout.addStretch()
+        return container
+
+    if screen.screen_id == ScreenId.HISTORY:
+        _build_history_screen_content(layout, shell_spec=shell_spec)
+        layout.addStretch()
+        return container
+
+    if screen.screen_id == ScreenId.HELP:
+        _build_help_screen_content(layout, shell_spec=shell_spec)
+        layout.addStretch()
+        return container
+
+    if screen.screen_id == ScreenId.SETTINGS:
+        _build_settings_screen_content(layout, shell_spec=shell_spec)
         layout.addStretch()
         return container
 
@@ -1446,16 +1796,29 @@ def _build_screen_widget(
     return container
 
 
+def _has_specialized_desktop_screen_content(screen_id: ScreenId) -> bool:
+    return screen_id in {
+        ScreenId.HOME,
+        ScreenId.PROFILES,
+        ScreenId.HISTORY,
+        ScreenId.HELP,
+        ScreenId.SETTINGS,
+    }
+
+
 def _build_automation_environment_widget(
     automation_environment: PrototypeAutomationEnvironment,
     shell_spec: PrototypeShellSpec,
     open_commitment_layer,
 ):
     from PySide6.QtWidgets import (
+        QComboBox,
         QDoubleSpinBox,
         QHBoxLayout,
         QLabel,
         QPushButton,
+        QSizePolicy,
+        QSpinBox,
         QVBoxLayout,
         QWidget,
     )
@@ -1465,12 +1828,9 @@ def _build_automation_environment_widget(
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(shell_spec.vertical_rhythm.header_spacing)
     title_label = QLabel(automation_environment.title)
-    primary_intention_label = QLabel(automation_environment.primary_intention)
     _style_screen_title(title_label, shell_spec=shell_spec)
-    _style_summary_label(primary_intention_label, shell_spec=shell_spec)
     layout.addWidget(title_label)
-    layout.addWidget(primary_intention_label)
-    layout.addSpacing(4)
+    layout.addSpacing(2)
 
     controller = FrontendAutomationController(
         session_id_provider=lambda: "desktop-prepared-session",
@@ -1520,10 +1880,27 @@ def _build_automation_environment_widget(
         treatment="secondary contextual support",
     )
     runtime = _build_preparation_text_card(
-        eyebrow="AUTO1 RUNTIME ADJUSTMENT",
+        eyebrow="QUICK SETTINGS",
         shell_spec=shell_spec,
         treatment="secondary contextual support",
     )
+    runtime["layout"].setContentsMargins(12, 7, 12, 7)
+    runtime["layout"].setSpacing(3)
+    auto1_settings_widget = QWidget()
+    auto1_settings_widget.setStyleSheet("background: transparent; border: none;")
+    auto1_settings_row = QHBoxLayout(auto1_settings_widget)
+    auto1_settings_row.setContentsMargins(0, 0, 0, 0)
+    auto1_settings_row.setSpacing(8)
+    auto2_settings_widget = QWidget()
+    auto2_settings_widget.setStyleSheet("background: transparent; border: none;")
+    auto2_settings_row = QHBoxLayout(auto2_settings_widget)
+    auto2_settings_row.setContentsMargins(0, 0, 0, 0)
+    auto2_settings_row.setSpacing(8)
+    auto3_settings_widget = QWidget()
+    auto3_settings_widget.setStyleSheet("background: transparent; border: none;")
+    auto3_settings_row = QHBoxLayout(auto3_settings_widget)
+    auto3_settings_row.setContentsMargins(0, 0, 0, 0)
+    auto3_settings_row.setSpacing(8)
     race_duration_input = QDoubleSpinBox()
     race_duration_input.setRange(
         AUTO1_RACE_DURATION_MIN_SECONDS,
@@ -1532,8 +1909,58 @@ def _build_automation_environment_widget(
     race_duration_input.setDecimals(1)
     race_duration_input.setSingleStep(1.0)
     race_duration_input.setSuffix(" sec")
+    race_duration_input.setMaximumWidth(16777215)
+    race_duration_input.setFixedHeight(32)
+    race_duration_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     _style_runtime_spinbox(race_duration_input, shell_spec=shell_spec)
-    runtime["layout"].addWidget(race_duration_input)
+    race_duration_input.setValue(_load_auto1_default_race_duration())
+    auto1_settings_row.addWidget(race_duration_input, 1)
+    auto1_loop_count_input = QSpinBox()
+    auto1_loop_count_input.setRange(AUTO1_LOOP_COUNT_MIN, AUTO1_LOOP_COUNT_MAX)
+    auto1_loop_count_input.setSingleStep(1)
+    auto1_loop_count_input.setSuffix(" loops")
+    auto1_loop_count_input.setMaximumWidth(16777215)
+    auto1_loop_count_input.setFixedHeight(32)
+    auto1_loop_count_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    _style_runtime_spinbox(auto1_loop_count_input, shell_spec=shell_spec)
+    auto1_settings_row.addWidget(auto1_loop_count_input, 1)
+    auto2_mode_input = QComboBox()
+    auto2_mode_input.addItem("Test navigation", "test")
+    auto2_mode_input.addItem("Purchase cars", "purchase")
+    auto2_mode_input.setMaximumWidth(16777215)
+    auto2_mode_input.setFixedHeight(32)
+    auto2_mode_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    _style_runtime_combobox(auto2_mode_input, shell_spec=shell_spec)
+    auto2_settings_row.addWidget(auto2_mode_input, 1)
+    auto2_purchase_count_input = QSpinBox()
+    auto2_purchase_count_input.setRange(1, 25)
+    auto2_purchase_count_input.setSingleStep(1)
+    auto2_purchase_count_input.setSuffix(" cars")
+    auto2_purchase_count_input.setMaximumWidth(16777215)
+    auto2_purchase_count_input.setFixedHeight(32)
+    auto2_purchase_count_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    _style_runtime_spinbox(auto2_purchase_count_input, shell_spec=shell_spec)
+    auto2_settings_row.addWidget(auto2_purchase_count_input, 1)
+    auto3_mode_input = QComboBox()
+    auto3_mode_input.addItem("Test traversal", "test")
+    auto3_mode_input.addItem("Unlock skill trees", "unlock")
+    auto3_mode_input.setMaximumWidth(16777215)
+    auto3_mode_input.setFixedHeight(32)
+    auto3_mode_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    _style_runtime_combobox(auto3_mode_input, shell_spec=shell_spec)
+    auto3_settings_row.addWidget(auto3_mode_input, 1)
+    auto3_cars_input = QSpinBox()
+    auto3_cars_input.setRange(1, 4)
+    auto3_cars_input.setSingleStep(1)
+    auto3_cars_input.setSuffix(" cars")
+    auto3_cars_input.setMaximumWidth(16777215)
+    auto3_cars_input.setFixedHeight(32)
+    auto3_cars_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    _style_runtime_spinbox(auto3_cars_input, shell_spec=shell_spec)
+    auto3_settings_row.addWidget(auto3_cars_input, 1)
+    runtime["layout"].addWidget(auto1_settings_widget)
+    runtime["layout"].addWidget(auto2_settings_widget)
+    runtime["layout"].addWidget(auto3_settings_widget)
     run = _build_preparation_text_card(
         eyebrow="RUN PREPARATION",
         shell_spec=shell_spec,
@@ -1541,18 +1968,18 @@ def _build_automation_environment_widget(
     )
 
     layout.addWidget(overview["card"])
-    layout.addSpacing(6)
+    layout.addSpacing(3)
     layout.addLayout(
         _build_card_row(
-            cards=(profile["card"], readiness["card"]),
+            cards=(profile["card"], warnings["card"]),
             shell_spec=shell_spec,
         )
     )
-    layout.addSpacing(6)
-    layout.addWidget(warnings["card"])
-    layout.addSpacing(6)
+    layout.addSpacing(3)
+    layout.addWidget(readiness["card"])
+    layout.addSpacing(3)
     layout.addWidget(runtime["card"])
-    layout.addSpacing(6)
+    layout.addSpacing(3)
 
     prepare_button = QPushButton("Prepare Run")
     _style_primary_button(prepare_button, shell_spec=shell_spec)
@@ -1586,11 +2013,17 @@ def _build_automation_environment_widget(
 
         definition = get_automation_definition(automation_id)
         profile_id = definition.available_profiles[0]
+        requested_count = _desktop_requested_count(
+            automation_id,
+            auto1_loop_count_input.value(),
+            auto2_purchase_count_input.value(),
+            auto3_cars_input.value(),
+        )
         plan = controller.prepare_run_plan(
             AutomationRunRequest(
                 automation_id=automation_id,
                 profile_id=profile_id,
-                requested_count=1,
+                requested_count=requested_count,
             )
         )
 
@@ -1605,16 +2038,25 @@ def _build_automation_environment_widget(
 
         profile_metadata = plan.profile_metadata
         readiness_model = plan.readiness_model
-        is_auto1 = _should_show_auto1_runtime_adjustment(automation_id)
         desktop_execution_supported = _is_desktop_execution_supported(automation_id)
-        if is_auto1 and not prepared:
-            race_duration_input.setValue(_load_auto1_default_race_duration())
-        runtime["card"].setVisible(is_auto1)
-        race_duration_input.setEnabled(is_auto1 and not prepared)
+        desktop_preparation_available = _is_desktop_preparation_available(automation_id)
+        runtime["card"].setVisible(automation_id in {"auto1", "auto2", "auto3"})
+        auto1_settings_widget.setVisible(automation_id == "auto1")
+        auto2_settings_widget.setVisible(automation_id == "auto2")
+        auto3_settings_widget.setVisible(automation_id == "auto3")
+        race_duration_input.setEnabled(automation_id == "auto1")
+        auto1_loop_count_input.setEnabled(automation_id == "auto1")
+        auto2_mode_input.setEnabled(automation_id == "auto2")
+        auto2_purchase_count_input.setEnabled(
+            automation_id == "auto2"
+            and auto2_mode_input.currentData() == "purchase"
+        )
+        auto3_mode_input.setEnabled(automation_id == "auto3")
+        auto3_cars_input.setEnabled(automation_id == "auto3")
         companion_button.setText(
             "Move to Supervision"
-            if desktop_execution_supported
-            else "Desktop Execution Unavailable"
+            if desktop_preparation_available
+            else "Desktop Unavailable"
         )
         _set_preparation_card_text(
             preparation_cards["overview"],
@@ -1636,9 +2078,9 @@ def _build_automation_environment_widget(
         )
         _set_preparation_card_text(
             preparation_cards["readiness"],
-            title=_compact_text(readiness_model.readiness_wording, 76),
-            summary=_compact_text(readiness_model.focus_requirement, 74),
-            details=tuple(_compact_text(note, 78) for note in readiness_model.confidence_notes[:2]),
+            title="Baseline requirements",
+            summary=_desktop_baseline_summary(automation_id),
+            details=_desktop_baseline_details(automation_id, readiness_model),
         )
         _set_preparation_card_text(
             preparation_cards["warnings"],
@@ -1652,15 +2094,44 @@ def _build_automation_environment_widget(
                 ),
             ),
         )
-        if is_auto1:
+        if automation_id == "auto1":
             _set_preparation_card_text(
                 preparation_cards["runtime"],
-                title="Race drive duration",
-                summary="Adjust only when race timing changes.",
+                title="Auto1 runtime",
+                summary=(
+                    f"{race_duration_input.value():.1f}s drive duration. "
+                    f"{auto1_loop_count_input.value()} loop(s)."
+                ),
                 details=(
-                    "Basic-accessible. Bounded safe range: "
+                    "Race drive duration range: "
                     f"{AUTO1_RACE_DURATION_MIN_SECONDS:.0f}-"
-                    f"{AUTO1_RACE_DURATION_MAX_SECONDS:.0f} seconds.",
+                    f"{AUTO1_RACE_DURATION_MAX_SECONDS:.0f} seconds. "
+                    f"Loop range: {AUTO1_LOOP_COUNT_MIN}-{AUTO1_LOOP_COUNT_MAX}.",
+                ),
+            )
+        elif automation_id == "auto2":
+            _set_preparation_card_text(
+                preparation_cards["runtime"],
+                title="Auto2 mode",
+                summary=_auto2_mode_label(auto2_mode_input.currentData()),
+                details=(
+                    (
+                        f"Purchases requested: {auto2_purchase_count_input.value()}."
+                        if auto2_mode_input.currentData() == "purchase"
+                        else "Test navigation does not purchase."
+                    ),
+                ),
+            )
+        elif automation_id == "auto3":
+            _set_preparation_card_text(
+                preparation_cards["runtime"],
+                title="Auto3 mode and cars",
+                summary=(
+                    f"{_auto3_mode_label(auto3_mode_input.currentData())}. "
+                    f"Cars: {auto3_cars_input.value()}."
+                ),
+                details=(
+                    "Validated A-start boundary. Current hard max: 4 cars.",
                 ),
             )
         _set_preparation_card_text(
@@ -1668,55 +2139,78 @@ def _build_automation_environment_widget(
             title=(
                 (
                     "Prepared for supervised operation"
-                    if desktop_execution_supported
-                    else "Desktop execution refused safely"
+                    if desktop_preparation_available
+                    else "Desktop preparation unavailable"
                 )
                 if prepared
                 else (
                     "Prepare the run plan"
-                    if desktop_execution_supported
+                    if desktop_preparation_available
                     else "Review guarded manual boundary"
                 )
             ),
             summary=(
                 (
-                    "Ready for focus handoff. No execution has started."
+                    (
+                        "Ready for focus handoff. No execution has started."
+                        if desktop_execution_supported
+                        else "Ready for preparation review. No execution has started."
+                    )
                     if desktop_execution_supported
-                    else "This automation can be reviewed here, but it cannot execute from desktop UI."
+                    else "Ready for preparation review. No execution has started."
                 )
                 if prepared
                 else _desktop_execution_confirmation_summary(automation_id)
             ),
             details=(
-                f"Selected: {definition.display_name}. Requested cycles: 1.",
+                (
+                    f"Selected: {definition.display_name}. "
+                    f"Requested cycles: {_desktop_requested_count(automation_id, auto1_loop_count_input.value(), auto2_purchase_count_input.value(), auto3_cars_input.value())}."
+                ),
                 (
                     (
-                        "Prepared state only. Supervision mode is available."
-                        if desktop_execution_supported
+                        "Prepared state only. Start is available after commitment."
+                        if desktop_preparation_available
                         else " ".join(_desktop_execution_refusal_details(automation_id))
                     )
                     if prepared
                     else (
-                        "Preparation only. No operation begins until commitment."
-                        if desktop_execution_supported
+                        "No operation begins until focus handoff and commitment."
+                        if desktop_preparation_available
                         else " ".join(_desktop_execution_refusal_details(automation_id))
                     )
                 ),
             ),
         )
-        if prepared and desktop_execution_supported:
+        if prepared and desktop_preparation_available:
             selected_companion_state["value"] = {
                 "automation_id": definition.automation_id,
                 "automation_name": definition.display_name,
                 "profile_id": profile_metadata.profile_id,
                 "profile_name": profile_metadata.profile_name,
-                "requested_cycles": "1",
+                "requested_cycles": str(auto1_loop_count_input.value()),
                 "race_duration_seconds": f"{race_duration_input.value():.1f}",
+                "auto2_mode": str(auto2_mode_input.currentData()),
+                "auto2_purchase_count": str(auto2_purchase_count_input.value()),
+                "auto3_mode": str(auto3_mode_input.currentData()),
+                "auto3_cars": str(auto3_cars_input.value()),
                 "status": "Prepared",
-                "progress": "Cycle 1 of 1 - waiting for commitment",
-                "focus": "FH6 focus handoff ready",
+                "progress": (
+                    "Waiting for focus handoff and commitment"
+                    if desktop_execution_supported
+                    else "Waiting for preparation review"
+                ),
+                "focus": (
+                    "FH6 focus handoff ready"
+                    if desktop_execution_supported
+                    else "Focus handoff unavailable"
+                ),
                 "stop": "F8 emergency stop available",
-                "summary": "Prepared state. No automation is executing.",
+                "summary": (
+                    "Prepared state. No automation is executing."
+                    if desktop_execution_supported
+                    else "Prepared state. Desktop execution is unavailable for this automation."
+                ),
                 "execution_active": "false",
             }
             companion_button.setEnabled(True)
@@ -1735,6 +2229,28 @@ def _build_automation_environment_widget(
             lambda _checked=False, selected_id=automation_id: select_automation(selected_id)
         )
 
+    def rerender_if_selected(automation_id: str) -> None:
+        if selected_automation_id["value"] == automation_id:
+            render_preparation_state(automation_id, prepared=False)
+
+    race_duration_input.valueChanged.connect(
+        lambda _value: rerender_if_selected("auto1")
+    )
+    auto1_loop_count_input.valueChanged.connect(
+        lambda _value: rerender_if_selected("auto1")
+    )
+    auto2_mode_input.currentIndexChanged.connect(
+        lambda _index: rerender_if_selected("auto2")
+    )
+    auto2_purchase_count_input.valueChanged.connect(
+        lambda _value: rerender_if_selected("auto2")
+    )
+    auto3_mode_input.currentIndexChanged.connect(
+        lambda _index: rerender_if_selected("auto3")
+    )
+    auto3_cars_input.valueChanged.connect(
+        lambda _value: rerender_if_selected("auto3")
+    )
     prepare_button.clicked.connect(
         lambda: render_preparation_state(selected_automation_id["value"], prepared=True)
     )
@@ -1813,7 +2329,7 @@ def _build_commitment_layer_widget(
     action_row = QHBoxLayout()
     action_row.setContentsMargins(0, 0, 0, 0)
     action_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-    continue_button = QPushButton("Continue")
+    continue_button = QPushButton("Start")
     manual_focus_button = QPushButton("I focused FH6 manually")
     return_button = QPushButton("Return to Preparation")
     _style_primary_button(continue_button, shell_spec=shell_spec)
@@ -1832,6 +2348,9 @@ def _build_commitment_layer_widget(
 
     def set_waiting_state(companion_state: dict[str, str]) -> None:
         current_companion_state["value"] = companion_state
+        real_execution_supported = _is_desktop_execution_supported(
+            companion_state.get("automation_id", "")
+        )
         countdown_timer.stop()
         countdown_position["value"] = 0
         continue_button.setEnabled(True)
@@ -1845,11 +2364,27 @@ def _build_commitment_layer_widget(
         )
         _set_preparation_card_text(
             focus_card,
-            title=shell_spec.commitment_layer.focus_label,
-            summary=f"Target window: {DEFAULT_FH6_TARGET_TITLE}",
+            title=(
+                shell_spec.commitment_layer.focus_label
+                if real_execution_supported
+                else "No desktop real-input handoff"
+            ),
+            summary=(
+                f"Target window: {DEFAULT_FH6_TARGET_TITLE}"
+                if real_execution_supported
+                else "This prepared supervision state will not send automation keys."
+            ),
             details=(
-                "Automatic focus handoff is attempted before countdown.",
-                "If confirmation fails, Auto1 stays stopped until you choose a safe fallback.",
+                (
+                    "Automatic focus handoff is attempted before countdown."
+                    if real_execution_supported
+                    else "Start is unavailable for this automation."
+                ),
+                (
+                    "If confirmation fails, the selected operation stays stopped until you choose a safe fallback."
+                    if real_execution_supported
+                    else "Return to preparation and choose Auto1, Auto2, or Auto3."
+                ),
             ),
         )
         _set_preparation_card_text(
@@ -1858,14 +2393,18 @@ def _build_commitment_layer_widget(
             summary=shell_spec.commitment_layer.profile_label,
             details=(
                 shell_spec.commitment_layer.stop_label,
-                "Keep the validated race restart baseline visible before continuing.",
+                (
+                    "Keep the validated FH6 baseline visible before continuing."
+                    if real_execution_supported
+                    else "This desktop path is unavailable for the selected automation."
+                ),
             ),
         )
         _set_preparation_card_text(
             countdown_card,
             title="Ready when you are",
             summary="Supervised operation begins after a calm countdown.",
-            details=("Continue or return to preparation.",),
+            details=("Start or return to preparation.",),
         )
 
     def start_countdown(manual_focus_acknowledged: bool = False) -> None:
@@ -1877,7 +2416,7 @@ def _build_commitment_layer_widget(
                 focus_card,
                 title="Manual focus acknowledged",
                 summary="FH6 focus was confirmed by the operator.",
-                details=("Auto1 will begin after the countdown. Keep F8 ready.",),
+                details=("The selected operation will begin after the countdown. Keep F8 ready.",),
             )
         advance_countdown()
         countdown_timer.start()
@@ -1897,27 +2436,38 @@ def _build_commitment_layer_widget(
             countdown_card,
             title=str(value),
             summary="Supervised operation begins in",
-            details=("Auto1 begins after this commitment countdown.",),
+            details=(
+                (
+                    "The selected operation begins after this commitment countdown."
+                    if current_companion_state["value"] is not None
+                    else "Supervision opens after this countdown."
+                ),
+            ),
         )
 
     def begin_countdown() -> None:
         if current_companion_state["value"] is None:
             return
 
-        if current_companion_state["value"].get("automation_id") != "auto1":
+        if not _is_desktop_execution_supported(
+            current_companion_state["value"].get("automation_id", "")
+        ):
             open_refusal_state(
                 current_companion_state["value"],
-                "UI execution is currently wired for Auto1 only.",
+                "Desktop execution is unavailable for the selected automation.",
             )
             return
 
         focus_result = _attempt_ui_focus_handoff(current_companion_state["value"])
         if not focus_result.succeeded:
-            failure_message = _format_ui_focus_failure_message(focus_result)
+            failure_message = _format_ui_focus_failure_message(
+                focus_result,
+                current_companion_state["value"].get("automation_name", "operation"),
+            )
             _set_preparation_card_text(
                 focus_card,
                 title="Focus handoff needs attention",
-                summary="Auto1 has not started.",
+                summary="The selected operation has not started.",
                 details=(failure_message,),
             )
             _set_preparation_card_text(
@@ -1953,6 +2503,7 @@ def _build_home_screen_content(
     home_concept: PrototypeHomeConcept,
     shell_spec: PrototypeShellSpec,
     open_automation_environment,
+    open_profiles,
 ) -> None:
     layout.addWidget(
         _build_visual_card(
@@ -1984,11 +2535,11 @@ def _build_home_screen_content(
             eyebrow=home_concept.signals[1].title,
             title=home_concept.signals[1].summary,
             summary="Check profile, readiness, warnings and commitment before proceeding.",
-            button_text="Review & Prepare",
+            button_text="Review Profiles",
             shell_spec=shell_spec,
             treatment="secondary action",
             primary=False,
-            action_callback=open_automation_environment,
+            action_callback=open_profiles,
         )
     )
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
@@ -2016,11 +2567,473 @@ def _build_home_screen_content(
     )
 
 
+def _is_real_desktop_execution_state(companion_state: dict[str, str]) -> bool:
+    return (
+        companion_state.get("automation_id") in {"auto1", "auto2", "auto3"}
+        and companion_state.get("execution_active") == "true"
+    )
+
+
+def _auto2_mode_label(mode: str) -> str:
+    return "Purchase cars" if mode == "purchase" else "Test navigation"
+
+
+def _auto3_mode_label(mode: str) -> str:
+    return "Multi-car unlock" if mode == "unlock" else "Multi-car test traversal"
+
+
+def _parse_auto3_car_count(raw_value: str | None) -> int:
+    try:
+        car_count = int(raw_value or "1")
+    except (TypeError, ValueError) as error:
+        raise ValueError("Auto3 car count must be an integer.") from error
+
+    if car_count < 1 or car_count > 4:
+        raise ValueError("Auto3 car count must be between 1 and 4.")
+
+    return car_count
+
+
+def _parse_auto2_purchase_count(raw_value: str | None) -> int:
+    try:
+        purchase_count = int(raw_value or "1")
+    except (TypeError, ValueError) as error:
+        raise ValueError("Auto2 purchase count must be an integer.") from error
+
+    if purchase_count < 1 or purchase_count > 25:
+        raise ValueError("Auto2 purchase count must be between 1 and 25.")
+
+    return purchase_count
+
+
+def _desktop_running_progress_label(companion_state: dict[str, str]) -> str:
+    automation_id = companion_state.get("automation_id")
+    if automation_id == "auto1":
+        return (
+            f"Requested loops: {_parse_auto1_loop_count(companion_state.get('requested_cycles'))} "
+            "- guarded race run active"
+        )
+
+    if automation_id == "auto2":
+        if companion_state.get("auto2_mode") == "purchase":
+            return (
+                "Purchase cars - "
+                f"{_parse_auto2_purchase_count(companion_state.get('auto2_purchase_count'))} purchase(s) active"
+            )
+        return "Test navigation - guarded one-cycle run active"
+
+    if automation_id == "auto3":
+        return (
+            f"{_auto3_mode_label(companion_state.get('auto3_mode', 'test'))} - "
+            f"{_parse_auto3_car_count(companion_state.get('auto3_cars'))} car(s) active"
+        )
+
+    return "Guarded operation active"
+
+
+def _desktop_stop_guidance(automation_id: str | None) -> str:
+    if automation_id == "auto1":
+        return "F8 emergency stop available. UI stop request available."
+
+    if automation_id in {"auto2", "auto3"}:
+        return "F8 emergency stop available."
+
+    return "No desktop real input is active."
+
+
+def _desktop_requested_count(
+    automation_id: str,
+    auto1_loops: int,
+    auto2_purchases: int,
+    auto3_cars: int,
+) -> int:
+    if automation_id == "auto1":
+        return auto1_loops
+
+    if automation_id == "auto2":
+        return auto2_purchases
+
+    if automation_id == "auto3":
+        return auto3_cars
+
+    return 1
+
+
+def _build_profiles_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
+    from PySide6.QtWidgets import (
+        QFrame,
+        QGridLayout,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QDoubleSpinBox,
+        QSizePolicy,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    profiles = _load_desktop_profile_settings()
+    first_profile = profiles[0] if profiles else None
+    selected_profile_id = {"value": first_profile["profile_id"] if first_profile else ""}
+    selector_buttons: dict[str, QPushButton] = {}
+    timing_editor_layout = QGridLayout()
+    status_label = QLabel()
+    selected_summary_label = QLabel()
+
+    layout.addWidget(
+        _build_visual_card(
+            title="Profile settings",
+            summary="Adjust profile timing behavior without touching automation logic.",
+            details=(
+                "Official profiles are locked reference defaults.",
+                "Custom profiles can be tuned for slower or faster FH6 menu behavior.",
+            ),
+            shell_spec=shell_spec,
+            treatment="hero",
+        )
+    )
+
+    layout.addSpacing(6)
+
+    profile_stage = QFrame()
+    profile_stage.setObjectName("DesktopCard")
+    profile_stage.setFrameShape(QFrame.Shape.NoFrame)
+    profile_stage.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(profile_stage, treatment="primary")
+
+    profile_stage_layout = QHBoxLayout(profile_stage)
+    profile_stage_layout.setContentsMargins(12, 10, 12, 10)
+    profile_stage_layout.setSpacing(10)
+
+    selector_column = QWidget()
+    selector_column.setStyleSheet("background: transparent; border: none;")
+    selector_column.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Preferred,
+    )
+    selector_layout = QVBoxLayout(selector_column)
+    selector_layout.setContentsMargins(0, 0, 0, 0)
+    selector_layout.setSpacing(6)
+
+    selector_title = QLabel("Available profiles")
+    _style_eyebrow_label(selector_title, primary=True)
+    selector_layout.addWidget(selector_title)
+
+    detail_panel = QFrame()
+    detail_panel.setObjectName("DesktopCard")
+    detail_panel.setFrameShape(QFrame.Shape.NoFrame)
+    detail_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(detail_panel, treatment="primary")
+
+    detail_layout = QVBoxLayout(detail_panel)
+    detail_layout.setContentsMargins(12, 10, 12, 10)
+    detail_layout.setSpacing(7)
+
+    selected_eyebrow = QLabel("Timing controls")
+    _style_eyebrow_label(selected_eyebrow, primary=True)
+    selected_title_label = QLabel()
+    _style_card_title(selected_title_label, shell_spec=shell_spec, treatment="primary")
+    _style_detail_label(selected_summary_label, shell_spec=shell_spec)
+    _style_detail_label(status_label, shell_spec=shell_spec)
+
+    detail_layout.addWidget(selected_eyebrow)
+    detail_layout.addWidget(selected_title_label)
+    detail_layout.addWidget(selected_summary_label)
+    detail_layout.addLayout(timing_editor_layout)
+    detail_layout.addWidget(status_label)
+
+    def render_selected_profile(profile: dict[str, Any]) -> None:
+        profile_id = str(profile["profile_id"])
+        selected_profile_id["value"] = profile_id
+        for profile_id, button in selector_buttons.items():
+            _style_profile_selector_button(
+                button,
+                shell_spec=shell_spec,
+                selected=profile_id == selected_profile_id["value"],
+            )
+
+        _clear_layout(timing_editor_layout)
+        profile_data = profile["data"]
+        selected_title_label.setText(profile_data["profile_name"])
+        selected_summary_label.setText(_profile_settings_summary(profile_data))
+        status_label.setText(_profile_settings_status(profile_data))
+
+        timings = profile_data.get("timings", {})
+        for index, timing_key in enumerate(timings):
+            label = QLabel(_timing_display_label(timing_key))
+            _style_detail_label(label, shell_spec=shell_spec)
+            spinbox = QDoubleSpinBox()
+            spinbox.setRange(0.0, 240.0)
+            spinbox.setDecimals(1)
+            spinbox.setSingleStep(0.5)
+            spinbox.setValue(float(timings[timing_key]))
+            spinbox.setFixedHeight(30)
+            spinbox.setEnabled(not profile_data.get("is_official", False))
+            spinbox.setSuffix(" sec")
+            _style_runtime_spinbox(spinbox, shell_spec=shell_spec)
+
+            row = index // 2
+            column = (index % 2) * 2
+            timing_editor_layout.addWidget(label, row, column)
+            timing_editor_layout.addWidget(spinbox, row, column + 1)
+
+        if not timings:
+            empty_label = QLabel("No editable timing fields found for this profile.")
+            _style_detail_label(empty_label, shell_spec=shell_spec)
+            timing_editor_layout.addWidget(empty_label, 0, 0, 1, 4)
+
+    for profile in profiles:
+        profile_data = profile["data"]
+        button = QPushButton(_profile_settings_selector_text(profile_data))
+        button.setObjectName(f"ProfileSelector_{profile['profile_id']}")
+        button.setMinimumHeight(58)
+        button.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        button.clicked.connect(lambda _checked=False, item=profile: render_selected_profile(item))
+        selector_buttons[str(profile["profile_id"])] = button
+        selector_layout.addWidget(button)
+
+    selector_layout.addStretch(1)
+
+    profile_stage_layout.addWidget(selector_column, 9)
+    profile_stage_layout.addWidget(detail_panel, 11)
+
+    layout.addWidget(profile_stage)
+    layout.addSpacing(6)
+    layout.addLayout(
+        _build_card_row(
+            cards=(
+                _build_visual_card(
+                    title="What belongs here",
+                    summary="Menu delay, wait timing, race duration, and recovery pacing.",
+                    details=(
+                        "Timing controls affect how patiently the macro waits between steps.",
+                    ),
+                    shell_spec=shell_spec,
+                    treatment="secondary",
+                ),
+                _build_visual_card(
+                    title="What does not belong here",
+                    summary="Keys, routes, navigation counts, deletion behavior, or automation logic.",
+                    details=(
+                        "Those remain locked unless a future milestone explicitly opens them.",
+                    ),
+                    shell_spec=shell_spec,
+                    treatment="tertiary",
+                ),
+            ),
+            shell_spec=shell_spec,
+        )
+    )
+
+    if first_profile is not None:
+        render_selected_profile(first_profile)
+
+
+def _build_history_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
+    screen = build_history_screen(
+        (
+            OperationalHistoryEntry(
+                session_id="current-desktop-session",
+                automation_id="desktop",
+                automation_name="Desktop UI",
+                profile_id="none",
+                profile_name="No persisted run profile",
+                outcome=SessionStatus.PREPARED,
+                summary="Desktop UI session is active. Run persistence is not connected yet.",
+                timestamp=datetime.now(timezone.utc),
+                requested_count=0,
+                completed_count=0,
+                confidence_note="History is session-oriented and will show completed supervised runs once persistence is added.",
+                warnings=(),
+                recovery_note=None,
+                suggested_next_step="Prepare a supervised operation from Automation Environment.",
+                expandable_details=(),
+            ),
+        )
+    )
+    recent = screen.recent_sessions.sessions[0]
+
+    layout.addWidget(
+        _build_visual_card(
+            title="Operational memory",
+            summary=screen.primary_intention,
+            details=(
+                "History summarizes sessions, not raw logs.",
+                "Persistence is intentionally not connected in this pass.",
+            ),
+            shell_spec=shell_spec,
+            treatment="hero",
+        )
+    )
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    layout.addWidget(
+        _build_visual_card(
+            title=recent.outcome_message,
+            summary=recent.summary,
+            details=(
+                recent.confidence_note,
+                recent.suggested_next_step or "Review the current preparation state.",
+            ),
+            shell_spec=shell_spec,
+            treatment="primary action",
+        )
+    )
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    layout.addWidget(
+        _build_visual_card(
+            title="Older sessions",
+            summary="No stored older sessions yet",
+            details=("When persistence is added, this remains recency-first and session-oriented.",),
+            shell_spec=shell_spec,
+            treatment="tertiary",
+        )
+    )
+
+
+def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
+    screen = build_help_screen(
+        automation_definitions=tuple(get_all_automation_definitions()),
+        readiness_models=tuple(get_all_readiness_models()),
+        profile_metadata=tuple(get_all_profile_metadata()),
+    )
+    common_questions = screen.common_questions.questions
+    primary_question = common_questions[0]
+    secondary_question = common_questions[1]
+
+    layout.addWidget(
+        _build_visual_card(
+            title="Help without a rabbit hole",
+            summary=screen.primary_intention,
+            details=(
+                "Use this screen for quick operational confidence, not deep documentation.",
+            ),
+            shell_spec=shell_spec,
+            treatment="hero",
+        )
+    )
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    layout.addWidget(
+        _build_visual_card(
+            title=primary_question.question,
+            summary=_compact_text(primary_question.answer, 120),
+            details=(
+                _compact_text(secondary_question.question, 72),
+                _compact_text(secondary_question.answer, 94),
+            ),
+            shell_spec=shell_spec,
+            treatment="primary action",
+        )
+    )
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    layout.addLayout(
+        _build_card_row(
+            cards=(
+                _build_visual_card(
+                    title="Baseline guidance",
+                    summary="Readiness is assumed, not magically verified.",
+                    details=("Check the FH6 baseline before commitment.",),
+                    shell_spec=shell_spec,
+                    treatment="secondary",
+                ),
+                _build_visual_card(
+                    title="If something looks wrong",
+                    summary="Stop, reset baseline, prepare again.",
+                    details=("Refusal is protective clarity, not failure.",),
+                    shell_spec=shell_spec,
+                    treatment="tertiary",
+                ),
+            ),
+            shell_spec=shell_spec,
+        )
+    )
+
+
+def _build_settings_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
+    from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+
+    screen = build_settings_screen()
+
+    expected = screen.expected_application_behavior.settings
+    safety = screen.safety_and_operational_preferences.settings
+    advanced = screen.advanced_system_preferences.settings
+
+    layout.addWidget(
+        _build_visual_card(
+            title="Quiet system control",
+            summary=screen.primary_intention,
+            details=(
+                "Settings control the app shell, not automation timing or profile behavior.",
+            ),
+            shell_spec=shell_spec,
+            treatment="hero",
+        )
+    )
+    layout.addSpacing(6)
+
+    settings_stage = QFrame()
+    settings_stage.setObjectName("DesktopCard")
+    settings_stage.setFrameShape(QFrame.Shape.NoFrame)
+    settings_stage.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(settings_stage, treatment="primary")
+
+    settings_stage_layout = QVBoxLayout(settings_stage)
+    settings_stage_layout.setContentsMargins(12, 10, 12, 10)
+    settings_stage_layout.setSpacing(7)
+
+    expected_label = QLabel("Expected application behavior")
+    _style_eyebrow_label(expected_label, primary=True)
+    settings_stage_layout.addWidget(expected_label)
+
+    expected_grid = QHBoxLayout()
+    expected_grid.setContentsMargins(0, 0, 0, 0)
+    expected_grid.setSpacing(7)
+    for setting in expected:
+        expected_grid.addWidget(
+            _build_setting_item_card(
+                setting,
+                shell_spec=shell_spec,
+                status_text=_setting_status_label(setting),
+                treatment="primary",
+            )
+        )
+    settings_stage_layout.addLayout(expected_grid)
+
+    boundary_note = QLabel(
+        "Execution behavior stays in Profiles. Settings only controls the app shell."
+    )
+    _style_detail_label(boundary_note, shell_spec=shell_spec)
+    settings_stage_layout.addWidget(boundary_note)
+
+    layout.addWidget(settings_stage)
+    layout.addSpacing(6)
+    layout.addLayout(
+        _build_card_row(
+            cards=(
+                _build_settings_section_card(
+                    title="Safety preferences",
+                    settings=safety,
+                    shell_spec=shell_spec,
+                    treatment="secondary",
+                ),
+                _build_settings_section_card(
+                    title="Advanced system",
+                    settings=advanced,
+                    shell_spec=shell_spec,
+                    treatment="tertiary",
+                ),
+            ),
+            shell_spec=shell_spec,
+        )
+    )
+
+
 def _build_companion_mode_widget(
     shell_spec: PrototypeShellSpec,
     return_to_preparation,
     request_stop,
-    open_completion_state,
 ):
     from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -2091,16 +3104,6 @@ def _build_companion_mode_widget(
     back_button.clicked.connect(return_to_preparation)
     layout.addSpacing(6)
 
-    outcome_row = QHBoxLayout()
-    outcome_row.setContentsMargins(0, 0, 0, 0)
-    outcome_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-    completed_button = QPushButton("Record Completed")
-    stopped_button = QPushButton("Record Stopped")
-    refused_button = QPushButton("Record Paused")
-    for button in (completed_button, stopped_button, refused_button):
-        _style_secondary_button(button, shell_spec=shell_spec)
-        outcome_row.addWidget(button)
-    layout.addLayout(outcome_row)
     layout.addWidget(back_button)
     layout.addStretch()
 
@@ -2120,6 +3123,7 @@ def _build_companion_mode_widget(
     def update_companion_mode(companion_state: dict[str, str]) -> None:
         current_companion_state["value"] = companion_state
         is_real_auto1_running = _is_real_auto1_execution_state(companion_state)
+        is_real_desktop_running = _is_real_desktop_execution_state(companion_state)
         _set_preparation_card_text(
             status_card,
             title=companion_state["status"],
@@ -2130,13 +3134,13 @@ def _build_companion_mode_widget(
             operation_card,
             title=companion_state["automation_name"],
             summary=companion_state["progress"],
-            details=("Only Auto1 can execute from this supervised UI flow.",),
+            details=("Guarded desktop execution is active for the selected automation.",),
         )
         _set_preparation_card_text(
             focus_card,
             title=companion_state["focus"],
-            summary="Focus handoff status placeholder",
-            details=("Automatic focus handoff can be represented here later.",),
+            summary="Focus handoff status",
+            details=("Focus state follows the selected automation boundary.",),
         )
         _set_preparation_card_text(
             profile_card,
@@ -2148,7 +3152,7 @@ def _build_companion_mode_widget(
             reassurance_card,
             title="Supervise confidently",
             summary="Keep FH6 visible and the operation under observation.",
-            details=("Completion and recovery states will follow in a later milestone.",),
+            details=("The completion state opens automatically when the guarded run returns.",),
         )
         _set_preparation_card_text(
             stop_card,
@@ -2158,14 +3162,14 @@ def _build_companion_mode_widget(
                 (
                     "Use F8 or Request Stop. Cleanup is handled by the guarded Auto1 runner."
                     if is_real_auto1_running
-                    else "Stop controls become available during an active guarded Auto1 run."
+                    else "Use F8 emergency stop for this guarded runner."
+                    if is_real_desktop_running
+                    else "Stop controls become available during an active guarded run."
                 ),
             ),
         )
         stop_request_button.setEnabled(is_real_auto1_running)
-        back_button.setEnabled(not is_real_auto1_running)
-        for button in (completed_button, stopped_button, refused_button):
-            button.setEnabled(not is_real_auto1_running)
+        back_button.setEnabled(not is_real_desktop_running)
 
     def request_stop_from_ui() -> None:
         message = request_stop()
@@ -2174,15 +3178,6 @@ def _build_companion_mode_widget(
         current_state["summary"] = "Stop requested. Waiting for guarded cleanup and completion."
         update_companion_mode(current_state)
 
-    completed_button.clicked.connect(
-        lambda: open_completion_state("completed", current_companion_state["value"])
-    )
-    stopped_button.clicked.connect(
-        lambda: open_completion_state("stopped", current_companion_state["value"])
-    )
-    refused_button.clicked.connect(
-        lambda: open_completion_state("refused", current_companion_state["value"])
-    )
     stop_request_button.clicked.connect(request_stop_from_ui)
     update_companion_mode(current_companion_state["value"])
 
@@ -2335,26 +3330,26 @@ def _build_automation_environment_content(
     layout.addLayout(
         _build_card_row(
             cards=(
-                _build_section_card(overview, shell_spec=shell_spec),
                 _build_section_card(profile, shell_spec=shell_spec),
+                _build_section_card(warnings, shell_spec=shell_spec),
             ),
             shell_spec=shell_spec,
         )
     )
+    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+    layout.addWidget(_build_section_card(overview, shell_spec=shell_spec))
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
     layout.addWidget(_build_section_card(readiness, shell_spec=shell_spec))
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
     layout.addLayout(
         _build_card_row(
             cards=(
-                _build_section_card(warnings, shell_spec=shell_spec),
                 _build_section_card(advanced, shell_spec=shell_spec),
+                _build_section_card(run, shell_spec=shell_spec),
             ),
             shell_spec=shell_spec,
         )
     )
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addWidget(_build_section_card(run, shell_spec=shell_spec))
 
 
 def _build_section_card(
@@ -2449,6 +3444,174 @@ def _format_warning_summary(warnings: tuple[str, ...]) -> str:
     return warnings[0]
 
 
+def _desktop_baseline_summary(automation_id: str) -> str:
+    summaries = {
+        "auto1": "Complete one race first, then stay in the post-race restart menu.",
+        "auto2": "Open Autoshow and start from the validated buy-car menu baseline.",
+        "auto3": "Open Garage -> Cars -> My Cars; do not start from freeroam.",
+    }
+    return summaries.get(automation_id, "Use the documented baseline for this automation.")
+
+
+def _desktop_baseline_details(automation_id: str, readiness_model) -> tuple[str, ...]:
+    if automation_id == "auto1":
+        return (
+            "Leave FH6 at the restart screen where pressing X restarts the event.",
+            "The app attempts FH6 focus handoff before the countdown starts.",
+            "Use the validated race/car setup and keep F8 ready.",
+        )
+
+    if automation_id == "auto2":
+        return (
+            "Autoshow should already be open at the expected manufacturer/car navigation baseline.",
+            "The app attempts FH6 focus handoff before the countdown starts.",
+            "Use test navigation first if purchase alignment is uncertain.",
+        )
+
+    if automation_id == "auto3":
+        return (
+            "My Cars should already be open from Garage -> Cars, with start row A.",
+            "The app attempts FH6 focus handoff before the countdown starts.",
+            "Validated traversal: A1 -> B1 -> C1 -> A2. Current hard max: 4 cars.",
+        )
+
+    return (
+        readiness_model.expected_baseline,
+        readiness_model.manual_positioning_assumption,
+    )
+
+
+def _format_profile_list(profiles: tuple[object, ...]) -> str:
+    if not profiles:
+        return "No profiles available."
+
+    return " / ".join(profile.profile_name for profile in profiles[:3])
+
+
+def _load_desktop_profile_settings() -> list[dict[str, Any]]:
+    from profiles import ProfileManager
+
+    profile_manager = ProfileManager()
+    loaded_profiles: list[dict[str, Any]] = []
+
+    for profile_path in sorted(profile_manager.official_profiles_path.glob("*.json")):
+        profile_data = profile_manager.load_profile(profile_path)
+        if profile_data.get("profile_type") in {
+            "auto1_race",
+            "auto2_buy_car",
+            "auto3_skill_tree",
+        }:
+            loaded_profiles.append(
+                {
+                    "profile_id": profile_data["profile_id"],
+                    "data": profile_data,
+                    "source": "official",
+                }
+            )
+
+    for profile_path in sorted(profile_manager.custom_profiles_path.glob("*.json")):
+        profile_data = profile_manager.load_profile(profile_path)
+        loaded_profiles.append(
+            {
+                "profile_id": profile_data["profile_id"],
+                "data": profile_data,
+                "source": "custom",
+            }
+        )
+
+    return loaded_profiles
+
+
+def _profile_settings_selector_text(profile_data: dict[str, Any]) -> str:
+    lock_state = "Locked default" if profile_data.get("is_official") else "Custom editable"
+    return (
+        f"{profile_data['profile_name']}\n"
+        f"{_profile_type_label(profile_data.get('profile_type'))} - {lock_state}"
+    )
+
+
+def _profile_settings_summary(profile_data: dict[str, Any]) -> str:
+    timing_count = len(profile_data.get("timings", {}))
+    profile_state = "Official locked profile" if profile_data.get("is_official") else "Custom editable profile"
+    return f"{profile_state}. {timing_count} timing value(s) shown."
+
+
+def _profile_settings_status(profile_data: dict[str, Any]) -> str:
+    if profile_data.get("is_official"):
+        return "Official defaults are protected. Duplicate to custom before saving timing changes."
+
+    return "Custom profile timing controls are editable here. Save wiring is the next step."
+
+
+def _profile_type_label(profile_type: str | None) -> str:
+    labels = {
+        "auto1_race": "Auto1 Race",
+        "auto2_buy_car": "Auto2 Buy Car",
+        "auto3_skill_tree": "Auto3 Skill Tree",
+    }
+    return labels.get(profile_type or "", "Profile")
+
+
+def _timing_display_label(timing_key: str) -> str:
+    labels = {
+        "startup_delay": "Startup delay",
+        "wait_after_restart": "After restart",
+        "wait_after_first_confirm": "After first confirm",
+        "race_duration": "Race drive duration",
+        "post_cycle_delay": "After cycle",
+        "menu_key_delay": "Menu keypress delay",
+        "wait_after_menu_confirm": "After menu confirm",
+        "wait_after_car_selection": "After car selection",
+        "wait_after_purchase_confirm": "After purchase confirm",
+        "skill_tree_key_delay": "Skill tree keypress delay",
+        "wait_after_get_in": "After get in",
+        "wait_after_get_in_next_car": "Later-car recovery wait",
+        "wait_after_menu_open": "After menu open",
+        "wait_after_unlock": "After unlock",
+    }
+    return labels.get(timing_key, timing_key.replace("_", " ").title())
+
+
+def _profile_selector_text(profile) -> str:
+    automation_name = profile.automation_name or _profile_automation_type_label(
+        profile.automation_id
+    )
+    tier = profile.package_tier.value.title()
+    confidence = profile.validation_confidence.value.title()
+    return f"{profile.profile_name}\n{automation_name} - {tier} - {confidence}"
+
+
+def _profile_detail_lines(profile) -> tuple[str, ...]:
+    automation_name = profile.automation_name or _profile_automation_type_label(
+        profile.automation_id
+    )
+    return (
+        f"{automation_name}. {profile.reliability_posture}",
+        f"{profile.package_tier.value.title()} / {profile.recommendation_status.value.title()} / {profile.availability.value.title()}",
+        profile.customization_status,
+    )
+
+
+def _profile_automation_type_label(automation_id: str | None) -> str:
+    labels = {
+        "auto1": "Auto1 Race",
+        "auto2": "Auto2 Buy Car",
+        "auto3": "Auto3 Skill Tree",
+    }
+    return labels.get(automation_id or "", "Automation profile")
+
+
+def _format_setting_list(settings: tuple[object, ...]) -> str:
+    if not settings:
+        return "No settings available."
+
+    return " / ".join(setting.label for setting in settings[:3])
+
+
+def _setting_status_label(setting) -> str:
+    return "Available" if setting.is_editable_now else "Planned"
+
+
 def _compact_text(text: str, max_length: int) -> str:
     if len(text) <= max_length:
         return text
@@ -2529,6 +3692,84 @@ def _build_card_row(cards: tuple[object, object], shell_spec: PrototypeShellSpec
         row.addWidget(card)
 
     return row
+
+
+def _clear_layout(layout) -> None:
+    while layout.count():
+        item = layout.takeAt(0)
+        child_layout = item.layout()
+        child_widget = item.widget()
+
+        if child_layout is not None:
+            _clear_layout(child_layout)
+
+        if child_widget is not None:
+            child_widget.deleteLater()
+
+
+def _build_setting_item_card(
+    setting,
+    shell_spec: PrototypeShellSpec,
+    status_text: str,
+    treatment: str,
+):
+    from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout
+
+    card = QFrame()
+    card.setObjectName("DesktopCard")
+    card.setFrameShape(QFrame.Shape.NoFrame)
+    card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(card, treatment=treatment)
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(9, 8, 9, 8)
+    card_layout.setSpacing(4)
+
+    status_label = QLabel(status_text.upper())
+    _style_eyebrow_label(status_label, primary=status_text == "Available")
+    title_label = QLabel(setting.label)
+    _style_card_title(title_label, shell_spec=shell_spec, treatment=treatment)
+    detail_label = QLabel(_compact_text(setting.description, 64))
+    _style_detail_label(detail_label, shell_spec=shell_spec)
+
+    card_layout.addWidget(status_label)
+    card_layout.addWidget(title_label)
+    card_layout.addWidget(detail_label)
+
+    return card
+
+
+def _build_settings_section_card(
+    title: str,
+    settings: tuple[object, ...],
+    shell_spec: PrototypeShellSpec,
+    treatment: str,
+):
+    from PySide6.QtWidgets import QFrame, QVBoxLayout
+
+    card = QFrame()
+    card.setObjectName("DesktopCard")
+    card.setFrameShape(QFrame.Shape.NoFrame)
+    _style_visual_card(card, treatment=treatment)
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(10, 9, 10, 9)
+    card_layout.setSpacing(6)
+
+    section_title = _build_footer_metadata_label(title.upper(), shell_spec=shell_spec)
+    card_layout.addWidget(section_title)
+
+    for setting in settings:
+        card_layout.addWidget(
+            _build_setting_item_card(
+                setting,
+                shell_spec=shell_spec,
+                status_text=_setting_status_label(setting),
+                treatment=treatment,
+            )
+        )
+
+    return card
 
 
 def _build_footer_metadata_label(text: str, shell_spec: PrototypeShellSpec):
@@ -2831,21 +4072,105 @@ def _style_secondary_button(button, shell_spec: PrototypeShellSpec) -> None:
 def _style_runtime_spinbox(spinbox, shell_spec: PrototypeShellSpec) -> None:
     spinbox.setStyleSheet(
         f"""
-        QDoubleSpinBox {{
+        QDoubleSpinBox, QSpinBox {{
             font-size: {shell_spec.typography.summary_size}px;
             font-weight: 600;
             color: {COLOR_TEXT_PRIMARY};
-            background-color: {COLOR_SURFACE_RECESSED};
+            background-color: {COLOR_SURFACE_CARD_SOFT};
             border: 1px solid {COLOR_BORDER_SUBTLE};
             border-radius: 10px;
-            padding: 6px 8px;
+            padding: 5px 8px;
         }}
-        QDoubleSpinBox:focus {{
+        QDoubleSpinBox:focus, QSpinBox:focus {{
             border: 1px solid {COLOR_ACCENT_PRIMARY};
         }}
-        QDoubleSpinBox:disabled {{
+        QDoubleSpinBox:disabled, QSpinBox:disabled {{
             color: {COLOR_TEXT_FAINT};
             border: 1px solid {COLOR_BORDER_SUBTLE};
+        }}
+        QDoubleSpinBox::up-button, QDoubleSpinBox::down-button,
+        QSpinBox::up-button, QSpinBox::down-button {{
+            width: 14px;
+            background-color: transparent;
+            border: none;
+            border-radius: 9px;
+        }}
+        QDoubleSpinBox::up-arrow, QDoubleSpinBox::down-arrow,
+        QSpinBox::up-arrow, QSpinBox::down-arrow {{
+            width: 7px;
+            height: 7px;
+        }}
+        """
+    )
+
+
+def _style_runtime_combobox(combobox, shell_spec: PrototypeShellSpec) -> None:
+    arrow_path = (Path(__file__).with_name("assets") / "chevron_down.svg").as_posix()
+    combobox.setStyleSheet(
+        f"""
+        QComboBox {{
+            font-size: {shell_spec.typography.summary_size}px;
+            font-weight: 520;
+            color: {COLOR_TEXT_PRIMARY};
+            background-color: {COLOR_SURFACE_CARD_SOFT};
+            border: 1px solid {COLOR_BORDER_SUBTLE};
+            border-radius: 10px;
+            padding: 5px 8px;
+        }}
+        QComboBox:focus {{
+            border: 1px solid {COLOR_ACCENT_PRIMARY};
+        }}
+        QComboBox:disabled {{
+            color: {COLOR_TEXT_FAINT};
+            border: 1px solid {COLOR_BORDER_SUBTLE};
+        }}
+        QComboBox::drop-down {{
+            width: 26px;
+            background-color: transparent;
+            border: none;
+            border-radius: 9px;
+        }}
+        QComboBox::down-arrow {{
+            image: url("{arrow_path}");
+            width: 10px;
+            height: 10px;
+        }}
+        QComboBox QAbstractItemView {{
+            color: {COLOR_TEXT_PRIMARY};
+            background-color: {COLOR_SURFACE_CARD_SOFT};
+            selection-background-color: {COLOR_SURFACE_CARD_RAISED};
+        }}
+        """
+    )
+
+
+def _style_profile_selector_button(
+    button,
+    shell_spec: PrototypeShellSpec,
+    selected: bool,
+) -> None:
+    background = COLOR_SURFACE_CARD_RAISED if selected else COLOR_SURFACE_CARD_SOFT
+    border = COLOR_ACCENT_PRIMARY if selected else COLOR_BORDER_SUBTLE
+    text_color = COLOR_TEXT_PRIMARY if selected else COLOR_TEXT_SECONDARY
+    button.setStyleSheet(
+        f"""
+        QPushButton {{
+            font-size: {shell_spec.typography.detail_size}px;
+            font-weight: 580;
+            color: {text_color};
+            background-color: {background};
+            border: 1px solid {border};
+            border-radius: 10px;
+            padding: 7px 10px;
+            text-align: left;
+        }}
+        QPushButton:hover {{
+            color: {COLOR_TEXT_PRIMARY};
+            background-color: {COLOR_SURFACE_CARD_RAISED};
+            border: 1px solid {COLOR_BORDER_STRONG};
+        }}
+        QPushButton:pressed {{
+            background-color: {COLOR_SURFACE_RECESSED};
         }}
         """
     )

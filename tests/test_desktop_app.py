@@ -2,6 +2,10 @@ import inspect
 import unittest
 
 from desktop import app
+from frontend.automation_controller import (
+    AutomationRunRequest,
+    FrontendAutomationController,
+)
 from product.automation_registry import (
     AUTOMATION_DEFINITIONS,
     get_active_automation_definitions,
@@ -20,7 +24,7 @@ class DesktopAppTest(unittest.TestCase):
         self.assertEqual("FH6 Farm Tool", shell_spec.window_title)
         self.assertNotIn("Prototype", shell_spec.window_title)
         self.assertEqual(640, shell_spec.window_width)
-        self.assertEqual(864, shell_spec.window_height)
+        self.assertEqual(960, shell_spec.window_height)
         self.assertTrue(shell_spec.is_fixed_size)
 
     def test_desktop_app_represents_visible_workflow_states(self) -> None:
@@ -73,32 +77,49 @@ class DesktopAppTest(unittest.TestCase):
         workflow = app.build_desktop_app_spec().workflow_contract
 
         self.assertIn("clears prepared", workflow.state_reset_policy)
-        self.assertIn("Auto2 and Auto3 refuse", workflow.unsupported_execution_policy)
-        self.assertIn("Auto1 only", workflow.real_input_boundary)
-        self.assertIn("StopManager", workflow.stop_policy)
+        self.assertIn("Auto4 is inactive", workflow.unsupported_execution_policy)
+        self.assertIn("Auto1, Auto2, and Auto3", workflow.real_input_boundary)
+        self.assertIn("F8", workflow.stop_policy)
 
     def test_desktop_app_keeps_auto4_inactive(self) -> None:
         active_automation_ids = {
             definition.automation_id for definition in get_active_automation_definitions()
         }
 
+        self.assertEqual({"auto1", "auto2", "auto3"}, active_automation_ids)
         self.assertFalse(AUTOMATION_DEFINITIONS["auto4"].is_active)
         self.assertNotIn("auto4", active_automation_ids)
 
-    def test_desktop_app_execution_boundary_is_auto1_guarded_only(self) -> None:
+    def test_desktop_preparation_accepts_auto1_auto2_and_auto3(self) -> None:
+        controller = FrontendAutomationController(
+            session_id_provider=lambda: "desktop-navigation-test-session"
+        )
+
+        for automation_id in ("auto1", "auto2", "auto3"):
+            definition = AUTOMATION_DEFINITIONS[automation_id]
+            plan = controller.prepare_run_plan(
+                AutomationRunRequest(
+                    automation_id=automation_id,
+                    profile_id=definition.available_profiles[0],
+                    requested_count=1,
+                )
+            )
+
+            self.assertTrue(plan.accepted, automation_id)
+            self.assertEqual(automation_id, plan.automation_definition.automation_id)
+
+    def test_desktop_app_execution_boundary_supports_mvp_guarded_paths(self) -> None:
         shell_spec = app.build_desktop_app_spec()
         wiring = shell_spec.execution_wiring
 
-        self.assertEqual(("auto1",), wiring.enabled_automation_ids)
-        self.assertEqual(("auto2", "auto3"), wiring.refused_automation_ids)
-        self.assertTrue(wiring.uses_existing_guarded_auto1_path)
+        self.assertEqual(("auto1", "auto2", "auto3"), wiring.enabled_automation_ids)
+        self.assertEqual(("auto4",), wiring.refused_automation_ids)
+        self.assertTrue(wiring.uses_existing_guarded_paths)
         self.assertTrue(wiring.preserves_f8_stop)
         self.assertTrue(wiring.fail_closed_for_unsupported_automations)
-        self.assertIn("Auto2 and Auto3 refuse", shell_spec.workflow_contract.unsupported_execution_policy)
-        self.assertNotIn("support", shell_spec.workflow_contract.unsupported_execution_policy.lower())
-        self.assertIn("Auto1 only", shell_spec.workflow_contract.real_input_boundary)
-        self.assertIn("Request Stop", shell_spec.workflow_contract.stop_policy)
-        self.assertIn("StopManager", shell_spec.workflow_contract.stop_policy)
+        self.assertIn("Auto4 is inactive", shell_spec.workflow_contract.unsupported_execution_policy)
+        self.assertIn("Auto1, Auto2, and Auto3", shell_spec.workflow_contract.real_input_boundary)
+        self.assertIn("F8", shell_spec.workflow_contract.stop_policy)
 
     def test_desktop_app_does_not_directly_import_real_input_backend(self) -> None:
         source = inspect.getsource(app)

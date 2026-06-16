@@ -82,9 +82,9 @@ SIDEBAR_DESTINATIONS: tuple[SidebarDestination, ...] = (
     ),
     SidebarDestination(
         destination_id=SidebarDestinationId.PROFILES,
-        label="Profiles",
+        label="Profile Settings",
         screen_id=ScreenId.PROFILES,
-        purpose="Trusted execution behavior selection.",
+        purpose="Trusted execution timing behavior.",
     ),
     SidebarDestination(
         destination_id=SidebarDestinationId.HISTORY,
@@ -170,21 +170,21 @@ SCREEN_DESCRIPTORS: tuple[ScreenDescriptor, ...] = (
     ),
     ScreenDescriptor(
         screen_id=ScreenId.PROFILES,
-        title="Profiles",
+        title="Profile Settings",
         screen_type=ScreenType.TRUST_SELECTION,
-        primary_intention="Help the operator choose trusted execution behavior.",
+        primary_intention="Help the operator adjust trusted profile timing behavior.",
         zones=WeightedContentZones(
             primary=ContentZone(
                 role=ZoneRole.PRIMARY,
-                purpose="Recommended and validated profile choices.",
+                purpose="Selected profile timing controls.",
             ),
             secondary=ContentZone(
                 role=ZoneRole.SECONDARY,
-                purpose="Profile behavior summaries and reliability posture.",
+                purpose="Official and custom profile boundaries.",
             ),
             tertiary=ContentZone(
                 role=ZoneRole.TERTIARY,
-                purpose="Custom or advanced profile information.",
+                purpose="Future advanced profile settings.",
             ),
         ),
     ),
