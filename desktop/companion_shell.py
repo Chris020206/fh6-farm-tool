@@ -1,15 +1,50 @@
-from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-import threading
 from typing import Any
 
 from frontend.automation_controller import (
     AutomationRunRequest,
     FrontendAutomationController,
 )
-from automation.auto1_race.auto1_runner import DEFAULT_AUTO1_PROFILE_PATH
+from desktop.execution.auto1_desktop_execution import (
+    AUTO1_LOOP_COUNT_MAX,
+    AUTO1_LOOP_COUNT_MIN,
+    AUTO1_RACE_DURATION_EXECUTION_BUFFER_SECONDS,
+    AUTO1_RACE_DURATION_MAX_SECONDS,
+    AUTO1_RACE_DURATION_MIN_SECONDS,
+    auto1_execution_race_duration,
+    build_auto1_ui_execution_profile,
+    load_auto1_default_race_duration,
+    parse_auto1_loop_count,
+    parse_auto1_race_duration_override,
+    start_auto1_ui_execution,
+)
+from desktop.execution.auto2_desktop_execution import (
+    parse_auto2_purchase_count,
+    start_auto2_ui_execution,
+)
+from desktop.execution.auto3_desktop_execution import (
+    parse_auto3_car_count,
+    start_auto3_ui_execution,
+)
+from desktop.execution.execution_boundary import (
+    is_desktop_execution_supported,
+    is_desktop_preparation_available,
+)
+from desktop.execution.execution_messages import (
+    completion_state_id_for_status,
+    completion_state_id_for_auto1_status,
+    desktop_execution_confirmation_summary,
+    desktop_execution_refusal_details,
+    summarize_ui_execution_error,
+    summarize_auto1_ui_execution_error,
+)
+from desktop.execution.focus_handoff import (
+    DEFAULT_FH6_TARGET_TITLE,
+    attempt_ui_focus_handoff,
+    format_ui_focus_failure_message,
+)
 from product.automation_registry import get_automation_definition
 from product.automation_registry import get_all_automation_definitions
 from product.automation_registry import get_active_automation_definitions
@@ -61,12 +96,6 @@ COLOR_TEXT_PRIMARY = "#E7E9EE"
 COLOR_TEXT_SECONDARY = "#B1B8C4"
 COLOR_TEXT_MUTED = "#7C8593"
 COLOR_TEXT_FAINT = "#5F6673"
-AUTO1_RACE_DURATION_MIN_SECONDS = 5.0
-AUTO1_RACE_DURATION_MAX_SECONDS = 180.0
-AUTO1_RACE_DURATION_EXECUTION_BUFFER_SECONDS = 5.0
-AUTO1_LOOP_COUNT_MIN = 1
-AUTO1_LOOP_COUNT_MAX = 25
-DEFAULT_FH6_TARGET_TITLE = "Forza Horizon 6"
 DESKTOP_BRAND_LOGO_PATH = Path(__file__).with_name("assets") / "fh6_farm_tool_logo.png"
 DESKTOP_BRAND_LOGO_MAX_WIDTH = 252
 DESKTOP_BRAND_LOGO_MAX_HEIGHT = 46
@@ -1032,77 +1061,13 @@ def _start_auto1_ui_execution(
     on_result,
     stop_manager,
 ) -> None:
-    execution_state = {
-        "done": False,
-        "state_id": "refused",
-        "message": "Auto1 execution did not start.",
-    }
-    poll_timer = timer_type(parent)
-    poll_timer.setInterval(250)
-
-    def worker() -> None:
-        from app_logging.log_manager import configure_logging
-
-        logger = configure_logging()
-        logger.warning(
-            "UI-triggered Auto1 execution attempt starting. cycles=%s profile=%s",
-            companion_state.get("requested_cycles", "1"),
-            companion_state.get("profile_id", "default"),
-            category="sequence",
-        )
-        try:
-            from automation.auto1_race.manual_real_input_runner import (
-                run_manual_real_input_auto1,
-            )
-
-            result = run_manual_real_input_auto1(
-                cycle_count=_parse_auto1_loop_count(
-                    companion_state.get("requested_cycles")
-                ),
-                use_fast_timings=False,
-                logger=logger,
-                profile_data=_build_auto1_ui_execution_profile(companion_state),
-                stop_manager=stop_manager,
-            )
-            execution_state["state_id"] = _completion_state_id_for_auto1_status(
-                result.status
-            )
-            execution_state["message"] = (
-                f"{result.message} Completed cycles: "
-                f"{result.completed_cycles}/{result.requested_cycles}."
-            )
-            logger.warning(
-                "UI-triggered Auto1 execution returned status=%s completed_cycles=%s/%s.",
-                result.status,
-                result.completed_cycles,
-                result.requested_cycles,
-                category="sequence",
-            )
-        except Exception as error:
-            execution_state["state_id"] = "refused"
-            execution_state["message"] = _summarize_auto1_ui_execution_error(error)
-            logger.error(
-                "UI-triggered Auto1 execution failed closed: %s",
-                execution_state["message"],
-                category="error",
-            )
-        finally:
-            execution_state["done"] = True
-
-    def poll_for_result() -> None:
-        if not execution_state["done"]:
-            return
-
-        poll_timer.stop()
-        on_result(
-            execution_state["state_id"],
-            companion_state,
-            execution_state["message"],
-        )
-
-    poll_timer.timeout.connect(poll_for_result)
-    threading.Thread(target=worker, daemon=True).start()
-    poll_timer.start()
+    start_auto1_ui_execution(
+        companion_state=companion_state,
+        parent=parent,
+        timer_type=timer_type,
+        on_result=on_result,
+        stop_manager=stop_manager,
+    )
 
 
 def _start_auto2_ui_execution(
@@ -1111,91 +1076,12 @@ def _start_auto2_ui_execution(
     timer_type,
     on_result,
 ) -> None:
-    execution_state = {
-        "done": False,
-        "state_id": "refused",
-        "message": "Auto2 execution did not start.",
-    }
-    poll_timer = timer_type(parent)
-    poll_timer.setInterval(250)
-
-    def worker() -> None:
-        from app_logging.log_manager import configure_logging
-
-        logger = configure_logging()
-        mode = companion_state.get("auto2_mode", "test")
-        logger.warning(
-            "UI-triggered Auto2 execution attempt starting. mode=%s profile=%s",
-            mode,
-            companion_state.get("profile_id", "default"),
-            category="sequence",
-        )
-        try:
-            purchase_count = _parse_auto2_purchase_count(
-                companion_state.get("auto2_purchase_count")
-            )
-            if mode == "purchase":
-                from automation.auto2_buy_car.dangerous_auto2_one_car_purchase_test import (
-                    load_purchase_test_profile,
-                    run_auto2_one_car_purchase_test,
-                )
-
-                profile_data = load_purchase_test_profile(None)
-                result = run_auto2_one_car_purchase_test(
-                    cycle_count=purchase_count,
-                    profile_data=profile_data,
-                    logger=logger,
-                )
-            else:
-                from automation.auto2_buy_car.dangerous_auto2_test_mode_real_input_test import (
-                    load_test_mode_profile,
-                    run_auto2_test_mode_real_input,
-                )
-
-                profile_data = load_test_mode_profile(False, None)
-                result = run_auto2_test_mode_real_input(
-                    cycle_count=1,
-                    profile_data=profile_data,
-                    logger=logger,
-                )
-
-            execution_state["state_id"] = _completion_state_id_for_status(result.status)
-            execution_state["message"] = (
-                f"{result.message} Completed cycles: "
-                f"{result.completed_cycles}/{result.requested_cycles}."
-            )
-            logger.warning(
-                "UI-triggered Auto2 execution returned status=%s completed_cycles=%s/%s.",
-                result.status,
-                result.completed_cycles,
-                result.requested_cycles,
-                category="sequence",
-            )
-        except Exception as error:
-            execution_state["state_id"] = "refused"
-            execution_state["message"] = _summarize_ui_execution_error("Auto2", error)
-            logger.error(
-                "UI-triggered Auto2 execution failed closed: %s",
-                execution_state["message"],
-                category="error",
-            )
-        finally:
-            execution_state["done"] = True
-
-    def poll_for_result() -> None:
-        if not execution_state["done"]:
-            return
-
-        poll_timer.stop()
-        on_result(
-            execution_state["state_id"],
-            companion_state,
-            execution_state["message"],
-        )
-
-    poll_timer.timeout.connect(poll_for_result)
-    threading.Thread(target=worker, daemon=True).start()
-    poll_timer.start()
+    start_auto2_ui_execution(
+        companion_state=companion_state,
+        parent=parent,
+        timer_type=timer_type,
+        on_result=on_result,
+    )
 
 
 def _start_auto3_ui_execution(
@@ -1204,208 +1090,36 @@ def _start_auto3_ui_execution(
     timer_type,
     on_result,
 ) -> None:
-    execution_state = {
-        "done": False,
-        "state_id": "refused",
-        "message": "Auto3 execution did not start.",
-    }
-    poll_timer = timer_type(parent)
-    poll_timer.setInterval(250)
-
-    def worker() -> None:
-        from app_logging.log_manager import configure_logging
-
-        logger = configure_logging()
-        mode = companion_state.get("auto3_mode", "test")
-        try:
-            car_count = _parse_auto3_car_count(companion_state.get("auto3_cars"))
-            logger.warning(
-                "UI-triggered Auto3 execution attempt starting. mode=%s cars=%s profile=%s",
-                mode,
-                car_count,
-                companion_state.get("profile_id", "default"),
-                category="sequence",
-            )
-            if mode == "unlock":
-                from automation.auto3_skill_tree.dangerous_auto3_multi_car_unlock_test import (
-                    load_unlock_test_profile,
-                    run_auto3_multi_car_unlock_test,
-                )
-
-                profile_data = load_unlock_test_profile(False, None)
-                result = run_auto3_multi_car_unlock_test(
-                    car_count=car_count,
-                    profile_data=profile_data,
-                    logger=logger,
-                )
-            else:
-                from automation.auto3_skill_tree.dangerous_auto3_multi_car_test_mode_real_input_test import (
-                    load_multi_car_test_mode_profile,
-                    run_auto3_multi_car_test_mode_real_input,
-                )
-
-                profile_data = load_multi_car_test_mode_profile(False, None)
-                result = run_auto3_multi_car_test_mode_real_input(
-                    car_count=car_count,
-                    profile_data=profile_data,
-                    logger=logger,
-                )
-
-            execution_state["state_id"] = _completion_state_id_for_status(result.status)
-            execution_state["message"] = result.message
-            logger.warning(
-                "UI-triggered Auto3 execution returned status=%s cars=%s.",
-                result.status,
-                car_count,
-                category="sequence",
-            )
-        except Exception as error:
-            execution_state["state_id"] = "refused"
-            execution_state["message"] = _summarize_ui_execution_error("Auto3", error)
-            logger.error(
-                "UI-triggered Auto3 execution failed closed: %s",
-                execution_state["message"],
-                category="error",
-            )
-        finally:
-            execution_state["done"] = True
-
-    def poll_for_result() -> None:
-        if not execution_state["done"]:
-            return
-
-        poll_timer.stop()
-        on_result(
-            execution_state["state_id"],
-            companion_state,
-            execution_state["message"],
-        )
-
-    poll_timer.timeout.connect(poll_for_result)
-    threading.Thread(target=worker, daemon=True).start()
-    poll_timer.start()
+    start_auto3_ui_execution(
+        companion_state=companion_state,
+        parent=parent,
+        timer_type=timer_type,
+        on_result=on_result,
+    )
 
 
 def _attempt_ui_focus_handoff(companion_state: dict[str, str]):
-    from app_logging.log_manager import configure_logging
-    from integrations.windows_focus_handoff import attempt_fh6_focus_handoff
-
-    logger = configure_logging()
-    logger.warning(
-        "UI focus handoff attempt starting. target_title=%s automation=%s",
-        DEFAULT_FH6_TARGET_TITLE,
-        companion_state.get("automation_id", "unknown"),
-        category="state",
-    )
-
-    def log_confirmation_attempt(attempt_number, active_candidate) -> None:
-        active_title = active_candidate.title if active_candidate is not None else "<none>"
-        active_handle = active_candidate.handle if active_candidate is not None else "<none>"
-        logger.warning(
-            "UI focus handoff confirmation attempt %s active_title=%s active_handle=%s",
-            attempt_number,
-            active_title,
-            active_handle,
-            category="state",
-        )
-
-    result = attempt_fh6_focus_handoff(
-        confirm_focus=True,
-        exact_title=DEFAULT_FH6_TARGET_TITLE,
-        confirmation_observer=log_confirmation_attempt,
-    )
-    if result.succeeded:
-        logger.warning(
-            "UI focus handoff succeeded: %s active_title=%s active_handle=%s",
-            result.message,
-            result.active_candidate.title if result.active_candidate else "<none>",
-            result.active_candidate.handle if result.active_candidate else "<none>",
-            category="state",
-        )
-    else:
-        logger.error(
-            "UI focus handoff failed closed: %s (%s) target_title=%s active_title=%s active_handle=%s attempts=%s",
-            result.message,
-            result.status.value,
-            DEFAULT_FH6_TARGET_TITLE,
-            result.active_candidate.title if result.active_candidate else "<none>",
-            result.active_candidate.handle if result.active_candidate else "<none>",
-            result.confirmation_attempts,
-            category="error",
-        )
-    return result
+    return attempt_ui_focus_handoff(companion_state)
 
 
 def _format_ui_focus_failure_message(focus_result, automation_name: str = "operation") -> str:
-    active_title = (
-        focus_result.active_candidate.title
-        if focus_result.active_candidate is not None and focus_result.active_candidate.title
-        else "unavailable"
-    )
-    return (
-        f"FH6 focus handoff failed before {automation_name} start. "
-        f"Reason: {focus_result.message} "
-        f"Target title: {DEFAULT_FH6_TARGET_TITLE}. "
-        f"Active window: {active_title}. "
-        f"Status: {focus_result.status.value}. "
-        f"Confirmation attempts: {focus_result.confirmation_attempts}."
-    )
+    return format_ui_focus_failure_message(focus_result, automation_name)
 
 
 def _build_auto1_ui_execution_profile(companion_state: dict[str, str]) -> dict:
-    from profiles import ProfileManager
-
-    displayed_race_duration = _parse_auto1_race_duration_override(
-        companion_state.get("race_duration_seconds")
-    )
-    profile_data = ProfileManager().load_profile(DEFAULT_AUTO1_PROFILE_PATH)
-    execution_profile = deepcopy(profile_data)
-    execution_profile["timings"] = dict(profile_data["timings"])
-    execution_profile["timings"]["race_duration"] = _auto1_execution_race_duration(
-        displayed_race_duration
-    )
-    return execution_profile
+    return build_auto1_ui_execution_profile(companion_state)
 
 
 def _parse_auto1_race_duration_override(raw_value: str | None) -> float:
-    if raw_value is None:
-        raise ValueError("Race drive duration was not provided.")
-
-    try:
-        race_duration = float(raw_value)
-    except (TypeError, ValueError) as error:
-        raise ValueError("Race drive duration must be a number.") from error
-
-    if not (
-        AUTO1_RACE_DURATION_MIN_SECONDS
-        <= race_duration
-        <= AUTO1_RACE_DURATION_MAX_SECONDS
-    ):
-        raise ValueError(
-            "Race drive duration must be between "
-            f"{AUTO1_RACE_DURATION_MIN_SECONDS:.0f} and "
-            f"{AUTO1_RACE_DURATION_MAX_SECONDS:.0f} seconds."
-        )
-
-    return race_duration
+    return parse_auto1_race_duration_override(raw_value)
 
 
 def _parse_auto1_loop_count(raw_value: str | None) -> int:
-    try:
-        loop_count = int(raw_value or str(AUTO1_LOOP_COUNT_MIN))
-    except (TypeError, ValueError) as error:
-        raise ValueError("Auto1 loop count must be an integer.") from error
-
-    if not AUTO1_LOOP_COUNT_MIN <= loop_count <= AUTO1_LOOP_COUNT_MAX:
-        raise ValueError(
-            f"Auto1 loop count must be between {AUTO1_LOOP_COUNT_MIN} and {AUTO1_LOOP_COUNT_MAX}."
-        )
-
-    return loop_count
+    return parse_auto1_loop_count(raw_value)
 
 
 def _auto1_execution_race_duration(displayed_race_duration: float) -> float:
-    return displayed_race_duration + AUTO1_RACE_DURATION_EXECUTION_BUFFER_SECONDS
+    return auto1_execution_race_duration(displayed_race_duration)
 
 
 def _should_show_auto1_runtime_adjustment(automation_id: str) -> bool:
@@ -1413,45 +1127,19 @@ def _should_show_auto1_runtime_adjustment(automation_id: str) -> bool:
 
 
 def _is_desktop_execution_supported(automation_id: str) -> bool:
-    return automation_id in {"auto1", "auto2", "auto3"}
+    return is_desktop_execution_supported(automation_id)
 
 
 def _is_desktop_preparation_available(automation_id: str) -> bool:
-    return automation_id in {"auto1", "auto2", "auto3"}
+    return is_desktop_preparation_available(automation_id)
 
 
 def _desktop_execution_refusal_details(automation_id: str) -> tuple[str, ...]:
-    if automation_id == "auto2":
-        return (
-            "Auto2 is available through the guarded desktop flow.",
-            "Test navigation and finite purchase modes remain bounded.",
-            "F8 stop is registered by the guarded Auto2 runner.",
-        )
-
-    if automation_id == "auto3":
-        return (
-            "Auto3 is available through the guarded desktop flow.",
-            "Traversal and unlock modes remain bounded to the validated car limit.",
-            "F8 stop is registered by the guarded Auto3 runner.",
-        )
-
-    return (
-        "Desktop execution is not available for this automation.",
-        "No operation will start from this UI path.",
-    )
+    return desktop_execution_refusal_details(automation_id)
 
 
 def _desktop_execution_confirmation_summary(automation_id: str) -> str:
-    if automation_id == "auto1":
-        return "Desktop path uses focus handoff, countdown, F8 stop, and guarded Auto1 cleanup."
-
-    if automation_id == "auto2":
-        return "Desktop path uses focus handoff, countdown, F8 stop, and guarded Auto2 bounded execution."
-
-    if automation_id == "auto3":
-        return "Desktop path uses focus handoff, countdown, F8 stop, and guarded Auto3 bounded execution."
-
-    return "Execution is unavailable from the desktop UI."
+    return desktop_execution_confirmation_summary(automation_id)
 
 
 def _format_auto1_race_duration_for_display(raw_value: str | None) -> str:
@@ -1503,33 +1191,23 @@ def _build_commitment_readiness_details(companion_state: dict[str, str]) -> tupl
 
 
 def _load_auto1_default_race_duration() -> float:
-    from profiles import ProfileManager
-
-    profile_data = ProfileManager().load_profile(DEFAULT_AUTO1_PROFILE_PATH)
-    return float(profile_data["timings"]["race_duration"])
+    return load_auto1_default_race_duration()
 
 
 def _completion_state_id_for_status(status: str) -> str:
-    if status == "completed":
-        return "completed"
-
-    if status == "stopped":
-        return "stopped"
-
-    return "refused"
+    return completion_state_id_for_status(status)
 
 
 def _completion_state_id_for_auto1_status(status: str) -> str:
-    return _completion_state_id_for_status(status)
+    return completion_state_id_for_auto1_status(status)
 
 
 def _summarize_auto1_ui_execution_error(error: Exception) -> str:
-    return _summarize_ui_execution_error("Auto1", error)
+    return summarize_auto1_ui_execution_error(error)
 
 
 def _summarize_ui_execution_error(automation_label: str, error: Exception) -> str:
-    message = str(error).strip() or error.__class__.__name__
-    return f"{automation_label} guarded run unavailable: {error.__class__.__name__}: {message}"
+    return summarize_ui_execution_error(automation_label, error)
 
 
 def _is_real_auto1_execution_state(companion_state: dict[str, str]) -> bool:
@@ -2569,7 +2247,7 @@ def _build_home_screen_content(
 
 def _is_real_desktop_execution_state(companion_state: dict[str, str]) -> bool:
     return (
-        companion_state.get("automation_id") in {"auto1", "auto2", "auto3"}
+        _is_desktop_execution_supported(companion_state.get("automation_id", ""))
         and companion_state.get("execution_active") == "true"
     )
 
@@ -2583,27 +2261,11 @@ def _auto3_mode_label(mode: str) -> str:
 
 
 def _parse_auto3_car_count(raw_value: str | None) -> int:
-    try:
-        car_count = int(raw_value or "1")
-    except (TypeError, ValueError) as error:
-        raise ValueError("Auto3 car count must be an integer.") from error
-
-    if car_count < 1 or car_count > 4:
-        raise ValueError("Auto3 car count must be between 1 and 4.")
-
-    return car_count
+    return parse_auto3_car_count(raw_value)
 
 
 def _parse_auto2_purchase_count(raw_value: str | None) -> int:
-    try:
-        purchase_count = int(raw_value or "1")
-    except (TypeError, ValueError) as error:
-        raise ValueError("Auto2 purchase count must be an integer.") from error
-
-    if purchase_count < 1 or purchase_count > 25:
-        raise ValueError("Auto2 purchase count must be between 1 and 25.")
-
-    return purchase_count
+    return parse_auto2_purchase_count(raw_value)
 
 
 def _desktop_running_progress_label(companion_state: dict[str, str]) -> str:
