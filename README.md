@@ -5,14 +5,14 @@ hardening.
 
 The project is organized as small modules with clear ownership boundaries. This
 stage includes shared runtime systems, guarded manual operator commands,
-profile tooling, a PySide6 desktop UI foundation, and documentation for
-validated Auto1/Auto2/Auto3 behavior. It is not a broad production release.
+profile tooling, a validated PySide6 desktop UI foundation, and documentation
+for validated Auto1/Auto2/Auto3 behavior. It is not a broad production release.
 
 The current command surface and desktop UI are for controlled developer/manual
-operation. The desktop shell now provides the real UI foundation for Home,
+operation. Auto1, Auto2, and Auto3 are validated for controlled/manual desktop
+UI execution. The desktop shell provides the real UI foundation for Home,
 Automation Environment, commitment, supervision, and completion states, but it
-is not public launch-ready. M11 strategy still requires a restrained premium
-desktop UI to be hardened before public paid launch.
+is still under hardening and is not public launch-ready.
 
 Normal `main.py` startup remains safe: it loads configuration, logs startup,
 and exits without running automation or sending keyboard input.
@@ -59,11 +59,13 @@ edits; tuning is performed through custom profiles.
 
 ## Timing
 
-Auto1, Auto2, and Auto3 currently use intentionally conservative
-profile-driven timings for reliability across FH6 menu/loading variation and
-user hardware differences. Some timings may be slower than necessary. Timing
-optimization is postponed until profile tuning is hardened further. This
-accepted limitation is documented in
+Auto1, Auto2, and Auto3 use intentionally conservative profile-driven timings
+for reliability across FH6 menu/loading variation and user hardware
+differences. Auto3's current timing model has been validated and refined for
+the documented controlled/manual boundary. Some timings may still be slower
+than necessary; further tuning must preserve the validated baseline.
+
+The conservative timing decision is documented in
 `docs/conservative_timing_decision.md`.
 
 ## Input Backends
@@ -72,6 +74,10 @@ accepted limitation is documented in
 keyboard backend exists in `core/input/`, but it is not wired into normal
 startup. Real input is available only through guarded manual commands that
 require explicit confirmation flags.
+
+CLI/manual guarded runners still exist and remain valid operator paths. Real
+input remains guarded, finite, and supervised. Guarded real-input paths support
+F8 stop where documented.
 
 A dangerous manual smoke test exists at
 `core/input/dangerous_real_keyboard_smoke_test.py`. It refuses to run unless
@@ -94,21 +100,28 @@ It still requires a finite cycle count and explicit confirmation, and it is not
 connected to normal startup.
 
 Auto2 currently provides guarded real-input commands for test-mode menu
-validation and exactly one full purchase/reset validation. These commands
-require explicit confirmation flags and support F8 stop.
+validation and purchase validation. Validated behavior includes test mode,
+purchase mode, finite purchase counts greater than 1, spending-risk
+protection, and completion behavior. These commands require explicit
+confirmation flags and support F8 stop.
 
-Auto3 currently provides in-memory validation modes, guarded real-input
-test-mode navigation, guarded one-car unlock validation, and guarded/manual
-multi-car unlock validation. The validated multi-car traversal is:
+Auto3 currently provides guarded/manual desktop and CLI execution for the
+validated skill-tree path. Validated behavior includes the first-car exception,
+safety reset navigation, Recently Added re-sort, Get In path, Upgrades &
+Tuning navigation, Car Mastery navigation, locked perk path, corrected timing
+model, and completion-state behavior.
+
+The validated multi-car traversal is:
 
 ```text
 A1 -> B1 -> C1 -> A2
 ```
 
-The current guarded Auto3 multi-car unlock hard max is 4 cars. Auto3 remains
-dangerous/manual/test-only for real input, and no production Auto3 command
-exists. These commands require explicit confirmation flags and support F8 stop
-where real input is used.
+The row 3 / column 1 -> row 1 / column 2 transition uses Right -> Up -> Up.
+The current guarded Auto3 multi-car unlock hard max is 4 cars, with row A as
+the only validated start row. Auto3 real input remains guarded/manual and can
+spend skill points. Confirmation flags are required for CLI real-input unlock
+paths, and F8 stop is available where real input is used.
 
 Auto4 is not part of the current MVP hardening scope. M11 strategy treats it as
 a conditional pre-launch candidate only if a future safety milestone proves it
@@ -127,11 +140,27 @@ Automation Environment preparation, commitment countdown, Companion Mode, and
 post-run completion states. Visible controls either navigate/update UI state or
 refuse unsupported execution calmly.
 
-Real automation remains safety-bound. Auto1 has a guarded UI execution path
-with focus handoff, F8 stop preservation, and an Auto1-only race drive duration
-adjustment. Auto2 and Auto3 are not executable from the desktop UI. They remain
-available only through their existing guarded/manual commands until a future
-integration milestone explicitly changes that boundary.
+Real automation remains safety-bound. The desktop UI supports validated
+controlled/manual execution for Auto1, Auto2, and Auto3.
+
+Validated desktop behavior includes:
+
+- Auto1 focus handoff, fail-closed behavior, F8 stop, loop count handling,
+  Auto1-only race drive duration adjustment, and completion behavior
+- Auto2 test mode, purchase mode, purchase count handling, spending-risk
+  protection, F8 stop, and completion behavior
+- Auto3 first-car exception, safety reset navigation, Recently Added re-sort,
+  validated traversal through A1 -> B1 -> C1 -> A2, corrected timing model,
+  F8 stop, and completion behavior
+
+Auto4 remains outside the current implementation scope.
+
+## Validated Behavior
+
+The current anti-regression source of truth is
+`docs/VALIDATED_BEHAVIOR.md`. Changes affecting Auto1, Auto2, or Auto3
+execution must preserve that validated baseline unless explicitly approved and
+revalidated.
 
 ## Engineering Standards
 
