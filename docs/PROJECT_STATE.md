@@ -1,15 +1,17 @@
-# FH6 Farm Tool — Project State
+# FH6 Farm Tool - Project State
 
 ## Project Status
 
-Controlled MVP Ready — Developer/Manual Use
+Controlled MVP Ready - Developer/Manual Use
 
-This means the validated command surface is ready for careful, supervised
-developer/operator use.
+This means the validated desktop UI and guarded command surface are ready for
+careful, supervised developer/operator use. Auto1, Auto2, and Auto3 are
+validated through the desktop execution surface within their current controlled
+boundaries.
 
 This does not mean broad public/customer release readiness. The project is not
-packaged, the desktop UI is not public launch-ready, and the project is not
-ready for unattended automation.
+packaged for public launch, not ready for unattended automation, and not safe to
+operate without supervision.
 
 ---
 
@@ -19,83 +21,84 @@ MVP Hardening & Polish
 
 Current priorities:
 
-- operator runbooks
-- CLI polish
-- desktop UI foundation hardening
+- MVP hardening
+- desktop execution hardening
+- launch-facing UX foundation
+- documentation realignment
+- maintainability and architecture cleanup
 - safety hardening
-- documentation consistency
-- additional refusal/profile tests
 - packaging strategy planning only
 
 Not current priorities:
 
 - Auto4
 - new automation capability
-- timing optimization
-- expanding Auto3 boundaries
-
-Strategic note:
-
-M11 doctrine treats UI as trust infrastructure. The PySide6 desktop UI
-foundation now exists for controlled developer/manual use, but it must be
-hardened before public paid launch.
+- unattended automation
+- major timing optimization
+- expanding Auto3 boundaries beyond validated limits
 
 ---
 
 ## Current Validated Systems
 
-### Auto1 — Race Automation
+### Auto1 - Race Automation
 
 Status: Validated
 
-- guarded/manual
+- guarded/manual desktop UI execution validated
+- focus handoff
+- fail-closed behavior
 - F8 stop
-- finite cycles
+- finite loop count handling
+- race drive duration runtime adjustment
 - profile-driven timing
+- completion-state behavior
 - no unattended mode
 
 ---
 
-### Auto2 — Buy Car Automation
+### Auto2 - Buy Car Automation
 
 Status: Validated (Controlled Scope)
 
-- test-mode navigation validation
-- one-car purchase validation
+- guarded/manual desktop UI execution validated
+- test-mode navigation validated
+- purchase mode validated
+- purchase count greater than 1 validated
 - spending-risk protection
-- guarded/manual
-- no promoted production multi-cycle mode
+- F8 stop through guarded runner path
+- completion behavior validated
+- no unattended mode
 
 ---
 
-### Auto3 — Skill Tree Automation
+### Auto3 - Skill Tree Automation
 
 Status: Validated
 
-Current hard limits:
+Current validated limits:
 
-- max cars = 4
+- max validated cars = 4
 - start row = A
 
 Validated traversal:
 
 ```text
-A1 → B1 → C1 → A2
+A1 -> B1 -> C1 -> A2
 ```
-
-Boundaries:
-
-- dangerous/manual/test-only
-- no production command
-- no unattended mode
 
 Validated behavior includes:
 
+- guarded/manual desktop UI execution validated
 - first-car exception
-- later-car get-in flow
-- validated 12-second later-car recovery
-- reset-to-grid baseline after each car
-- clean termination after the fourth car
+- safety reset navigation
+- Recently Added re-sort
+- multiple-car traversal
+- row 3 / column 1 -> row 1 / column 2 transition
+- current timing refinements
+- completion behavior
+- F8 stop through guarded runner path
+- no unattended mode
 
 ---
 
@@ -140,17 +143,14 @@ These are frozen unless a future milestone explicitly changes them:
 
 - Auto3 > 4 cars
 - Auto3 B/C start rows
-- Auto4 in the current hardening scope
+- Auto4 outside current scope
 - unattended automation
-- timing optimization
+- major timing optimization
 - destructive/remove-car behavior
 - startup automation
 
-Auto3's 4-car limit is the current validated boundary, not a final launch
-ceiling. Future scaling must be validation-based and explicitly milestoned.
-
-Auto4 is a conditional pre-launch candidate under M11 doctrine, but remains
-outside current MVP hardening until a dedicated safety milestone justifies it.
+Auto3's 4-car limit is the current validated boundary, not a final ceiling.
+Future scaling must be validation-based and explicitly milestoned.
 
 ---
 
@@ -159,21 +159,23 @@ outside current MVP hardening until a dedicated safety milestone justifies it.
 - GitHub active
 - default branch = main
 - Controlled MVP baseline established
+- desktop execution baseline established
+- validated automation baseline established
 - recommended milestone tag: `v0.1-controlled-mvp`
 
 ---
 
 ## Next Recommended Milestone
 
-M11.6 - Command Surface Hardening
+Documentation and Desktop Hardening Pass
 
 Focus:
 
-- refusal message clarity
-- command consistency
-- operator visibility
-- pre-flight validation
-- safety hardening
+- documentation realignment
+- launch-facing UX refinement
+- desktop maintainability
+- UI hardening
+- anti-regression discipline
 
 No new automation capability before hardening.
 
