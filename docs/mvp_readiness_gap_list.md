@@ -1,72 +1,77 @@
 # MVP Readiness Gap List
 
-This document lists remaining gaps before the FH6 Farm Tool should be treated
-as a controlled MVP, a broader release, or post-MVP work.
+This document lists remaining gaps after the Controlled MVP baseline. The
+current project is ready for supervised developer/manual use, not public launch
+or unattended automation.
 
 ## 1. Safety
 
-Required before controlled MVP:
+Current baseline:
 
-- Keep all real-input commands behind explicit confirmation flags.
-- Keep `main.py` safe and free of automation startup behavior.
-- Keep F8 stop available in guarded real-input commands.
-- Keep refusal-path tests for dangerous commands passing.
-- Confirm recovery instructions remain documented for real-input use.
+- Auto1, Auto2, and Auto3 real-input execution remains guarded/manual.
+- F8 stop is available in guarded real-input paths.
+- Refusal-path tests exist for dangerous/manual paths.
+- `main.py` remains safe and does not run automation.
+- Operator supervision is required.
 
-Required before broader release:
+Remaining gaps:
 
-- Add clearer user-facing pre-run checks for correct FH6 starting state.
-- Add stronger guardrails around commands that can spend credits or skill
-  points.
-- Improve visibility of active command, selected profile, and stop behavior.
+- Keep pre-run baseline requirements clear in the desktop UI and runbooks.
+- Keep spending-risk warnings clear for Auto2 and Auto3.
+- Preserve fail-closed behavior when focus handoff, readiness, or execution
+  setup fails.
+- Continue hardening desktop UI safety language before public launch.
 
-Postponed after MVP:
+Postponed:
 
-- Pause/resume.
+- Unattended automation.
 - F7 start hotkey.
-- Any unattended or background automation mode.
+- Pause/resume.
+- Auto4/remove-car behavior.
 
 ## 2. Reliability
 
-Required before controlled MVP:
+Current baseline:
 
-- Preserve current Auto1, Auto2, and Auto3 validation reports.
-- Keep full test suite passing.
-- Keep conservative timing values unless a profile-specific validation justifies
-  changes.
-- Document any new real-input findings before changing flow logic.
+- Auto1 desktop execution is validated.
+- Auto2 desktop execution is validated.
+- Auto3 desktop execution is validated within the 4-car row-A boundary.
+- Conservative timing remains the default reliability strategy.
+- The test suite is expected to remain passing.
+- `docs/VALIDATED_BEHAVIOR.md` defines the anti-regression baseline.
 
-Required before broader release:
+Remaining gaps:
 
-- Add more automated command refusal and profile-selection tests.
-- Add repeatable smoke checks for in-memory CLI commands.
-- Add clearer validation around optional real keyboard dependency behavior.
+- Preserve validated behavior during refactors and UI changes.
+- Add tests where new desktop state or refusal behavior is introduced.
+- Treat timing changes as validation work, not casual cleanup.
+- Keep validation reports and runbooks aligned with runtime behavior.
 
-Postponed after MVP:
+Postponed:
 
-- Timing optimization.
+- Major timing optimization.
 - Adaptive timing.
 - Hardware-specific timing presets.
+- Auto3 expansion beyond the validated boundary.
 
 ## 3. Documentation
 
-Required before controlled MVP:
+Current baseline:
 
-- Keep command index current.
-- Keep MVP scope lock current.
-- Keep Auto1, Auto2, and Auto3 reliability reports aligned with current
-  behavior.
-- Keep Auto4 clearly outside current MVP hardening unless a future dedicated
-  safety milestone justifies it.
+- `docs/VALIDATED_BEHAVIOR.md` is the anti-regression source of truth.
+- Operator runbooks exist for Auto1, Auto2, and Auto3.
+- `docs/PROJECT_STATE.md` reflects the current controlled MVP state.
+- `docs/engineering_standards.md` reflects current desktop execution
+  boundaries.
 
-Required before broader release:
+Remaining gaps:
 
-- Add a concise user runbook for each real-input command.
-- Add troubleshooting guidance for wrong FH6 baseline state.
-- Add a clear glossary for official profiles, custom profiles, and dangerous
-  commands.
+- Continue realigning older docs with the validated desktop execution surface.
+- Keep command index, runbooks, and validation reports synchronized.
+- Remove stale wording when implementation reality changes.
+- Keep public-launch language separate from controlled/manual MVP language.
 
-Postponed after MVP:
+Postponed:
 
 - Full end-user manual.
 - Visual setup guide.
@@ -74,167 +79,153 @@ Postponed after MVP:
 
 ## 4. CLI Usability
 
-Required before controlled MVP:
+Current baseline:
 
-- Keep command summaries and refusal messages consistent.
-- Keep dangerous commands explicit about real input and resource spending.
-- Keep command wrappers thin and free of automation logic.
+- CLI/manual guarded runners remain valid operator paths.
+- Desktop UI is now a validated controlled/manual operator surface.
+- CLI is no longer the only operator surface.
 
-Required before broader release:
+Remaining gaps:
 
-- Replace module-path command usage with friendlier launcher scripts or packaged
-  entry points.
-- Improve help output with more complete examples.
-- Consider a single command namespace for manual operations.
+- Keep CLI help/refusal messages clear and consistent.
+- Keep module-path commands documented for developer/manual use.
+- Avoid letting CLI paths bypass desktop or safety boundaries.
 
-Postponed after MVP:
+Postponed:
 
+- Friendly packaged launcher commands.
 - Interactive command wizard.
-
-Public paid launch requirement:
-
-- Harden the existing restrained PySide6 desktop UI foundation into a
-  public-ready desktop product. The current CLI remains the primary
-  controlled/manual operator surface, and the current desktop UI is not yet
-  public launch-ready.
+- Single consolidated command namespace.
 
 ## 5. Profile / Settings
 
-Required before controlled MVP:
+Current baseline:
 
-- Keep official profiles protected from editing.
-- Keep custom profile timing edits validation-based.
-- Keep backup/restore commands working before further tuning.
-- Verify profile selection works for current Auto1, Auto2, and Auto3 manual
-  commands.
+- Official profiles remain protected.
+- Custom timing edits remain guarded by profile tooling.
+- Runtime UI adjustments are narrow and automation-specific.
+- Profile-driven behavior remains the execution model.
 
-Required before broader release:
+Remaining gaps:
 
-- Harden profile selection lookup behavior for duplicate names or ambiguous
-  identifiers.
-- Add more tests for missing, wrong-type, and invalid custom profiles.
-- Add clearer profile backup recommendations before editing.
+- Harden profile lookup behavior for duplicate or ambiguous identifiers.
+- Add tests for missing, wrong-type, and invalid custom profiles where gaps
+  remain.
+- Keep user-facing profile language separate from raw timing internals.
 
-Postponed after MVP:
+Postponed:
 
 - Profile key editing.
 - Profile navigation-count editing.
-- Profile import/export.
-
-Public paid launch requirement:
-
-- Add profile UI/editor flows only after command/profile behavior remains
-  stable enough to present safely.
+- Broad profile import/export.
 
 ## 6. Auto1
 
-Required before controlled MVP:
+Current baseline:
 
-- Preserve current guarded manual command behavior.
-- Preserve F8 stop and held-key cleanup behavior.
-- Keep official and custom profile execution paths working.
+- Desktop UI execution validated.
+- Focus handoff validated.
+- Fail-closed behavior validated.
+- F8 stop available.
+- Runtime race duration adjustment exists.
+- Loop count handling exists.
+- Completion behavior validated.
+- Guarded/manual CLI path still exists.
 
-Required before broader release:
+Remaining gaps:
 
-- Add more command-level smoke tests for profile selection and refusal paths.
-- Add clearer FH6 starting-state checklist near the command index.
+- Harden public-facing UI wording and baseline guidance.
+- Preserve Auto1 validated behavior during desktop refactors.
+- Keep runtime adjustment narrow and Auto1-specific.
 
-Postponed after MVP:
+Postponed:
 
-- Speed tuning beyond validated profile timing changes.
-
-Public paid launch requirement:
-
-- Add a restrained Auto1 UI control surface before public paid launch.
+- Speed tuning beyond validated timing/profile changes.
+- Unattended Auto1 operation.
 
 ## 7. Auto2
 
-Required before controlled MVP:
+Current baseline:
 
-- Keep test-mode real-input validation available.
-- Keep one-car purchase harness guarded by both confirmation flags.
-- Keep full purchase flow and baseline reset documented.
+- Desktop UI execution validated.
+- Test mode validated.
+- Purchase mode validated.
+- Purchase count greater than 1 validated.
+- Spending-risk protections remain required.
+- Completion behavior validated.
+- Guarded/manual CLI paths still exist.
 
-Required before broader release:
+Remaining gaps:
 
-- Decide whether and when to promote a production multi-cycle purchase command.
-- Add stronger pre-run warnings for credit spending.
-- Add more validation around estimated cost.
+- Harden public-facing purchase warnings and confirmation language.
+- Keep requested purchase count visible and understandable before execution.
+- Preserve spending-risk protections during UI and execution refactors.
 
-Postponed after MVP:
+Postponed:
 
-- Auto2 production multi-cycle purchase command.
+- Unattended purchasing.
 - Advanced cost management.
-
-Public paid launch requirement:
-
-- Add purchase UI/confirmation safeguards before public paid launch if Auto2 is
-  exposed through the desktop product.
+- Broad public launch exposure without stronger safeguards.
 
 ## 8. Auto3
 
-Required before controlled MVP:
+Current baseline:
 
-- Keep Auto3 one-car and guarded 4-car unlock validation documented.
-- Keep test modes no-unlock safe.
-- Keep unlock harnesses guarded by `--confirm-real-input` and
-  `--confirm-unlock`.
-- Keep the guarded multi-car unlock hard max at 4 unless a later validation
-  milestone explicitly changes it.
-- Keep the start-row `A` assumption documented.
+- Desktop UI execution validated.
+- First-car exception validated.
+- Safety reset logic validated.
+- Recently Added re-sort validated.
+- Get In path, Upgrades & Tuning navigation, Car Mastery navigation, and locked
+  perk path validated.
+- Traversal model validated through `A1 -> B1 -> C1 -> A2`.
+- Row 3 / column 1 -> row 1 / column 2 uses Right -> Up -> Up.
+- Corrected timing model validated.
+- Max validated cars = 4.
+- Row A start only.
+- Completion behavior validated.
+- Guarded/manual CLI paths still exist.
 
-Required before broader release:
+Remaining gaps:
 
-- Decide whether and when to promote an Auto3 production command.
-- Add stronger pre-run checks for the required FH6 baseline and start row.
-- Add more validation beyond the current `A1 -> B1 -> C1 -> A2` boundary before
-  increasing the hard max above 4.
-- Add clearer user-facing warnings for skill-point spending.
+- Do not expand beyond 4 cars without explicit approval and validation.
+- Do not support row B/C starts without explicit design and validation.
+- Keep skill-point risk visible before execution.
+- Preserve reset/re-sort and timing behavior during refactors.
 
-Postponed after MVP:
+Postponed:
 
-- Auto3 production command.
-- Auto3 start-row flexibility.
 - Auto3 counts greater than 4.
-- Broader validation beyond the current start-row `A` path.
-- Auto4 car removal.
+- Start-row flexibility.
+- Broader traversal validation beyond current row-A boundary.
+- Unattended Auto3 operation.
 
 ## 9. Packaging / Release
 
-Required before controlled MVP:
+Current baseline:
 
-- No package is required for controlled MVP if commands remain developer/manual
-  operated.
-- Keep documented module commands accurate.
+- No installer or packaged release exists.
+- Desktop UI exists and is validated for controlled/manual use.
+- The UI is not public launch-ready.
 
-Required before broader release:
+Remaining gaps:
 
-- Add packaging or installer strategy.
-- Add dependency installation instructions.
-- Add release checklist.
-- Add versioned changelog.
+- Packaging strategy.
+- Dependency installation instructions.
+- Release checklist.
+- Versioned changelog.
+- Public-launch UX hardening.
 
-Postponed after MVP:
+Postponed:
 
 - Signed installer.
 - Auto-update.
-
-Public paid launch requirement:
-
-- Non-technical dashboard-first release experience.
+- Public/customer launch packaging.
 
 ## Summary
 
-Blocking gaps before controlled MVP are mostly safety/documentation hardening:
-accurate docs, passing tests, guarded real-input commands, clear profile
-behavior, and preserved startup safety.
+The remaining gaps are now mostly UX hardening, desktop polish,
+maintainability, packaging, launch safeguards, and anti-regression discipline.
 
-Blocking gaps before broader release are larger: friendlier command entry
-points, stronger user-facing safeguards, packaging, restrained premium desktop
-UI, and more automated coverage.
-
-Auto3 production operation, Auto3 start-row flexibility, Auto3 counts above 4,
-Auto2 production multi-cycle purchase, timing optimization, installer work, and
-Auto4 remain outside the controlled MVP boundary. UI also remains outside the
-current controlled/manual MVP surface, but M11 doctrine makes it mandatory
-before public paid launch.
+Auto1, Auto2, and Auto3 automation capability is validated within the current
+controlled/manual boundaries. Future work should preserve that baseline rather
+than reinterpret it.

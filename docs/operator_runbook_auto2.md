@@ -4,9 +4,9 @@
 
 Auto2 automates the FH6 buy-car menu flow.
 
-It is used for controlled validation of Autoshow navigation and exactly one
-guarded purchase/reset cycle. Auto2 is controlled/manual only. It is not a
-production multi-cycle purchasing system.
+It is used for controlled validation of Autoshow navigation and guarded
+purchase/reset cycles. Auto2 is controlled/manual only. It is not a production
+bulk-purchasing system.
 
 Auto2 has spending risk. The purchase command can spend credits and must be
 treated more strictly than non-spending automation.
@@ -94,6 +94,28 @@ Optional profile usage:
 ```powershell
 python -B -m automation.auto2_buy_car.dangerous_auto2_one_car_purchase_test 1 --confirm-real-input --confirm-purchase --profile auto2_safe_slow
 ```
+
+---
+
+## Desktop UI Execution
+
+Auto2 may also be launched through the validated desktop UI for
+controlled/manual use.
+
+The desktop UI path supports:
+
+- test-mode navigation
+- purchase mode
+- finite purchase counts greater than one
+- completion-state reporting
+- F8 stop through the guarded runner path
+
+Desktop execution does not reduce spending risk. The operator must still
+supervise the run, understand the requested purchase count, and keep F8 ready.
+
+Use test mode first whenever navigation confidence is uncertain. Desktop
+execution is validated for developer/operator use, not public launch use or
+unattended purchasing.
 
 ---
 
@@ -227,15 +249,21 @@ Auto2 current boundaries:
 
 - guarded/manual only
 - real-input commands require confirmation flags
-- one-car purchase validation only
+- purchase count greater than one validated
+- finite execution only
 - no promoted production multi-cycle purchase mode
 - no unattended mode
 - no startup automation
 - profile-driven conservative timing
 - official profile used by default
 - custom profile timing edits only through the profile tooling
+- spending-risk protection remains required
 
 Auto2 is Controlled MVP behavior, not broad production release behavior.
+
+Validated Auto2 behavior must not be changed without explicit approval. This
+includes test mode, purchase mode, purchase count handling, spending-risk
+protections, and completion-state behavior.
 
 ---
 

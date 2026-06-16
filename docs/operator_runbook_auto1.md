@@ -67,6 +67,32 @@ If `--profile` is omitted, the official Auto1 profile is used.
 
 ---
 
+## Desktop UI Execution
+
+Auto1 may also be launched through the validated PySide6 desktop UI for
+controlled/manual use.
+
+Desktop execution includes:
+
+- FH6 focus handoff before execution
+- fail-closed behavior if focus handoff or preparation fails
+- F8 stop availability
+- Auto1 runtime race duration adjustment
+- finite loop count handling
+- completion-state reporting
+
+The race duration adjustment is intentionally Auto1-only. Use it only when the
+validated race timing changes.
+
+If FH6 focus handoff fails, Auto1 must not start. Return to preparation, restore
+the required FH6 baseline, and retry only when the operator can supervise the
+run.
+
+Desktop execution does not remove the supervision requirement. Keep F8 ready
+and watch FH6 throughout the run.
+
+---
+
 ## Expected Behavior
 
 Normal Auto1 behavior:
@@ -154,13 +180,14 @@ Unexpected menu state
 Auto1 current boundaries:
 
 - guarded/manual only
+- validated desktop UI execution for controlled/manual use only
 - finite execution only
 - no unattended mode
 - no startup automation
-- no UI/dashboard control
 - no timing optimization in the official profile
 - profile-driven conservative timing
 - official profile used by default
+- runtime adjustment remains narrow and Auto1-specific
 - custom profile timing edits only through the profile tooling
 
 Auto1 is Controlled MVP behavior, not broad production release behavior.

@@ -4,7 +4,7 @@
 
 Auto3 automates the FH6 skill-tree menu flow for the current validated wheelspin/perk path. It navigates from the My Cars baseline into Car Mastery, follows the locked perk unlock path, and returns to the My Cars grid baseline.
 
-Auto3 is part of the Controlled MVP, but current real-input usage remains guarded, manual, and test-only. It is not a production command, not unattended automation, and not a broad-release feature. Confirmed unlock commands can spend skill points.
+Auto3 is validated for controlled/manual use through the desktop UI and guarded command surface. Real input remains guarded and manual. Auto3 is not unattended automation and is not a broad-release feature. Confirmed unlock commands can spend skill points.
 
 ## Required FH6 Baseline State
 
@@ -13,9 +13,11 @@ Before running Auto3, confirm:
 * FH6 is focused and ready to receive keyboard input.
 * The operator is supervising the entire run.
 * The user is in the Garage -> Cars -> My Cars context.
+* My Cars is sorted by Recently Added using the validated sort setup.
 * The current validated start-row assumption is row A.
 * The first target car is the active/seated A1 baseline where applicable.
 * The target cars are arranged in the validated traversal order: A1 -> B1 -> C1 -> A2.
+* The reset-to-baseline path is expected to return to My Cars and re-sort Recently Added after each car.
 * The operator understands confirmed unlock commands may spend skill points.
 * F8 is kept ready before and during execution.
 
@@ -61,7 +63,22 @@ This command sends real keyboard input and may spend skill points. It is limited
 python -B -m automation.auto3_skill_tree.dangerous_auto3_multi_car_unlock_test --cars 4 --confirm-real-input --confirm-unlock
 ```
 
-This command sends real keyboard input and may spend skill points. The current guarded hard max is 4 cars. The validated traversal is A1 -> B1 -> C1 -> A2, starting from row A. Both confirmation flags are required. This remains dangerous/manual/test-only and is not a production Auto3 command.
+This command sends real keyboard input and may spend skill points. The current guarded hard max is 4 cars. The validated traversal is A1 -> B1 -> C1 -> A2, starting from row A. Both confirmation flags are required. This remains guarded/manual real-input behavior.
+
+## Desktop UI Execution
+
+Auto3 may also be launched through the validated desktop UI for controlled/manual use.
+
+The desktop UI path preserves:
+
+* guarded real-input execution.
+* F8 stop through the guarded runner path.
+* finite car-count handling within the validated boundary.
+* completion-state reporting.
+
+Desktop execution does not reduce skill-point spending risk. The operator must still supervise the run, confirm the requested car count, verify the My Cars baseline, and keep F8 ready.
+
+Desktop execution is validated for developer/operator use, not public launch use or unattended operation.
 
 ## Expected Behavior
 
@@ -71,11 +88,13 @@ The first-car path uses the first-car exception. A1 is already active/seated, so
 
 Expected behavior:
 
-* Auto3 performs the validated sort/menu setup.
-* Auto3 navigates to Upgrades & Tuning.
-* Auto3 navigates to Car Mastery.
+* Auto3 performs the validated sort setup and hovers Recently Added.
+* Auto3 uses the first-car exception; A1 is already active/seated.
+* Auto3 uses safety reset navigation before entering Upgrades & Tuning.
+* Auto3 navigates from Upgrades & Tuning to Car Mastery.
 * Unlock commands follow the locked perk path only when an unlock command is confirmed.
 * Auto3 returns/resets to the My Cars grid baseline after the visit.
+* Auto3 re-sorts Recently Added after returning to My Cars.
 
 ### Later-Car Path
 
@@ -84,11 +103,14 @@ Later-car behavior starts after the grid baseline has been restored.
 Expected behavior:
 
 * Auto3 moves through the validated grid traversal.
-* Auto3 gets into the currently hovered car.
+* Auto3 uses the validated Get In flow for the target car.
 * Auto3 waits through the validated 12-second later-car recovery delay.
-* Auto3 uses the validated recovery path: esc, up x6, down, enter, down x7, enter.
+* Auto3 uses safety reset navigation.
+* Auto3 navigates to Upgrades & Tuning.
+* Auto3 navigates to Car Mastery.
 * Unlock commands follow the locked perk path only when an unlock command is confirmed.
 * Auto3 returns/resets to the My Cars grid baseline after each visited car.
+* Auto3 re-sorts Recently Added after returning to My Cars.
 
 ### Multi-Car Flow
 
@@ -113,6 +135,8 @@ For test-mode real-input validation, success means Auto3 reaches the expected Ca
 For one-car unlock validation, success means A1 follows the first-car exception path, completes the locked perk unlock path, resets to the My Cars grid baseline, and terminates cleanly.
 
 For multi-car unlock validation, success means Auto3 processes the requested count within the validated limit, follows A-start traversal correctly, resets after each car, and terminates cleanly without stuck inputs.
+
+For desktop execution, success also means the completion state reports the final outcome clearly and the run terminates after the requested finite count.
 
 ## Stop Immediately If
 
@@ -187,15 +211,17 @@ Auto3 current boundaries:
 * hard max: 4 cars.
 * start row: A.
 * validated traversal: A1 -> B1 -> C1 -> A2.
-* guarded/manual/test-only real-input commands.
-* no production Auto3 command.
+* validated desktop UI execution for controlled/manual use.
+* guarded/manual real input.
 * no unattended mode.
 * no Auto4 or remove-car behavior.
-* no expansion beyond validated traversal without a future milestone.
+* no expansion beyond validated traversal without explicit approval.
 * profile-driven conservative timing.
 * confirmation flags required for real-input and unlock paths.
 
-These boundaries are frozen unless a future milestone explicitly changes them.
+These boundaries are frozen unless explicit approval and validation change them.
+
+Validated Auto3 behavior must not change without explicit approval. This includes the first-car exception, safety reset logic, Recently Added re-sort, traversal order, timing model, row/column transition behavior, and completion-state behavior.
 
 ## Safety Notes
 
@@ -203,4 +229,4 @@ Auto3 unlock commands can spend skill points. Use test-mode commands before unlo
 
 Auto3 must be supervised. F8 stop is available in guarded real-input commands, but it is not a substitute for correct FH6 baseline setup or operator attention.
 
-Do not increase car count, start from row B/C, add Auto4 behavior, or treat Auto3 as unattended production automation without a future validated milestone. The current philosophy remains trust-first, safety-first, and reliability before speed.
+Do not increase car count, start from row B/C, add Auto4 behavior, or treat Auto3 as unattended automation without explicit approval and validation. The current philosophy remains trust-first, safety-first, and reliability before speed.
