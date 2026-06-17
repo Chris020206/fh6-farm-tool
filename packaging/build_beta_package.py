@@ -35,6 +35,35 @@ def _copy_directory(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
+def _locked_output_message(output_dir: Path) -> str:
+    return "\n".join(
+        (
+            f"Output package folder appears locked: {output_dir}",
+            "",
+            "Windows could not remove the previous beta package output.",
+            "Likely causes:",
+            "- File Explorer is open inside output/",
+            "- an image/logo file from the package is open",
+            "- OneDrive is syncing the output folder",
+            "- the packaged app is still running",
+            "",
+            "Close anything using the output folder, then delete output/ manually",
+            "or rerun this script after the folder is unlocked.",
+        )
+    )
+
+
+def _clean_previous_output(output_dir: Path) -> None:
+    if not output_dir.exists():
+        return
+
+    print("Cleaning previous output package...")
+    try:
+        shutil.rmtree(output_dir)
+    except PermissionError as exc:
+        raise PackageBuildError(_locked_output_message(output_dir)) from None
+
+
 def build_beta_package(root: Path | None = None) -> Path:
     root = root or project_root()
 
@@ -60,8 +89,7 @@ def build_beta_package(root: Path | None = None) -> Path:
     print("-----------------------------------")
     print("Building Beta Package...")
 
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
+    _clean_previous_output(output_dir)
     output_dir.mkdir(parents=True)
 
     print("Copying executable...")
