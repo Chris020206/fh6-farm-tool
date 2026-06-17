@@ -68,11 +68,18 @@ class ProjectLogger:
         normalized_category = _parse_category(category)
         formatted_message = message % args if args else message
         timestamp = datetime.now().strftime(DATE_FORMAT)
-        self.stream.write(
-            f"{timestamp} | {level} | {self.name} | "
-            f"{normalized_category} | {formatted_message}\n"
-        )
-        self.stream.flush()
+        stream = self.stream
+        if stream is None:
+            return
+
+        try:
+            stream.write(
+                f"{timestamp} | {level} | {self.name} | "
+                f"{normalized_category} | {formatted_message}\n"
+            )
+            stream.flush()
+        except (AttributeError, OSError, ValueError):
+            return
 
 
 _LOGGER = ProjectLogger(LOGGER_NAME)
