@@ -21,3 +21,8 @@ Thumbs.db
 # Editor files
 .vscode/
 .idea/
+
+# Packaging artifacts
+build/
+dist/
+*.spec
