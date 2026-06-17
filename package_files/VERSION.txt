@@ -1,0 +1,17 @@
+FH6 Farm Tool
+
+Version: v0.2.0-beta
+Build Type: Founding Tester Beta
+Release Date: 2026-07-17-01
+
+Changelog
+- Initial founding tester beta package candidate.
+- Auto1, Auto2, and Auto3 validated for controlled/manual desktop execution.
+- Portable zip distribution.
+
+Compatibility Notes
+- Windows only.
+- Forza Horizon 6 must be installed separately.
+- FH6 must be open and made ready at baseline while being focusable at automation start, and active during automation without interuption.
+- User supervision is required during real-input automation.
+- F8 emergency stop should be kept ready.
