@@ -21,6 +21,7 @@ from desktop.companion_shell import (
     NAVIGATION_ICON_SLOT_WIDTH,
     _desktop_about_text,
     _desktop_app_icon_path,
+    _desktop_visible_version_text,
     _build_commitment_readiness_details,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
@@ -211,6 +212,10 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertIn("Controlled/manual beta. Not unattended automation.", about_text)
         self.assertIn("Keep F8 available during automation.", about_text)
         self.assertIn("Support: project Discord", about_text)
+
+    def test_visible_desktop_version_uses_about_metadata(self) -> None:
+        self.assertEqual(DESKTOP_APP_VERSION, _desktop_visible_version_text())
+        self.assertEqual("v0.2.0-beta", _desktop_visible_version_text())
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)

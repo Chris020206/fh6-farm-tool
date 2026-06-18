@@ -401,6 +401,10 @@ def _desktop_about_text() -> str:
     return "\n".join(DESKTOP_ABOUT_LINES)
 
 
+def _desktop_visible_version_text() -> str:
+    return DESKTOP_APP_VERSION
+
+
 def _show_about_dialog(parent, icon) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QMessageBox
@@ -1359,7 +1363,8 @@ def _request_auto1_ui_stop(stop_manager, companion_state: dict[str, str]) -> str
 
 
 def _build_top_bar_widget(shell_spec: PrototypeShellSpec, label_type):
-    from PySide6.QtWidgets import QHBoxLayout, QWidget
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
     top_bar = QWidget()
     top_bar.setFixedHeight(shell_spec.top_bar.height)
@@ -1373,6 +1378,15 @@ def _build_top_bar_widget(shell_spec: PrototypeShellSpec, label_type):
 
     layout.addWidget(_build_branding_logo_widget(label_type))
     layout.addStretch()
+    version_label = QLabel(DESKTOP_APP_VERSION)
+    version_label.setObjectName("DesktopVersionLabel")
+    version_label.setToolTip(DESKTOP_APP_BUILD_TYPE)
+    version_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    version_label.setStyleSheet(
+        f"font-size: 11px; font-weight: 500; color: {COLOR_TEXT_MUTED}; "
+        "background: transparent; border: none;"
+    )
+    layout.addWidget(version_label)
 
     return top_bar
 
