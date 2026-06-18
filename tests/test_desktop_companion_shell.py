@@ -13,9 +13,13 @@ from desktop.companion_shell import (
     DESKTOP_APP_ICON_FALLBACK_PATH,
     DESKTOP_APP_ICON_PATH,
     DESKTOP_APP_USER_MODEL_ID,
+    DESKTOP_APP_BUILD_TYPE,
+    DESKTOP_APP_VERSION,
+    DESKTOP_ABOUT_TITLE,
     DESKTOP_TRAY_ACTION_LABELS,
     DESKTOP_TRAY_TOOLTIP,
     NAVIGATION_ICON_SLOT_WIDTH,
+    _desktop_about_text,
     _desktop_app_icon_path,
     _build_commitment_readiness_details,
     _build_auto1_ui_execution_profile,
@@ -179,7 +183,12 @@ class DesktopCompanionShellTest(unittest.TestCase):
     def test_desktop_tray_menu_contract_is_minimal_and_non_automation(self) -> None:
         self.assertEqual("FH6 Farm Tool", DESKTOP_TRAY_TOOLTIP)
         self.assertEqual(
-            ("Show FH6 Farm Tool", "Hide to Tray", "Exit"),
+            (
+                "Show FH6 Farm Tool",
+                "Hide to Tray",
+                "About FH6 Farm Tool",
+                "Exit",
+            ),
             DESKTOP_TRAY_ACTION_LABELS,
         )
         self.assertFalse(
@@ -188,6 +197,20 @@ class DesktopCompanionShellTest(unittest.TestCase):
                 for label in DESKTOP_TRAY_ACTION_LABELS
             )
         )
+
+    def test_about_dialog_text_contract_includes_beta_and_safety_context(self) -> None:
+        about_text = _desktop_about_text()
+
+        self.assertEqual("About FH6 Farm Tool", DESKTOP_ABOUT_TITLE)
+        self.assertEqual("v0.2.0-beta", DESKTOP_APP_VERSION)
+        self.assertEqual("Founding Tester Beta", DESKTOP_APP_BUILD_TYPE)
+        self.assertIn("FH6 Farm Tool", about_text)
+        self.assertIn("Version: v0.2.0-beta", about_text)
+        self.assertIn("Build type: Founding Tester Beta", about_text)
+        self.assertIn("supervised desktop automation utility", about_text)
+        self.assertIn("Controlled/manual beta. Not unattended automation.", about_text)
+        self.assertIn("Keep F8 available during automation.", about_text)
+        self.assertIn("Support: project Discord", about_text)
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)

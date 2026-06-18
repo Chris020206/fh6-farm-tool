@@ -104,10 +104,27 @@ DESKTOP_APP_ICON_FALLBACK_PATH = (
     Path(__file__).resolve().parents[1] / "assets" / "branding" / "tray_icon.png"
 )
 DESKTOP_APP_USER_MODEL_ID = "FH6FarmTool.Desktop"
+DESKTOP_APP_VERSION = "v0.2.0-beta"
+DESKTOP_APP_BUILD_TYPE = "Founding Tester Beta"
+DESKTOP_ABOUT_TITLE = "About FH6 Farm Tool"
+DESKTOP_ABOUT_LINES = (
+    "FH6 Farm Tool",
+    f"Version: {DESKTOP_APP_VERSION}",
+    f"Build type: {DESKTOP_APP_BUILD_TYPE}",
+    "",
+    "A supervised desktop automation utility for Forza Horizon 6.",
+    "",
+    "Controlled/manual beta. Not unattended automation.",
+    "Keep F8 available during automation.",
+    "",
+    "Support: project Discord",
+    "© 2026 FH6 Farm Tool",
+)
 DESKTOP_TRAY_TOOLTIP = "FH6 Farm Tool"
 DESKTOP_TRAY_ACTION_LABELS = (
     "Show FH6 Farm Tool",
     "Hide to Tray",
+    DESKTOP_ABOUT_TITLE,
     "Exit",
 )
 NAVIGATION_ICON_SLOT_WIDTH = 42
@@ -380,6 +397,31 @@ def _set_windows_app_user_model_id() -> None:
         return
 
 
+def _desktop_about_text() -> str:
+    return "\n".join(DESKTOP_ABOUT_LINES)
+
+
+def _show_about_dialog(parent, icon) -> None:
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QMessageBox
+
+    dialog = QMessageBox(parent)
+    dialog.setWindowTitle(DESKTOP_ABOUT_TITLE)
+    dialog.setText(_desktop_about_text())
+    dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
+    if not icon.isNull():
+        dialog.setWindowIcon(icon)
+        dialog.setIconPixmap(
+            icon.pixmap(64, 64).scaled(
+                48,
+                48,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+    dialog.exec()
+
+
 def _install_system_tray(app, window, icon) -> object | None:
     from PySide6.QtGui import QAction
     from PySide6.QtWidgets import QMenu, QSystemTrayIcon
@@ -393,7 +435,8 @@ def _install_system_tray(app, window, icon) -> object | None:
 
     show_action = QAction(DESKTOP_TRAY_ACTION_LABELS[0], tray_menu)
     hide_action = QAction(DESKTOP_TRAY_ACTION_LABELS[1], tray_menu)
-    exit_action = QAction(DESKTOP_TRAY_ACTION_LABELS[2], tray_menu)
+    about_action = QAction(DESKTOP_TRAY_ACTION_LABELS[2], tray_menu)
+    exit_action = QAction(DESKTOP_TRAY_ACTION_LABELS[3], tray_menu)
 
     def show_window() -> None:
         window.showNormal()
@@ -402,10 +445,12 @@ def _install_system_tray(app, window, icon) -> object | None:
 
     show_action.triggered.connect(show_window)
     hide_action.triggered.connect(window.hide)
+    about_action.triggered.connect(lambda: _show_about_dialog(window, icon))
     exit_action.triggered.connect(app.quit)
 
     tray_menu.addAction(show_action)
     tray_menu.addAction(hide_action)
+    tray_menu.addAction(about_action)
     tray_menu.addSeparator()
     tray_menu.addAction(exit_action)
 
