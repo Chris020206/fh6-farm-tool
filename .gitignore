@@ -25,4 +25,5 @@ Thumbs.db
 # Packaging artifacts
 build/
 dist/
+output/
 *.spec
