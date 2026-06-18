@@ -104,6 +104,12 @@ DESKTOP_APP_ICON_FALLBACK_PATH = (
     Path(__file__).resolve().parents[1] / "assets" / "branding" / "tray_icon.png"
 )
 DESKTOP_APP_USER_MODEL_ID = "FH6FarmTool.Desktop"
+DESKTOP_TRAY_TOOLTIP = "FH6 Farm Tool"
+DESKTOP_TRAY_ACTION_LABELS = (
+    "Show FH6 Farm Tool",
+    "Hide to Tray",
+    "Exit",
+)
 NAVIGATION_ICON_SLOT_WIDTH = 42
 
 
@@ -374,6 +380,45 @@ def _set_windows_app_user_model_id() -> None:
         return
 
 
+def _install_system_tray(app, window, icon) -> object | None:
+    from PySide6.QtGui import QAction
+    from PySide6.QtWidgets import QMenu, QSystemTrayIcon
+
+    if icon.isNull() or not QSystemTrayIcon.isSystemTrayAvailable():
+        return None
+
+    tray_icon = QSystemTrayIcon(icon, window)
+    tray_icon.setToolTip(DESKTOP_TRAY_TOOLTIP)
+    tray_menu = QMenu(window)
+
+    show_action = QAction(DESKTOP_TRAY_ACTION_LABELS[0], tray_menu)
+    hide_action = QAction(DESKTOP_TRAY_ACTION_LABELS[1], tray_menu)
+    exit_action = QAction(DESKTOP_TRAY_ACTION_LABELS[2], tray_menu)
+
+    def show_window() -> None:
+        window.showNormal()
+        window.raise_()
+        window.activateWindow()
+
+    show_action.triggered.connect(show_window)
+    hide_action.triggered.connect(window.hide)
+    exit_action.triggered.connect(app.quit)
+
+    tray_menu.addAction(show_action)
+    tray_menu.addAction(hide_action)
+    tray_menu.addSeparator()
+    tray_menu.addAction(exit_action)
+
+    tray_icon.setContextMenu(tray_menu)
+    tray_icon.activated.connect(
+        lambda reason: show_window()
+        if reason == QSystemTrayIcon.ActivationReason.Trigger
+        else None
+    )
+    tray_icon.show()
+    return tray_icon
+
+
 def launch_pyside6_shell_prototype() -> int:
     try:
         from PySide6.QtCore import QPropertyAnimation, QRect, QTimer
@@ -388,6 +433,7 @@ def launch_pyside6_shell_prototype() -> int:
             QPushButton,
             QSizePolicy,
             QStackedWidget,
+            QSystemTrayIcon,
             QVBoxLayout,
             QWidget,
         )
@@ -744,6 +790,7 @@ def launch_pyside6_shell_prototype() -> int:
     )
 
     window.setCentralWidget(root)
+    window._fh6_tray_icon = _install_system_tray(app, window, app_icon)
     window.show()
 
     return app.exec()

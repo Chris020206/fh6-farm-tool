@@ -13,6 +13,8 @@ from desktop.companion_shell import (
     DESKTOP_APP_ICON_FALLBACK_PATH,
     DESKTOP_APP_ICON_PATH,
     DESKTOP_APP_USER_MODEL_ID,
+    DESKTOP_TRAY_ACTION_LABELS,
+    DESKTOP_TRAY_TOOLTIP,
     NAVIGATION_ICON_SLOT_WIDTH,
     _desktop_app_icon_path,
     _build_commitment_readiness_details,
@@ -173,6 +175,19 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertEqual("tray_icon.png", DESKTOP_APP_ICON_FALLBACK_PATH.name)
         self.assertEqual(DESKTOP_APP_ICON_PATH, _desktop_app_icon_path())
         self.assertEqual("FH6FarmTool.Desktop", DESKTOP_APP_USER_MODEL_ID)
+
+    def test_desktop_tray_menu_contract_is_minimal_and_non_automation(self) -> None:
+        self.assertEqual("FH6 Farm Tool", DESKTOP_TRAY_TOOLTIP)
+        self.assertEqual(
+            ("Show FH6 Farm Tool", "Hide to Tray", "Exit"),
+            DESKTOP_TRAY_ACTION_LABELS,
+        )
+        self.assertFalse(
+            any(
+                "start" in label.lower() or "stop" in label.lower()
+                for label in DESKTOP_TRAY_ACTION_LABELS
+            )
+        )
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)
