@@ -1739,7 +1739,19 @@ def _build_automation_environment_widget(
     race_duration_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     _style_runtime_spinbox(race_duration_input, shell_spec=shell_spec)
     race_duration_input.setValue(_load_auto1_default_race_duration())
-    auto1_settings_row.addWidget(race_duration_input, 1)
+    race_duration_column = QWidget()
+    race_duration_column.setStyleSheet("background: transparent; border: none;")
+    race_duration_column_layout = QVBoxLayout(race_duration_column)
+    race_duration_column_layout.setContentsMargins(0, 0, 0, 0)
+    race_duration_column_layout.setSpacing(4)
+    race_duration_hint = QLabel(
+        "Use the race completion time shown on the Auto1 Restart screen."
+    )
+    _style_detail_label(race_duration_hint, shell_spec=shell_spec)
+    race_duration_hint.setWordWrap(False)
+    race_duration_column_layout.addWidget(race_duration_input)
+    race_duration_column_layout.addWidget(race_duration_hint)
+    auto1_settings_row.addWidget(race_duration_column, 1)
     auto1_loop_count_input = QSpinBox()
     auto1_loop_count_input.setRange(AUTO1_LOOP_COUNT_MIN, AUTO1_LOOP_COUNT_MAX)
     auto1_loop_count_input.setSingleStep(1)
@@ -1748,7 +1760,14 @@ def _build_automation_environment_widget(
     auto1_loop_count_input.setFixedHeight(32)
     auto1_loop_count_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     _style_runtime_spinbox(auto1_loop_count_input, shell_spec=shell_spec)
-    auto1_settings_row.addWidget(auto1_loop_count_input, 1)
+    loop_count_column = QWidget()
+    loop_count_column.setStyleSheet("background: transparent; border: none;")
+    loop_count_column_layout = QVBoxLayout(loop_count_column)
+    loop_count_column_layout.setContentsMargins(0, 0, 0, 0)
+    loop_count_column_layout.setSpacing(4)
+    loop_count_column_layout.addWidget(auto1_loop_count_input)
+    loop_count_column_layout.addSpacing(race_duration_hint.sizeHint().height())
+    auto1_settings_row.addWidget(loop_count_column, 1)
     auto2_mode_input = QComboBox()
     auto2_mode_input.addItem("Test navigation", "test")
     auto2_mode_input.addItem("Purchase cars", "purchase")
@@ -2757,72 +2776,615 @@ def _build_history_screen_content(layout, shell_spec: PrototypeShellSpec) -> Non
 
 
 def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPixmap
+    from PySide6.QtWidgets import (
+        QFrame,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QScrollArea,
+        QSizePolicy,
+        QVBoxLayout,
+        QWidget,
+    )
+
     screen = build_help_screen(
         automation_definitions=tuple(get_all_automation_definitions()),
         readiness_models=tuple(get_all_readiness_models()),
         profile_metadata=tuple(get_all_profile_metadata()),
     )
-    guide_questions = tuple(
-        question
-        for question in screen.contextual_guidance.questions
-        if question.question in {"Auto1 Guide", "Auto2 Guide", "Auto3 Guide"}
+    guides_by_automation_id = {
+        guide.automation_id: guide
+        for guide in screen.contextual_guidance.guides
+    }
+    auto1_guide = guides_by_automation_id["auto1"]
+    auto2_guide = guides_by_automation_id["auto2"]
+    auto3_guide = guides_by_automation_id["auto3"]
+    guide_asset_directories = (
+        Path(__file__).resolve().parents[1] / "assets" / "guides",
+        Path(__file__).resolve().parents[1] / "assets" / "Guides",
     )
-    auto1_guide = guide_questions[0]
-    auto2_guide = guide_questions[1]
-    auto3_guide = guide_questions[2]
 
-    layout.addWidget(
-        _build_visual_card(
-            title="Help without a rabbit hole",
-            summary=screen.primary_intention,
-            details=(
-                "Use this screen for quick operational confidence, not deep documentation.",
-            ),
-            shell_spec=shell_spec,
-            treatment="hero",
+    def build_text_label(text: str, *, role: str = "detail") -> QLabel:
+        label = QLabel(text)
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        if role == "heading":
+            label.setStyleSheet(
+                f"font-size: {shell_spec.typography.summary_size}px; "
+                f"font-weight: 650; color: {COLOR_TEXT_PRIMARY}; "
+                "background: transparent; border: none;"
+            )
+        elif role == "summary":
+            _style_summary_label(label, shell_spec=shell_spec)
+        else:
+            _style_detail_label(label, shell_spec=shell_spec)
+        return label
+
+    def build_bullet_list(items: tuple[str, ...]) -> QWidget:
+        bullet_widget = QWidget()
+        bullet_widget.setStyleSheet("background: transparent; border: none;")
+        bullet_layout = QVBoxLayout(bullet_widget)
+        bullet_layout.setContentsMargins(0, 0, 0, 0)
+        bullet_layout.setSpacing(3)
+        for item in items:
+            bullet_layout.addWidget(build_text_label(f"- {item}"))
+        return bullet_widget
+
+    def build_numbered_list(items: tuple[str, ...]) -> QWidget:
+        numbered_widget = QWidget()
+        numbered_widget.setStyleSheet("background: transparent; border: none;")
+        numbered_layout = QVBoxLayout(numbered_widget)
+        numbered_layout.setContentsMargins(0, 0, 0, 0)
+        numbered_layout.setSpacing(3)
+        for index, item in enumerate(items, start=1):
+            numbered_layout.addWidget(build_text_label(f"{index}. {item}"))
+        return numbered_widget
+
+    def add_section_heading(target_layout: QVBoxLayout, title: str) -> None:
+        target_layout.addSpacing(4)
+        target_layout.addWidget(build_text_label(title, role="heading"))
+
+    def build_screenshot_placeholder(text: str) -> QFrame:
+        placeholder = QFrame()
+        placeholder.setObjectName("HelpScreenshotPlaceholder")
+        placeholder.setFrameShape(QFrame.Shape.NoFrame)
+        placeholder.setMinimumHeight(58)
+        placeholder.setStyleSheet(
+            f"""
+            QFrame#HelpScreenshotPlaceholder {{
+                background-color: {COLOR_SURFACE_RECESSED};
+                border: 1px dashed {COLOR_BORDER_STRONG};
+                border-radius: 14px;
+            }}
+            """
         )
-    )
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addWidget(
-        _build_visual_card(
-            title=auto1_guide.question,
-            summary=_compact_text(auto1_guide.answer, 126),
-            details=(
-                _compact_text(auto1_guide.supporting_context[0], 96),
-                "Keep F8 ready.",
-            ),
-            shell_spec=shell_spec,
-            treatment="primary action",
+        placeholder_layout = QVBoxLayout(placeholder)
+        placeholder_layout.setContentsMargins(12, 10, 12, 10)
+        placeholder_layout.addWidget(build_text_label(text))
+        return placeholder
+
+    def resolve_guide_image_path(filename: str) -> Path | None:
+        for guide_asset_directory in guide_asset_directories:
+            candidate = guide_asset_directory / filename
+            if candidate.exists():
+                return candidate
+        return None
+
+    def build_guide_image(
+        filename: str,
+        fallback_text: str,
+        caption: str,
+    ) -> QFrame:
+        image_card = QFrame()
+        image_card.setObjectName("HelpGuideImage")
+        image_card.setFrameShape(QFrame.Shape.NoFrame)
+        image_card.setStyleSheet(
+            f"""
+            QFrame#HelpGuideImage {{
+                background-color: {COLOR_SURFACE_RECESSED};
+                border: 1px solid {COLOR_BORDER_SUBTLE};
+                border-radius: 14px;
+            }}
+            """
         )
-    )
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addLayout(
-        _build_card_row(
-            cards=(
-                _build_visual_card(
-                    title=auto2_guide.question,
-                    summary=_compact_text(auto2_guide.answer, 110),
-                    details=(
-                        "Target: Subaru Impreza 22B-STi Version (1998).",
-                        _compact_text(auto2_guide.supporting_context[0], 82),
-                    ),
-                    shell_spec=shell_spec,
-                    treatment="secondary",
+        image_layout = QVBoxLayout(image_card)
+        image_layout.setContentsMargins(10, 10, 10, 10)
+        image_layout.setSpacing(7)
+
+        image_path = resolve_guide_image_path(filename)
+        pixmap = QPixmap(str(image_path)) if image_path is not None else QPixmap()
+        if not pixmap.isNull():
+            image_label = QLabel()
+            image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            image_label.setStyleSheet("background: transparent; border: none;")
+            image_label.setPixmap(
+                pixmap.scaled(
+                    456,
+                    214,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+            image_layout.addWidget(image_label)
+        else:
+            image_layout.addWidget(build_screenshot_placeholder(fallback_text))
+
+        caption_label = build_text_label(caption)
+        caption_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        image_layout.addWidget(caption_label)
+        return image_card
+
+    def build_section_content(content_widgets: tuple[QWidget, ...]) -> QWidget:
+        content = QWidget()
+        content.setStyleSheet("background: transparent; border: none;")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 10, 0, 0)
+        content_layout.setSpacing(7)
+        for widget in content_widgets:
+            content_layout.addWidget(widget)
+        return content
+
+    def build_getting_started_content() -> QWidget:
+        content = QWidget()
+        content.setStyleSheet("background: transparent; border: none;")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(7)
+        content_layout.addWidget(build_text_label("FH6 Farm Tool uses supervised automation."))
+        content_layout.addWidget(
+            build_bullet_list(
+                (
+                    "Choose Auto1, Auto2, or Auto3.",
+                    "Read the readiness card before running.",
+                    "Open the matching guide if the required starting position is unclear.",
+                    "Verify the required starting position in FH6.",
+                    "Use test mode first when available.",
+                    "Keep F8 ready.",
+                    "Do not run unattended.",
+                )
+            )
+        )
+        return content
+
+    def build_auto1_content() -> QWidget:
+        content = QWidget()
+        content.setStyleSheet("background: transparent; border: none;")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(7)
+        content_layout.addWidget(build_text_label(f"Purpose: {auto1_guide.purpose}"))
+        content_layout.addWidget(
+            build_text_label(
+                f"Required starting position: {auto1_guide.required_starting_position}"
+            )
+        )
+        add_section_heading(content_layout, "Step-by-step")
+        content_layout.addWidget(
+            build_numbered_list(
+                (
+                    "Complete one race manually.",
+                    "Stay on the Restart screen.",
+                    "Confirm pressing X would restart the event.",
+                    "Return to FH6 Farm Tool and prepare Auto1.",
+                    "Choose focus method and keep F8 ready.",
+                )
+            )
+        )
+        content_layout.addWidget(
+            build_guide_image(
+                "auto1_starting_position.png",
+                "Auto1 screenshot placeholder: post-race Restart screen.",
+                (
+                    "Correct Auto1 starting position. The Restart screen should already "
+                    "be visible and pressing X should restart the event."
                 ),
-                _build_visual_card(
-                    title=auto3_guide.question,
-                    summary=_compact_text(auto3_guide.answer, 110),
-                    details=(
-                        "Selected car should be the newly purchased Subaru.",
-                        _compact_text(auto3_guide.supporting_context[0], 82),
-                    ),
-                    shell_spec=shell_spec,
-                    treatment="tertiary",
+            )
+        )
+        add_section_heading(content_layout, "Race Drive Duration")
+        content_layout.addWidget(
+            build_text_label(
+                "Auto1 uses this value to determine how long it should drive before preparing for the next restart."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "At the required starting position, the Restart screen shows your previous race completion time. Set Race Drive Duration to match that value."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Example: previous race time 20.1 seconds -> Race Drive Duration 20 seconds."
+            )
+        )
+        add_section_heading(content_layout, "Before pressing Run")
+        content_layout.addWidget(
+            build_bullet_list(
+                (
+                    "Restart screen visible",
+                    "X restarts the event",
+                    "FH6 can receive focus",
+                    "F8 ready",
+                )
+            )
+        )
+        add_section_heading(content_layout, "Common mistakes")
+        content_layout.addWidget(
+            build_bullet_list(
+                (
+                    "Starting from freeroam",
+                    "Starting from pause/map/garage",
+                    "Starting before completing one race",
+                )
+            )
+        )
+        add_section_heading(content_layout, "Recovery")
+        content_layout.addWidget(
+            build_text_label(
+                "Stop with F8 if needed, return to the Restart screen, then try again."
+            )
+        )
+        return content
+
+    def build_auto2_content() -> QWidget:
+        content = QWidget()
+        content.setStyleSheet("background: transparent; border: none;")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(7)
+        content_layout.addWidget(build_text_label(f"Purpose: {auto2_guide.purpose}"))
+        content_layout.addWidget(
+            build_text_label(
+                f"Target vehicle: {auto2_guide.target_or_vehicle_requirement}"
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Why this vehicle: It is the current validated/optimal wheelspin workflow target."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                f"Required starting position: {auto2_guide.required_starting_position}"
+            )
+        )
+        add_section_heading(content_layout, "Step-by-step")
+        content_layout.addWidget(
+            build_numbered_list(
+                (
+                    "Open Autoshow.",
+                    "Prepare Auto2 in FH6 Farm Tool.",
+                    "Use test mode first if unsure.",
+                    "Use purchase mode only when alignment is trusted.",
+                    "Keep F8 ready.",
+                )
+            )
+        )
+        content_layout.addWidget(
+            build_guide_image(
+                "auto2_starting_position.png",
+                "Auto2 screenshot placeholder: Autoshow validated starting position.",
+                "Correct Auto2 starting position. Simply enter Autoshow, then proceed to automation start.",
+            )
+        )
+        add_section_heading(content_layout, "Before pressing Run")
+        content_layout.addWidget(
+            build_bullet_list(
+                (
+                    "Autoshow open",
+                    "Credits available if using purchase mode",
+                    "Test mode used if uncertain",
+                    "F8 ready",
+                )
+            )
+        )
+        add_section_heading(content_layout, "Common mistakes")
+        content_layout.addWidget(
+            build_bullet_list(
+                (
+                    "Purchase mode before test mode",
+                    "Wrong manufacturer/car visible",
+                    "Unexpected confirmation screen",
+                )
+            )
+        )
+        add_section_heading(content_layout, "Recovery")
+        content_layout.addWidget(
+            build_text_label(
+                "Stop with F8 if alignment is wrong, return to Autoshow, and use test mode first."
+            )
+        )
+        return content
+
+    def build_auto3_content() -> QWidget:
+        content = QWidget()
+        content.setStyleSheet("background: transparent; border: none;")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(7)
+        content_layout.addWidget(build_text_label(f"Purpose: {auto3_guide.purpose}"))
+        add_section_heading(content_layout, "Important vehicle rule")
+        content_layout.addWidget(
+            build_text_label(
+                "Auto3 operates on the currently selected vehicle. It does not verify the car model."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Target vehicle: the selected vehicle should be the first newly purchased Subaru Impreza 22B-STi Version (1998)."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                f"Required starting position: {auto3_guide.required_starting_position}"
+            )
+        )
+        add_section_heading(content_layout, "Step-by-step")
+        content_layout.addWidget(
+            build_numbered_list(
+                (
+                    "Open Garage.",
+                    "Go to Cars -> My Cars.",
+                    "Sort by Recently Added.",
+                    "Make sure the correct newly purchased Subaru is selected.",
+                    "Confirm start row A.",
+                    "Prepare Auto3 in FH6 Farm Tool.",
+                    "Keep F8 ready.",
+                )
+            )
+        )
+        content_layout.addWidget(
+            build_guide_image(
+                "auto3_starting_position.png",
+                "Auto3 screenshot placeholder: My Cars sorted by Recently Added.",
+                (
+                    "Correct Auto3 starting position. From Garage -> Cars -> My Cars, "
+                    "(not Freeroam -> Change car!). The seated car should be the most "
+                    "recent Subaru Impreza 22B-STI (1998)."
                 ),
-            ),
-            shell_spec=shell_spec,
+            )
+        )
+        add_section_heading(content_layout, "Before pressing Run")
+        content_layout.addWidget(
+            build_bullet_list(
+                (
+                    "My Cars open",
+                    "Recently Added sorting active",
+                    "Correct Subaru selected",
+                    "Start row A",
+                    "Verify that the desired cars to be unlocked are placed in a continuous string.",
+                    "Skill points available",
+                    "F8 ready",
+                )
+            )
+        )
+        add_section_heading(content_layout, "Common mistakes")
+        content_layout.addWidget(
+            build_bullet_list(
+                (
+                    "Wrong car selected",
+                    "Entering My Cars directly from freeroam and not a garage",
+                    "Wrong start row",
+                    "Assuming Auto3 verifies the car model",
+                    "Running unlock mode while unsure",
+                    (
+                        "The number of cars wished to be unlocked are misaligned, "
+                        "either with other cars in between or otherwise not in a continuous "
+                        "string (see screenshot Auto3 Guide)."
+                    ),
+                )
+            )
+        )
+        add_section_heading(content_layout, "Recovery")
+        content_layout.addWidget(
+            build_text_label(
+                "If unsure which car is selected, do not run unlock mode. Re-sort Recently Added and verify the selected Subaru first."
+            )
+        )
+        add_section_heading(content_layout, "Safety")
+        content_layout.addWidget(
+            build_bullet_list(
+                (
+                    "Unlock mode can spend skill points.",
+                    "Current validated max: 4 cars.",
+                    "Validated traversal: A1 -> B1 -> C1 -> A2.",
+                )
+            )
+        )
+        return content
+
+    def build_faq_content() -> QWidget:
+        return build_section_content(
+            tuple(
+                build_text_label(
+                    f"{question.question} {question.answer}"
+                )
+                for question in screen.common_questions.questions
+            )
+        )
+
+    def build_troubleshooting_content() -> QWidget:
+        return build_section_content(
+            tuple(
+                build_text_label(
+                    f"{question.question} {question.answer}"
+                )
+                for question in screen.troubleshooting.questions
+            )
+            + (
+                build_text_label("Known issue: Auto3 is validated for max 4 cars and start row A."),
+                build_text_label("Safety note: stop with F8 whenever the visible FH6 state looks wrong."),
+            )
+        )
+
+    sections = (
+        (
+            "Operator Knowledge / Getting Started",
+            "Pick an automation, read the readiness card, and use the matching guide if the starting position is unclear.",
+            build_getting_started_content,
+        ),
+        (
+            "Auto1 Guide",
+            "Start from the post-race Restart screen where X restarts the event.",
+            build_auto1_content,
+        ),
+        (
+            "Auto2 Guide",
+            "Auto2 purchases the Subaru Impreza 22B-STi Version (1998) from Autoshow.",
+            build_auto2_content,
+        ),
+        (
+            "Auto3 Guide",
+            "Auto3 unlocks the validated wheelspin perk path on the currently selected Subaru.",
+            build_auto3_content,
+        ),
+        (
+            "FAQ",
+            "Short answers for common operator questions.",
+            build_faq_content,
+        ),
+        (
+            "Troubleshooting",
+            "Calm recovery guidance when FH6 state or automation alignment is unclear.",
+            build_troubleshooting_content,
+        ),
+    )
+
+    layout.addWidget(build_text_label("Operator Knowledge", role="heading"))
+    layout.addWidget(
+        build_text_label(
+            "Use Help for starting positions, operator checks, and recovery guidance.",
+            role="summary",
         )
     )
+    layout.addSpacing(8)
+
+    scroll_area = QScrollArea()
+    scroll_area.setWidgetResizable(True)
+    scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+    scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    scroll_area.setStyleSheet(
+        f"""
+        QScrollArea {{
+            background: transparent;
+            border: none;
+        }}
+        QScrollBar:vertical {{
+            background: {COLOR_SURFACE_RECESSED};
+            width: 8px;
+            margin: 2px 0 2px 0;
+            border-radius: 4px;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {COLOR_BORDER_STRONG};
+            border-radius: 4px;
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0px;
+        }}
+        """
+    )
+
+    scroll_content = QWidget()
+    scroll_content.setStyleSheet("background: transparent; border: none;")
+    scroll_outer_layout = QHBoxLayout(scroll_content)
+    scroll_outer_layout.setContentsMargins(10, 0, 10, 0)
+    scroll_outer_layout.setSpacing(0)
+
+    scroll_column = QWidget()
+    scroll_column.setStyleSheet("background: transparent; border: none;")
+    scroll_column.setMaximumWidth(500)
+    scroll_column.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Preferred,
+    )
+    scroll_layout = QVBoxLayout(scroll_column)
+    scroll_layout.setContentsMargins(0, 0, 0, 0)
+    scroll_layout.setSpacing(7)
+    scroll_outer_layout.addStretch(1)
+    scroll_outer_layout.addWidget(scroll_column)
+    scroll_outer_layout.addStretch(1)
+
+    section_buttons: list[QPushButton] = []
+    section_content_widgets: list[QWidget] = []
+
+    def update_section_styles(expanded_index: int) -> None:
+        for index, button in enumerate(section_buttons):
+            expanded = index == expanded_index
+            button.setText(
+                f"{'v' if expanded else '>'}  {sections[index][0]}\n{sections[index][1]}"
+            )
+            button.setStyleSheet(
+                f"""
+                QPushButton {{
+                    background-color: {COLOR_SURFACE_CARD_RAISED if expanded else COLOR_SURFACE_CARD};
+                    border: 1px solid {COLOR_ACCENT_PRIMARY if expanded else COLOR_BORDER_SUBTLE};
+                    border-radius: 16px;
+                    color: {COLOR_TEXT_PRIMARY};
+                    font-size: {shell_spec.typography.detail_size}px;
+                    font-weight: 600;
+                    padding: 10px 12px;
+                    text-align: left;
+                }}
+                QPushButton:hover {{
+                    border-color: {COLOR_ACCENT_HOVER};
+                    background-color: {COLOR_SURFACE_CARD_RAISED};
+                }}
+                """
+            )
+            section_content_widgets[index].setVisible(expanded)
+
+    def expand_section(section_index: int) -> None:
+        currently_open = section_content_widgets[section_index].isVisible()
+        if currently_open:
+            section_content_widgets[section_index].setVisible(False)
+            update_section_styles(-1)
+            return
+        update_section_styles(section_index)
+
+    for index, (_, _, content_builder) in enumerate(sections):
+        section_frame = QFrame()
+        section_frame.setObjectName("HelpAccordionSection")
+        section_frame.setFrameShape(QFrame.Shape.NoFrame)
+        section_frame.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
+        section_frame.setStyleSheet(
+            f"""
+            QFrame#HelpAccordionSection {{
+                background-color: {COLOR_SURFACE_CARD_SOFT};
+                border: 1px solid {COLOR_BORDER_SUBTLE};
+                border-radius: 18px;
+            }}
+            """
+        )
+        section_layout = QVBoxLayout(section_frame)
+        section_layout.setContentsMargins(8, 8, 8, 8)
+        section_layout.setSpacing(0)
+
+        section_button = QPushButton()
+        section_button.setObjectName("HelpAccordionHeader")
+        section_button.setMinimumHeight(66)
+        section_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        section_button.clicked.connect(
+            lambda _checked=False, section_index=index: expand_section(section_index)
+        )
+        section_content = build_section_content((content_builder(),))
+        section_content.setVisible(False)
+
+        section_buttons.append(section_button)
+        section_content_widgets.append(section_content)
+        section_layout.addWidget(section_button)
+        section_layout.addWidget(section_content)
+        scroll_layout.addWidget(section_frame)
+
+    scroll_layout.addStretch(1)
+    scroll_area.setWidget(scroll_content)
+    layout.addWidget(scroll_area, 1)
+    update_section_styles(0)
 
 
 def _build_settings_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:

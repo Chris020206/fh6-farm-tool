@@ -32,6 +32,22 @@ class HelpQuestion:
 
 
 @dataclass(frozen=True)
+class AutomationGuide:
+    automation_id: str
+    title: str
+    purpose: str
+    required_starting_position: str
+    target_or_vehicle_requirement: str | None
+    details: tuple[str, ...]
+    screenshot_placeholder: str
+    what_happens_when_run: str
+    before_you_press_run: tuple[str, ...]
+    common_mistakes: tuple[str, ...]
+    recovery_guidance: tuple[str, ...]
+    safety_notes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CommonQuestionsSection:
     section_id: HelpSectionId
     purpose: str
@@ -44,6 +60,7 @@ class ContextualGuidanceSection:
     section_id: HelpSectionId
     purpose: str
     questions: tuple[HelpQuestion, ...]
+    guides: tuple[AutomationGuide, ...]
     is_secondary: bool = True
 
 
@@ -89,6 +106,7 @@ def build_help_screen(
                 readiness_by_automation_id,
                 profiles_by_automation_type,
             ),
+            guides=_build_operator_guides(),
         ),
         troubleshooting=TroubleshootingSection(
             section_id=HelpSectionId.TROUBLESHOOTING,
@@ -143,7 +161,7 @@ def _build_contextual_guidance(
     readiness_by_automation_id: dict[str, ReadinessModel],
     profiles_by_automation_type: dict[str, tuple[ProfileMetadata, ...]],
 ) -> tuple[HelpQuestion, ...]:
-    questions: list[HelpQuestion] = list(_build_operator_guides())
+    questions: list[HelpQuestion] = []
 
     for automation_definition in automation_definitions:
         if not automation_definition.is_active:
@@ -191,60 +209,127 @@ def _build_contextual_guidance(
     return tuple(questions)
 
 
-def _build_operator_guides() -> tuple[HelpQuestion, ...]:
+def _build_operator_guides() -> tuple[AutomationGuide, ...]:
     return (
-        HelpQuestion(
-            question="Auto1 Guide",
-            answer=(
-                "What this automation does: repeated race automation. Required "
-                "Starting Position: complete one race manually first, then stay on "
-                "the post-race Restart screen where pressing X restarts the event. "
-                "What happens when you run it: Auto1 repeats the validated race flow. "
-                "Common mistakes: do not start from freeroam, map, garage, pause menu, "
-                "or festival menu. What to do if unsure: stop, return to the Restart "
-                "screen, and keep F8 ready."
+        AutomationGuide(
+            automation_id="auto1",
+            title="Auto1 Guide - Race Automation",
+            purpose="Repeated race automation.",
+            required_starting_position="Post-race Restart screen.",
+            target_or_vehicle_requirement=None,
+            details=(
+                "Complete one race manually first.",
+                "Stay on the screen where pressing X restarts the event.",
+                "Do not start from freeroam, map, garage, pause menu, or festival menu.",
             ),
-            topic_type=HelpTopicType.GUIDE,
-            related_automation_id="auto1",
-            supporting_context=(
-                "Screenshot placeholder: This is where the Auto1 starting position screenshot should be shown.",
+            screenshot_placeholder="This is where the Auto1 Restart screen screenshot should be shown.",
+            what_happens_when_run=(
+                "Auto1 restarts the race, confirms prompts, holds throttle, and repeats for the selected count."
+            ),
+            before_you_press_run=(
+                "One race completed manually",
+                "Restart screen visible",
+                "X restarts the event",
+                "FH6 can receive focus",
+                "F8 is ready",
+            ),
+            common_mistakes=(
+                "Starting from freeroam",
+                "Starting from pause/map/garage",
+                "FH6 not focused",
+                "Restart screen not visible",
+            ),
+            recovery_guidance=(
+                "Stop with F8 if needed.",
+                "Return to the post-race Restart screen.",
+                "Try again only from the required starting position.",
+            ),
+            safety_notes=(
+                "Supervised automation only.",
+                "Keep F8 available.",
             ),
         ),
-        HelpQuestion(
-            question="Auto2 Guide",
-            answer=(
-                "What this automation does: buys the Subaru Impreza 22B-STi Version "
-                "(1998), the current validated wheelspin workflow vehicle. Required "
-                "Starting Position: Autoshow at the validated buy-car menu baseline. "
-                "What happens when you run it: test mode validates navigation; purchase "
-                "mode can spend credits. Common mistakes: wrong manufacturer, wrong car, "
-                "or unexpected confirmation screen. What to do if unsure: use test mode "
-                "first, then stop and re-check if the wrong item appears selected."
+        AutomationGuide(
+            automation_id="auto2",
+            title="Auto2 Guide - Buy Car Automation",
+            purpose="Purchase the validated wheelspin vehicle.",
+            required_starting_position="Autoshow at the validated buy-car menu baseline.",
+            target_or_vehicle_requirement="Subaru Impreza 22B-STi Version (1998)",
+            details=(
+                "Auto2 is designed around purchasing this specific validated wheelspin workflow vehicle.",
+                "This vehicle is currently the validated/optimal wheelspin workflow target.",
             ),
-            topic_type=HelpTopicType.GUIDE,
-            related_automation_id="auto2",
-            supporting_context=(
-                "Screenshot placeholder: This is where the Auto2 starting position screenshot should be shown.",
+            screenshot_placeholder="This is where the Auto2 Autoshow starting position screenshot should be shown.",
+            what_happens_when_run=(
+                "Test mode validates navigation without purchase. Purchase mode navigates the validated path and can spend in-game credits."
+            ),
+            before_you_press_run=(
+                "Autoshow is open",
+                "Buy-car menu is at the expected baseline",
+                "Credits are available for purchase mode",
+                "Test mode was used if alignment is uncertain",
+                "F8 is ready",
+            ),
+            common_mistakes=(
+                "Wrong manufacturer selected",
+                "Wrong car selected",
+                "Purchase mode used before test mode",
+                "Unexpected confirmation screen",
+                "FH6 not focused",
+            ),
+            recovery_guidance=(
+                "Use F8 if alignment is wrong.",
+                "Return to Autoshow.",
+                "Use test mode first before spending credits.",
+            ),
+            safety_notes=(
+                "Purchase mode can spend in-game credits.",
             ),
         ),
-        HelpQuestion(
-            question="Auto3 Guide",
-            answer=(
-                "What this automation does: unlocks the validated wheelspin perk path "
-                "on the currently selected car. Target / Vehicle requirement: the "
-                "selected car should be the first newly purchased Subaru Impreza "
-                "22B-STi Version (1998). Required Starting Position: Garage -> Cars "
-                "-> My Cars -> Recently Added. Sort/order matters. What happens when "
-                "you run it: Auto3 uses start row A and validated traversal A1 -> B1 "
-                "-> C1 -> A2, current max 4 cars. Common mistakes: wrong selected car, "
-                "wrong row, or unknown sort state. What to do if unsure: do not run "
-                "unlock mode; re-check which car is selected. Unlock mode can spend "
-                "skill points."
+        AutomationGuide(
+            automation_id="auto3",
+            title="Auto3 Guide - Skill Tree Automation",
+            purpose="Unlock the validated wheelspin perk path.",
+            required_starting_position="Garage -> Cars -> My Cars -> Recently Added",
+            target_or_vehicle_requirement=(
+                "Auto3 operates on the currently selected vehicle. It does not independently verify the car model. "
+                "The selected vehicle should be the first newly purchased Subaru Impreza 22B-STi Version (1998)."
             ),
-            topic_type=HelpTopicType.GUIDE,
-            related_automation_id="auto3",
-            supporting_context=(
-                "Screenshot placeholder: This is where the Auto3 starting position screenshot should be shown.",
+            details=(
+                "Sort/order matters.",
+                "Start row A only.",
+                "Validated traversal: A1 -> B1 -> C1 -> A2.",
+                "Current max: 4 cars.",
+            ),
+            screenshot_placeholder="This is where the Auto3 My Cars / Recently Added starting position screenshot should be shown.",
+            what_happens_when_run=(
+                "Auto3 opens the selected car, enters Car Mastery, unlocks the validated perk path, exits, and continues through the validated traversal when multiple cars are selected."
+            ),
+            before_you_press_run=(
+                "Garage -> Cars -> My Cars is open",
+                "Recently Added sorting is active",
+                "Start row is A",
+                "Correct newly purchased Subaru is selected",
+                "Skill points are available",
+                "F8 is ready",
+            ),
+            common_mistakes=(
+                "Wrong car selected",
+                "Wrong sort order",
+                "Wrong start row",
+                "Assuming Auto3 verifies the car model",
+                "Running unlock mode while unsure",
+                "FH6 not focused",
+            ),
+            recovery_guidance=(
+                "If unsure which car is selected, do not run unlock mode.",
+                "Return to My Cars.",
+                "Re-sort Recently Added.",
+                "Verify the selected Subaru before running again.",
+            ),
+            safety_notes=(
+                "Unlock mode can spend skill points.",
+                "Maximum validated cars: 4.",
             ),
         ),
     )

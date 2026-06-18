@@ -4,6 +4,7 @@ from product.automation_registry import get_all_automation_definitions
 from product.profile_metadata_registry import get_all_profile_metadata
 from product.readiness_registry import get_all_readiness_models
 from ui.help_screen import (
+    AutomationGuide,
     HelpSectionId,
     HelpTopicType,
     build_help_screen,
@@ -60,10 +61,34 @@ class HelpScreenStructureTest(unittest.TestCase):
             + self.screen.contextual_guidance.questions
             + self.screen.troubleshooting.questions
         )
+        all_guides = self.screen.contextual_guidance.guides
 
         for question in all_questions:
             serialized_values = " ".join(
                 (question.question, question.answer, " ".join(question.supporting_context))
+            ).lower()
+            self.assertNotIn("keypress", serialized_values)
+            self.assertNotIn("wait_after", serialized_values)
+            self.assertNotIn("menu_key_delay", serialized_values)
+            self.assertNotIn("navigation_counts", serialized_values)
+            self.assertNotIn("debug", serialized_values)
+            self.assertNotIn("raw log", serialized_values)
+
+        for guide in all_guides:
+            serialized_values = " ".join(
+                (
+                    guide.title,
+                    guide.purpose,
+                    guide.required_starting_position,
+                    guide.target_or_vehicle_requirement or "",
+                    " ".join(guide.details),
+                    guide.screenshot_placeholder,
+                    guide.what_happens_when_run,
+                    " ".join(guide.before_you_press_run),
+                    " ".join(guide.common_mistakes),
+                    " ".join(guide.recovery_guidance),
+                    " ".join(guide.safety_notes),
+                )
             ).lower()
             self.assertNotIn("keypress", serialized_values)
             self.assertNotIn("wait_after", serialized_values)
@@ -109,22 +134,57 @@ class HelpScreenStructureTest(unittest.TestCase):
 
     def test_help_includes_operator_guides_for_auto1_auto2_and_auto3(self) -> None:
         guides = {
-            question.question: question
-            for question in self.screen.contextual_guidance.questions
-            if question.topic_type == HelpTopicType.GUIDE
+            guide.automation_id: guide
+            for guide in self.screen.contextual_guidance.guides
         }
 
-        self.assertEqual({"Auto1 Guide", "Auto2 Guide", "Auto3 Guide"}, set(guides))
-        self.assertIn("post-race Restart screen", guides["Auto1 Guide"].answer)
-        self.assertIn("pressing X restarts", guides["Auto1 Guide"].answer)
-        self.assertIn("Subaru Impreza 22B-STi Version (1998)", guides["Auto2 Guide"].answer)
-        self.assertIn("purchase mode can spend credits", guides["Auto2 Guide"].answer)
-        self.assertIn("currently selected car", guides["Auto3 Guide"].answer)
-        self.assertIn("Garage -> Cars -> My Cars -> Recently Added", guides["Auto3 Guide"].answer)
-        self.assertIn("A1 -> B1 -> C1 -> A2", guides["Auto3 Guide"].answer)
+        self.assertEqual({"auto1", "auto2", "auto3"}, set(guides))
+        self.assertIsInstance(guides["auto1"], AutomationGuide)
+        self.assertIn(
+            "post-race restart screen",
+            guides["auto1"].required_starting_position.lower(),
+        )
+        self.assertTrue(
+            any("pressing X restarts" in detail for detail in guides["auto1"].details)
+        )
+        self.assertIn(
+            "Subaru Impreza 22B-STi Version (1998)",
+            guides["auto2"].target_or_vehicle_requirement or "",
+        )
+        self.assertTrue(
+            any("credits" in note.lower() for note in guides["auto2"].safety_notes)
+        )
+        self.assertIn(
+            "currently selected vehicle",
+            guides["auto3"].target_or_vehicle_requirement or "",
+        )
+        self.assertIn(
+            "does not independently verify the car model",
+            guides["auto3"].target_or_vehicle_requirement or "",
+        )
+        self.assertIn(
+            "Garage -> Cars -> My Cars -> Recently Added",
+            guides["auto3"].required_starting_position,
+        )
+        self.assertTrue(
+            any("A1 -> B1 -> C1 -> A2" in detail for detail in guides["auto3"].details)
+        )
 
         for guide in guides.values():
-            self.assertIn("Screenshot placeholder:", guide.supporting_context[0])
+            self.assertTrue(guide.screenshot_placeholder.strip())
+            self.assertIn("screenshot", guide.screenshot_placeholder.lower())
+
+    def test_help_keeps_faq_troubleshooting_and_safety_notes(self) -> None:
+        self.assertGreaterEqual(len(self.screen.common_questions.questions), 4)
+        self.assertGreaterEqual(len(self.screen.troubleshooting.questions), 3)
+
+        safety_text = " ".join(
+            " ".join(guide.safety_notes)
+            for guide in self.screen.contextual_guidance.guides
+        ).lower()
+        self.assertIn("f8", safety_text)
+        self.assertIn("skill points", safety_text)
+        self.assertIn("credits", safety_text)
 
 
 if __name__ == "__main__":
