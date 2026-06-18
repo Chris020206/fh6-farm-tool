@@ -14,6 +14,7 @@ class HelpSectionId(str, Enum):
 
 class HelpTopicType(str, Enum):
     BASELINE = "baseline"
+    GUIDE = "guide"
     READINESS = "readiness"
     PROFILE = "profile"
     RESULT = "result"
@@ -142,7 +143,7 @@ def _build_contextual_guidance(
     readiness_by_automation_id: dict[str, ReadinessModel],
     profiles_by_automation_type: dict[str, tuple[ProfileMetadata, ...]],
 ) -> tuple[HelpQuestion, ...]:
-    questions: list[HelpQuestion] = []
+    questions: list[HelpQuestion] = list(_build_operator_guides())
 
     for automation_definition in automation_definitions:
         if not automation_definition.is_active:
@@ -188,6 +189,65 @@ def _build_contextual_guidance(
             )
 
     return tuple(questions)
+
+
+def _build_operator_guides() -> tuple[HelpQuestion, ...]:
+    return (
+        HelpQuestion(
+            question="Auto1 Guide",
+            answer=(
+                "What this automation does: repeated race automation. Required "
+                "Starting Position: complete one race manually first, then stay on "
+                "the post-race Restart screen where pressing X restarts the event. "
+                "What happens when you run it: Auto1 repeats the validated race flow. "
+                "Common mistakes: do not start from freeroam, map, garage, pause menu, "
+                "or festival menu. What to do if unsure: stop, return to the Restart "
+                "screen, and keep F8 ready."
+            ),
+            topic_type=HelpTopicType.GUIDE,
+            related_automation_id="auto1",
+            supporting_context=(
+                "Screenshot placeholder: This is where the Auto1 starting position screenshot should be shown.",
+            ),
+        ),
+        HelpQuestion(
+            question="Auto2 Guide",
+            answer=(
+                "What this automation does: buys the Subaru Impreza 22B-STi Version "
+                "(1998), the current validated wheelspin workflow vehicle. Required "
+                "Starting Position: Autoshow at the validated buy-car menu baseline. "
+                "What happens when you run it: test mode validates navigation; purchase "
+                "mode can spend credits. Common mistakes: wrong manufacturer, wrong car, "
+                "or unexpected confirmation screen. What to do if unsure: use test mode "
+                "first, then stop and re-check if the wrong item appears selected."
+            ),
+            topic_type=HelpTopicType.GUIDE,
+            related_automation_id="auto2",
+            supporting_context=(
+                "Screenshot placeholder: This is where the Auto2 starting position screenshot should be shown.",
+            ),
+        ),
+        HelpQuestion(
+            question="Auto3 Guide",
+            answer=(
+                "What this automation does: unlocks the validated wheelspin perk path "
+                "on the currently selected car. Target / Vehicle requirement: the "
+                "selected car should be the first newly purchased Subaru Impreza "
+                "22B-STi Version (1998). Required Starting Position: Garage -> Cars "
+                "-> My Cars -> Recently Added. Sort/order matters. What happens when "
+                "you run it: Auto3 uses start row A and validated traversal A1 -> B1 "
+                "-> C1 -> A2, current max 4 cars. Common mistakes: wrong selected car, "
+                "wrong row, or unknown sort state. What to do if unsure: do not run "
+                "unlock mode; re-check which car is selected. Unlock mode can spend "
+                "skill points."
+            ),
+            topic_type=HelpTopicType.GUIDE,
+            related_automation_id="auto3",
+            supporting_context=(
+                "Screenshot placeholder: This is where the Auto3 starting position screenshot should be shown.",
+            ),
+        ),
+    )
 
 
 def _build_troubleshooting_questions(

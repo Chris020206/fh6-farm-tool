@@ -1903,7 +1903,7 @@ def _build_automation_environment_widget(
         )
         _set_preparation_card_text(
             preparation_cards["readiness"],
-            title="Baseline requirements",
+            title="Required Starting Position",
             summary=_desktop_baseline_summary(automation_id),
             details=_desktop_baseline_details(automation_id, readiness_model),
         )
@@ -2762,9 +2762,14 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
         readiness_models=tuple(get_all_readiness_models()),
         profile_metadata=tuple(get_all_profile_metadata()),
     )
-    common_questions = screen.common_questions.questions
-    primary_question = common_questions[0]
-    secondary_question = common_questions[1]
+    guide_questions = tuple(
+        question
+        for question in screen.contextual_guidance.questions
+        if question.question in {"Auto1 Guide", "Auto2 Guide", "Auto3 Guide"}
+    )
+    auto1_guide = guide_questions[0]
+    auto2_guide = guide_questions[1]
+    auto3_guide = guide_questions[2]
 
     layout.addWidget(
         _build_visual_card(
@@ -2780,11 +2785,11 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
     layout.addWidget(
         _build_visual_card(
-            title=primary_question.question,
-            summary=_compact_text(primary_question.answer, 120),
+            title=auto1_guide.question,
+            summary=_compact_text(auto1_guide.answer, 126),
             details=(
-                _compact_text(secondary_question.question, 72),
-                _compact_text(secondary_question.answer, 94),
+                _compact_text(auto1_guide.supporting_context[0], 96),
+                "Keep F8 ready.",
             ),
             shell_spec=shell_spec,
             treatment="primary action",
@@ -2795,16 +2800,22 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
         _build_card_row(
             cards=(
                 _build_visual_card(
-                    title="Baseline guidance",
-                    summary="Readiness is assumed, not magically verified.",
-                    details=("Check the FH6 baseline before commitment.",),
+                    title=auto2_guide.question,
+                    summary=_compact_text(auto2_guide.answer, 110),
+                    details=(
+                        "Target: Subaru Impreza 22B-STi Version (1998).",
+                        _compact_text(auto2_guide.supporting_context[0], 82),
+                    ),
                     shell_spec=shell_spec,
                     treatment="secondary",
                 ),
                 _build_visual_card(
-                    title="If something looks wrong",
-                    summary="Stop, reset baseline, prepare again.",
-                    details=("Refusal is protective clarity, not failure.",),
+                    title=auto3_guide.question,
+                    summary=_compact_text(auto3_guide.answer, 110),
+                    details=(
+                        "Selected car should be the newly purchased Subaru.",
+                        _compact_text(auto3_guide.supporting_context[0], 82),
+                    ),
                     shell_spec=shell_spec,
                     treatment="tertiary",
                 ),
@@ -3309,33 +3320,36 @@ def _format_warning_summary(warnings: tuple[str, ...]) -> str:
 
 def _desktop_baseline_summary(automation_id: str) -> str:
     summaries = {
-        "auto1": "Complete one race first, then stay in the post-race restart menu.",
-        "auto2": "Open Autoshow and start from the validated buy-car menu baseline.",
-        "auto3": "Open Garage -> Cars -> My Cars; do not start from freeroam.",
+        "auto1": "Post-race Restart screen.",
+        "auto2": "Autoshow at the validated buy-car menu.",
+        "auto3": "Garage -> Cars -> My Cars -> Recently Added.",
     }
-    return summaries.get(automation_id, "Use the documented baseline for this automation.")
+    return summaries.get(automation_id, "Use the documented starting position for this automation.")
 
 
 def _desktop_baseline_details(automation_id: str, readiness_model) -> tuple[str, ...]:
     if automation_id == "auto1":
         return (
-            "Leave FH6 at the restart screen where pressing X restarts the event.",
-            "The app attempts FH6 focus handoff before the countdown starts.",
-            "Use the validated race/car setup and keep F8 ready.",
+            "Purpose: repeated race automation.",
+            "Complete one race first; pressing X should restart the event.",
+            "Expected Result: repeated race restart and completion.",
+            "Safety: supervised automation. Keep F8 available. Need help? See Help -> Auto1 Guide.",
         )
 
     if automation_id == "auto2":
         return (
-            "Autoshow should already be open at the expected manufacturer/car navigation baseline.",
-            "The app attempts FH6 focus handoff before the countdown starts.",
-            "Use test navigation first if purchase alignment is uncertain.",
+            "Purpose: purchase the validated wheelspin vehicle.",
+            "Target: Subaru Impreza 22B-STi Version (1998).",
+            "Expected Result: purchases the selected validated Subaru.",
+            "Safety: uses credits. Use test mode first if alignment is uncertain. Need help? See Help -> Auto2 Guide.",
         )
 
     if automation_id == "auto3":
         return (
-            "My Cars should already be open from Garage -> Cars, with start row A.",
-            "The app attempts FH6 focus handoff before the countdown starts.",
-            "Validated traversal: A1 -> B1 -> C1 -> A2. Current hard max: 4 cars.",
+            "Purpose: unlock the validated wheelspin perk path.",
+            "Target assumption: operates on the currently selected vehicle and does not verify the car model.",
+            "Selected vehicle should be the first newly purchased Subaru Impreza 22B-STi Version (1998).",
+            "Safety: uses skill points. Max 4 cars. Traversal: A1 -> B1 -> C1 -> A2. Need help? See Help -> Auto3 Guide.",
         )
 
     return (

@@ -5,16 +5,17 @@ READINESS_MODELS: dict[str, ReadinessModel] = {
     "auto1": ReadinessModel(
         automation_id="auto1",
         expected_baseline=(
-            "Expected FH6 baseline: post-race restart screen where pressing X restarts "
-            "the event."
+            "Required Starting Position: post-race Restart screen. Complete one race "
+            "first, then stay on the screen where pressing X restarts the event."
         ),
         manual_positioning_assumption=(
-            "Assumed operator setup: FH6 is focused and positioned at the validated "
-            "Auto1 restart baseline before execution starts."
+            "Assumed operator setup: Auto1 is used for repeated race automation from "
+            "the validated restart screen."
         ),
         recommended_setup=(
-            "Use the validated race setup and car assumptions from the Auto1 runbook.",
-            "Keep FH6 focused before the startup delay finishes.",
+            "Purpose: repeated race automation.",
+            "Expected Result: repeated race restart and completion.",
+            "Need help? See Help -> Auto1 Guide.",
             "Keep F8 ready for supervised stop control.",
         ),
         focus_requirement="FH6 should be the focused application before real input starts.",
@@ -40,17 +41,19 @@ READINESS_MODELS: dict[str, ReadinessModel] = {
     "auto2": ReadinessModel(
         automation_id="auto2",
         expected_baseline=(
-            "Expected FH6 baseline: Autoshow/menu state aligned with the official "
-            "Auto2 navigation assumptions."
+            "Required Starting Position: Autoshow, at the validated buy-car menu "
+            "baseline."
         ),
         manual_positioning_assumption=(
-            "Assumed operator setup: FH6 is focused, Autoshow navigation starts from "
-            "the documented baseline, and spending risk is understood before purchase testing."
+            "Target vehicle: Subaru Impreza 22B-STi Version (1998). Auto2 is "
+            "designed around purchasing this specific validated wheelspin workflow vehicle."
         ),
         recommended_setup=(
+            "Purpose: purchase the validated wheelspin vehicle.",
+            "Expected Result: purchases the selected validated Subaru.",
             "Run test-mode navigation before any purchase validation when alignment is uncertain.",
             "Use the official profile unless a validated custom timing profile is intentionally selected.",
-            "Confirm sufficient credits before the one-car purchase validation command.",
+            "Need help? See Help -> Auto2 Guide.",
         ),
         focus_requirement="FH6 should remain focused for the full guarded real-input sequence.",
         cursor_requirement=(
@@ -62,7 +65,7 @@ READINESS_MODELS: dict[str, ReadinessModel] = {
             "accepts the controlled spending risk."
         ),
         confidence_notes=(
-            "Auto2 has validated test-mode navigation and one-car purchase validation.",
+            "Auto2 has validated test-mode navigation and purchase-count execution.",
             "Readiness is assumption-based and does not inspect the active FH6 menu.",
         ),
         contextual_warnings=(
@@ -78,17 +81,19 @@ READINESS_MODELS: dict[str, ReadinessModel] = {
     "auto3": ReadinessModel(
         automation_id="auto3",
         expected_baseline=(
-            "Expected FH6 baseline: My Cars grid using the validated A-row start "
-            "assumption and official Auto3 sorting setup."
+            "Required Starting Position: Garage -> Cars -> My Cars -> Recently Added."
         ),
         manual_positioning_assumption=(
-            "Assumed operator setup: user starts from the documented garage baseline, "
-            "with traversal limited to the current validated A1 to A2 path."
+            "Target vehicle assumption: Auto3 unlocks perks on the currently selected "
+            "vehicle. It does not independently verify the car model."
         ),
         recommended_setup=(
-            "Use the start row A baseline.",
+            "Purpose: unlock the validated wheelspin perk path.",
+            "The currently selected vehicle should be the first newly purchased Subaru Impreza 22B-STi Version (1998).",
+            "Use start row A only.",
+            "Expected Result: unlocks the validated perk path for the selected/newly purchased Subaru vehicles.",
             "Keep car count at or below the guarded four-car validation boundary.",
-            "Confirm skill point spending is acceptable before unlock testing.",
+            "Need help? See Help -> Auto3 Guide.",
         ),
         focus_requirement="FH6 should remain focused during guarded real-input traversal and unlock.",
         cursor_requirement=None,

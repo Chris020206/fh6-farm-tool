@@ -21,6 +21,8 @@ from desktop.companion_shell import (
     NAVIGATION_ICON_SLOT_WIDTH,
     _desktop_about_text,
     _desktop_app_icon_path,
+    _desktop_baseline_details,
+    _desktop_baseline_summary,
     _desktop_visible_version_text,
     _build_commitment_readiness_details,
     _build_auto1_ui_execution_profile,
@@ -409,6 +411,23 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertIn("Multi-car unlock", joined)
         self.assertIn("Cars: 4", joined)
         self.assertIn("A1 -> B1 -> C1 -> A2", joined)
+
+    def test_operator_guidance_readiness_cards_name_required_starting_positions(self) -> None:
+        auto1 = " ".join(("auto1", _desktop_baseline_summary("auto1"), * _desktop_baseline_details("auto1", object())))
+        auto2 = " ".join(("auto2", _desktop_baseline_summary("auto2"), * _desktop_baseline_details("auto2", object())))
+        auto3 = " ".join(("auto3", _desktop_baseline_summary("auto3"), * _desktop_baseline_details("auto3", object())))
+
+        self.assertIn("Post-race Restart screen", auto1)
+        self.assertIn("pressing X should restart", auto1)
+        self.assertIn("Help -> Auto1 Guide", auto1)
+        self.assertIn("Autoshow", auto2)
+        self.assertIn("Subaru Impreza 22B-STi Version (1998)", auto2)
+        self.assertIn("Help -> Auto2 Guide", auto2)
+        self.assertIn("Garage -> Cars -> My Cars -> Recently Added", auto3)
+        self.assertIn("currently selected vehicle", auto3)
+        self.assertIn("newly purchased Subaru", auto3)
+        self.assertIn("A1 -> B1 -> C1 -> A2", auto3)
+        self.assertIn("Help -> Auto3 Guide", auto3)
 
     def test_auto1_ui_execution_profile_adds_hidden_race_duration_buffer(self) -> None:
         profile = _build_auto1_ui_execution_profile(

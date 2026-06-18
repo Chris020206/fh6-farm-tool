@@ -107,6 +107,25 @@ class HelpScreenStructureTest(unittest.TestCase):
         self.assertIn("auto3", automation_ids)
         self.assertNotIn("auto4", automation_ids)
 
+    def test_help_includes_operator_guides_for_auto1_auto2_and_auto3(self) -> None:
+        guides = {
+            question.question: question
+            for question in self.screen.contextual_guidance.questions
+            if question.topic_type == HelpTopicType.GUIDE
+        }
+
+        self.assertEqual({"Auto1 Guide", "Auto2 Guide", "Auto3 Guide"}, set(guides))
+        self.assertIn("post-race Restart screen", guides["Auto1 Guide"].answer)
+        self.assertIn("pressing X restarts", guides["Auto1 Guide"].answer)
+        self.assertIn("Subaru Impreza 22B-STi Version (1998)", guides["Auto2 Guide"].answer)
+        self.assertIn("purchase mode can spend credits", guides["Auto2 Guide"].answer)
+        self.assertIn("currently selected car", guides["Auto3 Guide"].answer)
+        self.assertIn("Garage -> Cars -> My Cars -> Recently Added", guides["Auto3 Guide"].answer)
+        self.assertIn("A1 -> B1 -> C1 -> A2", guides["Auto3 Guide"].answer)
+
+        for guide in guides.values():
+            self.assertIn("Screenshot placeholder:", guide.supporting_context[0])
+
 
 if __name__ == "__main__":
     unittest.main()
