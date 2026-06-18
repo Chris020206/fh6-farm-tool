@@ -10,7 +10,11 @@ from desktop.companion_shell import (
     DESKTOP_BRAND_LOGO_MAX_HEIGHT,
     DESKTOP_BRAND_LOGO_MAX_WIDTH,
     DESKTOP_BRAND_LOGO_PATH,
+    DESKTOP_APP_ICON_FALLBACK_PATH,
+    DESKTOP_APP_ICON_PATH,
+    DESKTOP_APP_USER_MODEL_ID,
     NAVIGATION_ICON_SLOT_WIDTH,
+    _desktop_app_icon_path,
     _build_commitment_readiness_details,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
@@ -161,6 +165,14 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertEqual("fh6_farm_tool_logo.png", DESKTOP_BRAND_LOGO_PATH.name)
         self.assertEqual(252, DESKTOP_BRAND_LOGO_MAX_WIDTH)
         self.assertEqual(46, DESKTOP_BRAND_LOGO_MAX_HEIGHT)
+
+    def test_desktop_app_icon_asset_contract(self) -> None:
+        self.assertTrue(DESKTOP_APP_ICON_PATH.exists())
+        self.assertEqual("app_icon.ico", DESKTOP_APP_ICON_PATH.name)
+        self.assertTrue(DESKTOP_APP_ICON_FALLBACK_PATH.exists())
+        self.assertEqual("tray_icon.png", DESKTOP_APP_ICON_FALLBACK_PATH.name)
+        self.assertEqual(DESKTOP_APP_ICON_PATH, _desktop_app_icon_path())
+        self.assertEqual("FH6FarmTool.Desktop", DESKTOP_APP_USER_MODEL_ID)
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)

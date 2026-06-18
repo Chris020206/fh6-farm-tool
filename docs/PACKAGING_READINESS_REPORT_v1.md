@@ -225,6 +225,7 @@ Initial prototype command direction:
 
 ```powershell
 python -B -m PyInstaller --noconfirm --clean --windowed --onedir --name "FH6 Farm Tool" `
+  --icon "assets/branding/app_icon.ico" `
   --add-data "desktop/assets;desktop/assets" `
   --add-data "assets;assets" `
   --add-data "profiles;profiles" `
@@ -252,7 +253,9 @@ Before calling the packaging prototype successful:
 
 - [ ] Build completes without fatal PyInstaller errors.
 - [ ] Packaged `FH6 Farm Tool.exe` launches.
+- [ ] Packaged executable uses `assets/branding/app_icon.ico`.
 - [ ] Desktop UI opens to the expected Home screen.
+- [ ] Window and taskbar icon appear where supported by Windows.
 - [ ] Top branding logo is visible.
 - [ ] Dropdown arrow asset is visible.
 - [ ] Navigation works at a basic smoke-test level.

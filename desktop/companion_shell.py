@@ -99,6 +99,11 @@ COLOR_TEXT_FAINT = "#5F6673"
 DESKTOP_BRAND_LOGO_PATH = Path(__file__).with_name("assets") / "fh6_farm_tool_logo.png"
 DESKTOP_BRAND_LOGO_MAX_WIDTH = 252
 DESKTOP_BRAND_LOGO_MAX_HEIGHT = 46
+DESKTOP_APP_ICON_PATH = Path(__file__).resolve().parents[1] / "assets" / "branding" / "app_icon.ico"
+DESKTOP_APP_ICON_FALLBACK_PATH = (
+    Path(__file__).resolve().parents[1] / "assets" / "branding" / "tray_icon.png"
+)
+DESKTOP_APP_USER_MODEL_ID = "FH6FarmTool.Desktop"
 NAVIGATION_ICON_SLOT_WIDTH = 42
 
 
@@ -345,9 +350,34 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
     )
 
 
+def _desktop_app_icon_path() -> Path | None:
+    if DESKTOP_APP_ICON_PATH.exists():
+        return DESKTOP_APP_ICON_PATH
+    if DESKTOP_APP_ICON_FALLBACK_PATH.exists():
+        return DESKTOP_APP_ICON_FALLBACK_PATH
+    return None
+
+
+def _set_windows_app_user_model_id() -> None:
+    import sys
+
+    if sys.platform != "win32":
+        return
+
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            DESKTOP_APP_USER_MODEL_ID
+        )
+    except Exception:
+        return
+
+
 def launch_pyside6_shell_prototype() -> int:
     try:
         from PySide6.QtCore import QPropertyAnimation, QRect, QTimer
+        from PySide6.QtGui import QIcon
         from PySide6.QtWidgets import (
             QApplication,
             QFrame,
@@ -369,11 +399,18 @@ def launch_pyside6_shell_prototype() -> int:
     import sys
 
     shell_spec = build_prototype_shell_spec()
+    _set_windows_app_user_model_id()
     app = QApplication(sys.argv)
     app.setStyleSheet(_global_stylesheet())
+    app_icon_path = _desktop_app_icon_path()
+    app_icon = QIcon(str(app_icon_path)) if app_icon_path is not None else QIcon()
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
 
     window = QMainWindow()
     window.setWindowTitle(shell_spec.window_title)
+    if not app_icon.isNull():
+        window.setWindowIcon(app_icon)
     window.setFixedSize(shell_spec.window_width, shell_spec.window_height)
 
     root = QWidget()

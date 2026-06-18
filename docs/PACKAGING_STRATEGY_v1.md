@@ -296,6 +296,7 @@ assets/branding/
 
 Recommended assets:
 
+- app_icon.ico
 - app icon
 - tray icon
 - light logo
