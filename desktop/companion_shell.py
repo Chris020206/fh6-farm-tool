@@ -248,7 +248,9 @@ class PrototypeCommitmentLayer:
     focus_label: str
     profile_label: str
     stop_label: str
+    focus_method_labels: tuple[str, str]
     countdown_values: tuple[int, ...]
+    focus_methods_share_countdown: bool
     is_last_safe_exit: bool
     introduces_execution: bool
 
@@ -952,7 +954,9 @@ def _build_prototype_commitment_layer() -> PrototypeCommitmentLayer:
         focus_label="FH6 focus handoff ready",
         profile_label="Safe default profile loaded",
         stop_label="Emergency stop available (F8)",
+        focus_method_labels=("Automatic Focus", "Manual Focus"),
         countdown_values=(3, 2, 1),
+        focus_methods_share_countdown=True,
         is_last_safe_exit=True,
         introduces_execution=False,
     )
@@ -1847,7 +1851,7 @@ def _build_automation_environment_widget(
                 ),
                 (
                     (
-                        "Prepared state only. Start is available after commitment."
+                        "Prepared state only. Supervision is available after commitment."
                         if desktop_preparation_available
                         else " ".join(_desktop_execution_refusal_details(automation_id))
                     )
@@ -2007,13 +2011,13 @@ def _build_commitment_layer_widget(
     action_row = QHBoxLayout()
     action_row.setContentsMargins(0, 0, 0, 0)
     action_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
-    continue_button = QPushButton("Start")
-    manual_focus_button = QPushButton("I focused FH6 manually")
+    automatic_focus_button = QPushButton("Automatic Focus")
+    manual_focus_button = QPushButton("Manual Focus")
     return_button = QPushButton("Return to Preparation")
-    _style_primary_button(continue_button, shell_spec=shell_spec)
+    _style_primary_button(automatic_focus_button, shell_spec=shell_spec)
     _style_secondary_button(manual_focus_button, shell_spec=shell_spec)
     _style_secondary_button(return_button, shell_spec=shell_spec)
-    action_row.addWidget(continue_button)
+    action_row.addWidget(automatic_focus_button)
     action_row.addWidget(manual_focus_button)
     action_row.addWidget(return_button)
     layout.addLayout(action_row)
@@ -2031,9 +2035,8 @@ def _build_commitment_layer_widget(
         )
         countdown_timer.stop()
         countdown_position["value"] = 0
-        continue_button.setEnabled(True)
-        manual_focus_button.setVisible(False)
-        manual_focus_button.setEnabled(False)
+        automatic_focus_button.setEnabled(True)
+        manual_focus_button.setEnabled(True)
         _set_preparation_card_text(
             readiness_card,
             title=shell_spec.commitment_layer.readiness_label,
@@ -2054,12 +2057,12 @@ def _build_commitment_layer_widget(
             ),
             details=(
                 (
-                    "Automatic focus handoff is attempted before countdown."
+                    "Automatic Focus asks the app to bring FH6 forward before countdown."
                     if real_execution_supported
-                    else "Start is unavailable for this automation."
+                    else "Desktop execution is unavailable for this automation."
                 ),
                 (
-                    "If confirmation fails, the selected operation stays stopped until you choose a safe fallback."
+                    "Manual Focus starts the same countdown so you can switch to FH6 before zero."
                     if real_execution_supported
                     else "Return to preparation and choose Auto1, Auto2, or Auto3."
                 ),
@@ -2080,21 +2083,46 @@ def _build_commitment_layer_widget(
         )
         _set_preparation_card_text(
             countdown_card,
-            title="Ready when you are",
-            summary="Supervised operation begins after a calm countdown.",
-            details=("Start or return to preparation.",),
+            title="Choose a focus method",
+            summary="Supervised operation begins after the shared countdown.",
+            details=("Choose Automatic Focus, Manual Focus, or return to preparation.",),
         )
 
-    def start_countdown(manual_focus_acknowledged: bool = False) -> None:
-        continue_button.setEnabled(False)
+    def start_countdown(focus_method: str) -> None:
+        automatic_focus_button.setEnabled(False)
         manual_focus_button.setEnabled(False)
         countdown_position["value"] = 0
-        if manual_focus_acknowledged:
+        if focus_method == "manual":
             _set_preparation_card_text(
                 focus_card,
-                title="Manual focus acknowledged",
-                summary="FH6 focus was confirmed by the operator.",
-                details=("The selected operation will begin after the countdown. Keep F8 ready.",),
+                title="Manual Focus selected",
+                summary="Switch to the FH6 game window during the countdown.",
+                details=(
+                    "Automation will begin automatically when the timer reaches zero.",
+                    "Keep F8 available.",
+                ),
+            )
+            _set_preparation_card_text(
+                countdown_card,
+                title="Manual Focus",
+                summary="Countdown begins now.",
+                details=("Switch to FH6 before the timer reaches zero.",),
+            )
+        else:
+            _set_preparation_card_text(
+                focus_card,
+                title="Automatic Focus selected",
+                summary="FH6 focus handoff was confirmed.",
+                details=(
+                    "Automation will begin automatically when the timer reaches zero.",
+                    "Keep F8 available.",
+                ),
+            )
+            _set_preparation_card_text(
+                countdown_card,
+                title="Automatic Focus",
+                summary="Countdown begins now.",
+                details=("FH6 focus is confirmed before the timer reaches zero.",),
             )
         advance_countdown()
         countdown_timer.start()
@@ -2123,7 +2151,7 @@ def _build_commitment_layer_widget(
             ),
         )
 
-    def begin_countdown() -> None:
+    def begin_automatic_focus_countdown() -> None:
         if current_companion_state["value"] is None:
             return
 
@@ -2136,6 +2164,14 @@ def _build_commitment_layer_widget(
             )
             return
 
+        automatic_focus_button.setEnabled(False)
+        manual_focus_button.setEnabled(False)
+        _set_preparation_card_text(
+            focus_card,
+            title="Automatic Focus selected",
+            summary="Attempting to focus FH6.",
+            details=("Automation will begin automatically when the timer reaches zero.",),
+        )
         focus_result = _attempt_ui_focus_handoff(current_companion_state["value"])
         if not focus_result.succeeded:
             failure_message = _format_ui_focus_failure_message(
@@ -2150,22 +2186,44 @@ def _build_commitment_layer_widget(
             )
             _set_preparation_card_text(
                 countdown_card,
-                title="Last safe checkpoint",
-                summary="Focus FH6 manually only if the game is ready.",
+                title="Choose a focus method",
+                summary="Automatic Focus did not confirm FH6.",
                 details=(
-                    "Use the manual acknowledgement only after you have clicked or focused FH6 yourself.",
+                    "Retry Automatic Focus, choose Manual Focus and switch during countdown, or return to preparation.",
                 ),
             )
-            manual_focus_button.setVisible(True)
+            automatic_focus_button.setEnabled(True)
             manual_focus_button.setEnabled(True)
             return
 
-        start_countdown()
+        start_countdown("automatic")
+
+    def begin_manual_focus_countdown() -> None:
+        if current_companion_state["value"] is None:
+            return
+
+        if not _is_desktop_execution_supported(
+            current_companion_state["value"].get("automation_id", "")
+        ):
+            open_refusal_state(
+                current_companion_state["value"],
+                "Desktop execution is unavailable for the selected automation.",
+            )
+            return
+
+        start_countdown("manual")
+
+    def return_to_preparation_from_commitment() -> None:
+        countdown_timer.stop()
+        countdown_position["value"] = 0
+        automatic_focus_button.setEnabled(True)
+        manual_focus_button.setEnabled(True)
+        return_to_preparation()
 
     countdown_timer.timeout.connect(advance_countdown)
-    continue_button.clicked.connect(begin_countdown)
-    manual_focus_button.clicked.connect(lambda: start_countdown(manual_focus_acknowledged=True))
-    return_button.clicked.connect(return_to_preparation)
+    automatic_focus_button.clicked.connect(begin_automatic_focus_countdown)
+    manual_focus_button.clicked.connect(begin_manual_focus_countdown)
+    return_button.clicked.connect(return_to_preparation_from_commitment)
     set_waiting_state(
         {
             "automation_name": "Prepared operation",

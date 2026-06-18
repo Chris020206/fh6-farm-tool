@@ -187,6 +187,8 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertIn("Confirm readiness", commitment.primary_intention)
         self.assertEqual((3, 2, 1), commitment.countdown_values)
         self.assertLess(len(commitment.countdown_values), 4)
+        self.assertEqual(("Automatic Focus", "Manual Focus"), commitment.focus_method_labels)
+        self.assertTrue(commitment.focus_methods_share_countdown)
         self.assertTrue(commitment.is_last_safe_exit)
         self.assertFalse(commitment.introduces_execution)
         self.assertIn("FH6 focus handoff", commitment.focus_label)
