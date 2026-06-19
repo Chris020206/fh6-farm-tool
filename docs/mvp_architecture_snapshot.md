@@ -1,6 +1,6 @@
 # MVP Architecture Snapshot
 
-This snapshot freezes the current FH6 Farm Tool architecture after guarded
+This snapshot freezes the current Forza Automation Assist architecture after guarded
 Auto3 4-car real-input unlock validation.
 
 The project is in controlled/manual validation and MVP hardening. It is not

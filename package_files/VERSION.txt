@@ -1,4 +1,4 @@
-FH6 Farm Tool
+Forza Automation Assist
 
 Version: v0.2.0-beta
 Build Type: Founding Tester Beta

@@ -1,4 +1,4 @@
-FH6 Farm Tool - Known Issues
+Forza Automation Assist - Known Issues
 
 Build: v0.2.0-beta
 

@@ -1,8 +1,8 @@
-# FH6 Farm Tool - Packaging Readiness Report v1
+# Forza Automation Assist - Packaging Readiness Report v1
 
 ## Summary Verdict
 
-FH6 Farm Tool appears ready for a first portable Windows packaging prototype,
+Forza Automation Assist appears ready for a first portable Windows packaging prototype,
 but not for public release packaging.
 
 Recommended path:
@@ -74,7 +74,7 @@ desktop/app.py
 Packaged executable name:
 
 ```text
-FH6 Farm Tool.exe
+Forza Automation Assist.exe
 ```
 
 Import/package path assessment:
@@ -164,8 +164,8 @@ Current status:
 Recommended first prototype output:
 
 ```text
-FH6 Farm Tool v0.2.0-beta/
-|-- FH6 Farm Tool.exe
+Forza Automation Assist v0.2.0-beta/
+|-- Forza Automation Assist.exe
 |-- README_INSTALL.txt
 |-- SAFETY_AND_TRANSPARENCY.txt
 |-- VERSION.txt
@@ -186,7 +186,7 @@ Notes:
 - The zip candidate should be named:
 
 ```text
-FH6_Farm_Tool_v0.2.0-beta.zip
+Forza_Automation_Assist_v0.2.0-beta.zip
 ```
 
 ---
@@ -224,7 +224,7 @@ Install PyInstaller in the packaging environment first.
 Initial prototype command direction:
 
 ```powershell
-python -B -m PyInstaller --noconfirm --clean --windowed --onedir --name "FH6 Farm Tool" `
+python -B -m PyInstaller --noconfirm --clean --windowed --onedir --name "Forza Automation Assist" `
   --icon "assets/branding/app_icon.ico" `
   --add-data "desktop/assets;desktop/assets" `
   --add-data "assets;assets" `
@@ -252,7 +252,7 @@ Recommended next step after the first successful command:
 Before calling the packaging prototype successful:
 
 - [ ] Build completes without fatal PyInstaller errors.
-- [ ] Packaged `FH6 Farm Tool.exe` launches.
+- [ ] Packaged `Forza Automation Assist.exe` launches.
 - [ ] Packaged executable uses `assets/branding/app_icon.ico`.
 - [ ] Desktop UI opens to the expected Home screen.
 - [ ] Window and taskbar icon appear where supported by Windows.
@@ -279,19 +279,19 @@ Do not run real-input automation as part of this packaging investigation.
 Likely PyInstaller output folder:
 
 ```text
-dist/FH6 Farm Tool/
+dist/Forza Automation Assist/
 ```
 
 Expected beta candidate folder:
 
 ```text
-FH6 Farm Tool v0.2.0-beta/
+Forza Automation Assist v0.2.0-beta/
 ```
 
 Expected zip candidate name:
 
 ```text
-FH6_Farm_Tool_v0.2.0-beta.zip
+Forza_Automation_Assist_v0.2.0-beta.zip
 ```
 
 Estimated output size:

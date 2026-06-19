@@ -1,6 +1,6 @@
 # Engineering Standards
 
-These standards define the baseline rules for future FH6 Farm Tool work.
+These standards define the baseline rules for future Forza Automation Assist work.
 
 ## Naming Conventions
 

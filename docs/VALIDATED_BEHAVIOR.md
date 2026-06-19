@@ -1,8 +1,8 @@
-# FH6 Farm Tool - Validated Behavior
+# Forza Automation Assist - Validated Behavior
 
 ## Purpose
 
-This document records manually validated behavior for FH6 Farm Tool. It acts as
+This document records manually validated behavior for Forza Automation Assist. It acts as
 an anti-regression boundary for future code, documentation, UI, refactor, and
 AI-assisted changes.
 

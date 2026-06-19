@@ -106,9 +106,10 @@ DESKTOP_APP_ICON_FALLBACK_PATH = (
 DESKTOP_APP_USER_MODEL_ID = "FH6FarmTool.Desktop"
 DESKTOP_APP_VERSION = "v0.2.0-beta"
 DESKTOP_APP_BUILD_TYPE = "Founding Tester Beta"
-DESKTOP_ABOUT_TITLE = "About FH6 Farm Tool"
+DESKTOP_PRODUCT_NAME = "Forza Automation Assist"
+DESKTOP_ABOUT_TITLE = f"About {DESKTOP_PRODUCT_NAME}"
 DESKTOP_ABOUT_LINES = (
-    "FH6 Farm Tool",
+    DESKTOP_PRODUCT_NAME,
     f"Version: {DESKTOP_APP_VERSION}",
     f"Build type: {DESKTOP_APP_BUILD_TYPE}",
     "",
@@ -118,11 +119,11 @@ DESKTOP_ABOUT_LINES = (
     "Keep F8 available during automation.",
     "",
     "Support: project Discord",
-    "© 2026 FH6 Farm Tool",
+    f"© 2026 {DESKTOP_PRODUCT_NAME}",
 )
-DESKTOP_TRAY_TOOLTIP = "FH6 Farm Tool"
+DESKTOP_TRAY_TOOLTIP = DESKTOP_PRODUCT_NAME
 DESKTOP_TRAY_ACTION_LABELS = (
-    "Show FH6 Farm Tool",
+    f"Show {DESKTOP_PRODUCT_NAME}",
     "Hide to Tray",
     DESKTOP_ABOUT_TITLE,
     "Exit",
@@ -348,7 +349,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
     sidebar_destinations = get_sidebar_destinations()
 
     return PrototypeShellSpec(
-        window_title="FH6 Farm Tool",
+        window_title=DESKTOP_PRODUCT_NAME,
         window_width=640,
         window_height=960,
         is_fixed_size=True,
@@ -1000,7 +1001,7 @@ def _build_prototype_home_concept() -> PrototypeHomeConcept:
 
 def _build_prototype_sidebar_composition() -> PrototypeSidebarComposition:
     return PrototypeSidebarComposition(
-        navigation_block_label="FH6 Farm Tool",
+        navigation_block_label=DESKTOP_PRODUCT_NAME,
         footer_status="",
         footer_detail="",
         is_compact_navigation=True,
@@ -1072,7 +1073,7 @@ def _build_prototype_visual_composition() -> PrototypeVisualComposition:
 
 def _build_prototype_top_bar() -> PrototypeTopBar:
     return PrototypeTopBar(
-        title="FH6 Farm Tool",
+        title=DESKTOP_PRODUCT_NAME,
         height=63,
         treatment="restrained product identity bar",
         reserves_identity_space=True,
@@ -1418,7 +1419,7 @@ def _build_branding_logo_widget(label_type):
         logo_label.setStyleSheet("background: transparent; border: none;")
         return logo_label
 
-    fallback_label = label_type("FH6 Farm Tool")
+    fallback_label = label_type(DESKTOP_PRODUCT_NAME)
     fallback_label.setObjectName("DesktopBrandFallback")
     fallback_label.setStyleSheet(
         f"font-size: 14px; font-weight: 700; color: {COLOR_TEXT_PRIMARY}; "
@@ -2932,7 +2933,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(7)
-        content_layout.addWidget(build_text_label("FH6 Farm Tool uses supervised automation."))
+        content_layout.addWidget(build_text_label(f"{DESKTOP_PRODUCT_NAME} uses supervised automation."))
         content_layout.addWidget(
             build_bullet_list(
                 (
@@ -2967,7 +2968,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
                     "Complete one race manually.",
                     "Stay on the Restart screen.",
                     "Confirm pressing X would restart the event.",
-                    "Return to FH6 Farm Tool and prepare Auto1.",
+                    f"Return to {DESKTOP_PRODUCT_NAME} and prepare Auto1.",
                     "Choose focus method and keep F8 ready.",
                 )
             )
@@ -3054,7 +3055,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
             build_numbered_list(
                 (
                     "Open Autoshow.",
-                    "Prepare Auto2 in FH6 Farm Tool.",
+                    f"Prepare Auto2 in {DESKTOP_PRODUCT_NAME}.",
                     "Use test mode first if unsure.",
                     "Use purchase mode only when alignment is trusted.",
                     "Keep F8 ready.",
@@ -3129,7 +3130,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
                     "Sort by Recently Added.",
                     "Make sure the correct newly purchased Subaru is selected.",
                     "Confirm start row A.",
-                    "Prepare Auto3 in FH6 Farm Tool.",
+                    f"Prepare Auto3 in {DESKTOP_PRODUCT_NAME}.",
                     "Keep F8 ready.",
                 )
             )

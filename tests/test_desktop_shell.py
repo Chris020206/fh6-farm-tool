@@ -9,7 +9,7 @@ class DesktopShellTest(unittest.TestCase):
     def test_production_shell_facade_imports_safely(self) -> None:
         spec = shell.build_desktop_app_spec()
 
-        self.assertEqual("FH6 Farm Tool", spec.window_title)
+        self.assertEqual("Forza Automation Assist", spec.window_title)
         self.assertEqual(640, spec.window_width)
         self.assertEqual(960, spec.window_height)
         self.assertTrue(spec.is_fixed_size)
@@ -22,7 +22,7 @@ class DesktopShellTest(unittest.TestCase):
 
     def test_public_shell_facade_avoids_prototype_language(self) -> None:
         self.assertNotIn("prototype", shell.__doc__.lower())
-        self.assertEqual("FH6 Farm Tool", shell.build_desktop_app_spec().window_title)
+        self.assertEqual("Forza Automation Assist", shell.build_desktop_app_spec().window_title)
 
 
 if __name__ == "__main__":

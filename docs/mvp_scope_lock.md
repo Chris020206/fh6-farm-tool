@@ -1,6 +1,6 @@
 # MVP Scope Lock
 
-This document locks the current MVP boundary for the FH6 Farm Tool.
+This document locks the current MVP boundary for the Forza Automation Assist.
 
 The MVP is in controlled/manual validation and hardening. It is not a broad
 production release. Automation is run only through explicit guarded commands,

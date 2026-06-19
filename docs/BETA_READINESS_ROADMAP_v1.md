@@ -1,4 +1,4 @@
-# FH6 Farm Tool - Beta Readiness Roadmap v1
+# Forza Automation Assist - Beta Readiness Roadmap v1
 
 ## Purpose
 
@@ -19,7 +19,7 @@ approved.
 
 ## Product Philosophy
 
-FH6 Farm Tool should remain:
+Forza Automation Assist should remain:
 
 - trust-first
 - safety-first
@@ -320,7 +320,7 @@ Interesting ideas alone are not sufficient justification.
 
 ## Final Principle
 
-The biggest risk to FH6 Farm Tool is not lack of ideas.
+The biggest risk to Forza Automation Assist is not lack of ideas.
 
 The biggest risk is scope creep before trust and legitimacy are earned.
 

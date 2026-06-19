@@ -1,10 +1,10 @@
-FH6 Farm Tool - Install Guide
+Forza Automation Assist - Install Guide
 
 Beta status
 This is a founding tester beta package. It is intended for controlled/manual evaluation, not public release.
 
-What FH6 Farm Tool is
-FH6 Farm Tool is a Windows desktop utility for supervised FH6 automation. It sends keyboard input to run Auto1, Auto2, and Auto3 automation flows while the operator remains present and supervises execution.
+What Forza Automation Assist is
+Forza Automation Assist is a Windows desktop utility for supervised FH6 automation. It sends keyboard input to run Auto1, Auto2, and Auto3 automation flows while the operator remains present and supervises execution.
 
 Portable app
 This build is portable. It does not use an installer.
@@ -16,7 +16,7 @@ Recommended setup
 4. Optionally scan the extracted folder.
 5. Open the extracted folder.
 6. Run:
-   FH6 Farm Tool.exe
+   Forza Automation Assist.exe
 
 Do not run the executable directly from inside the zip file.
 

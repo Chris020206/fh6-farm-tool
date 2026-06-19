@@ -1,4 +1,4 @@
-# FH6 Farm Tool - Project State
+# Forza Automation Assist - Project State
 
 ## Project Status
 

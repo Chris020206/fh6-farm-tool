@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 BETA_VERSION = "v0.2.0-beta"
-APP_NAME = "FH6 Farm Tool"
+APP_NAME = "Forza Automation Assist"
 PACKAGE_NAME = f"{APP_NAME} {BETA_VERSION}"
 
 REQUIRED_PACKAGE_FILES = (

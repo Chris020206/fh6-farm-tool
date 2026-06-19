@@ -1,6 +1,6 @@
 # Command Index
 
-This document lists the current command-line surface for the FH6 Farm Tool.
+This document lists the current command-line surface for the Forza Automation Assist.
 
 `main.py` is safe: it loads configuration, logs startup, and exits. It does not
 run automation.

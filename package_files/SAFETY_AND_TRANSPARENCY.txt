@@ -1,4 +1,4 @@
-FH6 Farm Tool - Safety and Transparency
+Forza Automation Assist - Safety and Transparency
 
 This file explains what the tool does and does not do.
 
@@ -19,7 +19,7 @@ The tool does not:
 - Run automation on startup.
 
 Real-input behavior
-FH6 Farm Tool works by sending normal keyboard input through guarded automation paths. The operator remains responsible for starting from the correct FH6 baseline state and supervising the run.
+Forza Automation Assist works by sending normal keyboard input through guarded automation paths. The operator remains responsible for starting from the correct FH6 baseline state and supervising the run.
 
 Antivirus and SmartScreen
 Because this is an early beta package from an "unknown publisher", Windows Defender SmartScreen or antivirus software may show a warning. That warning does not automatically mean the file is unsafe, but you should not ignore warnings blindly.

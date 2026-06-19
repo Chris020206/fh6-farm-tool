@@ -21,7 +21,7 @@ class DesktopAppTest(unittest.TestCase):
     def test_desktop_app_spec_uses_production_facing_naming(self) -> None:
         shell_spec = app.build_desktop_app_spec()
 
-        self.assertEqual("FH6 Farm Tool", shell_spec.window_title)
+        self.assertEqual("Forza Automation Assist", shell_spec.window_title)
         self.assertNotIn("Prototype", shell_spec.window_title)
         self.assertEqual(640, shell_spec.window_width)
         self.assertEqual(960, shell_spec.window_height)

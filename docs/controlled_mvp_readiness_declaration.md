@@ -1,6 +1,6 @@
 # Controlled MVP Readiness Declaration
 
-The FH6 Farm Tool is Controlled MVP Ready for developer/manual use.
+Forza Automation Assist is Controlled MVP Ready for developer/manual use.
 
 This means the current validated desktop UI and guarded command surface are
 ready for careful, supervised use by a developer/operator who understands the

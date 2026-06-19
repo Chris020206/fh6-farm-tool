@@ -1,8 +1,8 @@
-# FH6 Farm Tool - Beta Packaging Prototype Plan v1
+# Forza Automation Assist - Beta Packaging Prototype Plan v1
 
 ## Purpose
 
-This document defines the first packaging prototype milestone for FH6 Farm Tool.
+This document defines the first packaging prototype milestone for Forza Automation Assist.
 
 The goal is not to create a public release.
 
@@ -61,8 +61,8 @@ Excluded:
 Target structure:
 
 ```text
-FH6 Farm Tool v0.2.0-beta/
-|-- FH6 Farm Tool.exe
+Forza Automation Assist v0.2.0-beta/
+|-- Forza Automation Assist.exe
 |-- README_INSTALL.txt
 |-- SAFETY_AND_TRANSPARENCY.txt
 |-- VERSION.txt
@@ -154,7 +154,7 @@ The output of this milestone should be:
 
 ## Exit Condition
 
-This milestone is complete when FH6 Farm Tool can be packaged into a portable
+This milestone is complete when Forza Automation Assist can be packaged into a portable
 beta candidate that a founding tester could reasonably download, extract,
 launch, and evaluate.
 

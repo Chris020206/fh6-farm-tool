@@ -1,4 +1,4 @@
-# FH6 Farm Tool - Packaging Strategy v1
+# Forza Automation Assist - Packaging Strategy v1
 
 ## Purpose
 
@@ -47,7 +47,7 @@ User flow:
 2. Scan zip if desired.
 3. Extract folder.
 4. Scan extracted folder if desired.
-5. Run `FH6 Farm Tool.exe`.
+5. Run `Forza Automation Assist.exe`.
 
 The package should require:
 
@@ -74,13 +74,13 @@ Recommended scheme:
 Build naming:
 
 ```text
-FH6_Farm_Tool_v0.2.0-beta.zip
+Forza_Automation_Assist_v0.2.0-beta.zip
 ```
 
 Executable name:
 
 ```text
-FH6 Farm Tool.exe
+Forza Automation Assist.exe
 ```
 
 Each package should include `VERSION.txt`.
@@ -124,8 +124,8 @@ launch.
 Target zip structure:
 
 ```text
-FH6 Farm Tool v0.2.0-beta/
-|-- FH6 Farm Tool.exe
+Forza Automation Assist v0.2.0-beta/
+|-- Forza Automation Assist.exe
 |-- README_INSTALL.txt
 |-- SAFETY_AND_TRANSPARENCY.txt
 |-- VERSION.txt

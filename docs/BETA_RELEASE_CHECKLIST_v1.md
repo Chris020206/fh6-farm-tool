@@ -1,4 +1,4 @@
-# FH6 Farm Tool - Beta Release Checklist v1
+# Forza Automation Assist - Beta Release Checklist v1
 
 ## Purpose
 

@@ -1,6 +1,6 @@
-# FH6 Farm Tool
+# Forza Automation Assist
 
-Modular FH6 Farm Tool implementation in controlled manual validation and MVP
+Modular Forza Automation Assist implementation in controlled manual validation and MVP
 hardening.
 
 The project is organized as small modules with clear ownership boundaries. This

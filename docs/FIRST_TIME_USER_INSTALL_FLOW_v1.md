@@ -1,4 +1,4 @@
-# FH6 Farm Tool - First-Time User Install Flow v1
+# Forza Automation Assist - First-Time User Install Flow v1
 
 ## Purpose
 
@@ -23,7 +23,7 @@ Phase 3.
 Assume the user:
 
 - has never spoken to the developer
-- has never used FH6 Farm Tool before
+- has never used Forza Automation Assist before
 - has limited knowledge of the project
 - may be cautious about downloading automation software
 - may not understand the difference between automation and cheating
@@ -51,7 +51,7 @@ Success criteria:
 
 Within a short time the user understands:
 
-- FH6 Farm Tool
+- Forza Automation Assist
 - supervised automation
 - Forza Horizon 6 utility
 - not a cheat
@@ -136,7 +136,7 @@ User understands the software before downloading.
 User downloads:
 
 ```text
-FH6_Farm_Tool_v0.2.x-beta.zip
+Forza_Automation_Assist_v0.2.x-beta.zip
 ```
 
 Success criteria:
@@ -183,7 +183,7 @@ User extracts package.
 
 Expected package contents:
 
-- `FH6 Farm Tool.exe`
+- `Forza Automation Assist.exe`
 - `README_INSTALL.txt`
 - `SAFETY_AND_TRANSPARENCY.txt`
 - `VERSION.txt`
@@ -205,7 +205,7 @@ Potential friction:
 User launches:
 
 ```text
-FH6 Farm Tool.exe
+Forza Automation Assist.exe
 ```
 
 User question:
