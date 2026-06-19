@@ -3389,7 +3389,15 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
 
 
 def _build_settings_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
-    from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import (
+        QFrame,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QSizePolicy,
+        QVBoxLayout,
+        QWidget,
+    )
 
     screen = build_settings_screen()
 
@@ -3444,6 +3452,15 @@ def _build_settings_screen_content(layout, shell_spec: PrototypeShellSpec) -> No
     _style_detail_label(boundary_note, shell_spec=shell_spec)
     settings_stage_layout.addWidget(boundary_note)
 
+    license_button = QPushButton("Manage offline license")
+    license_button.setToolTip(
+        "View Community or licensed entitlements and import a signed FAA license."
+    )
+    license_button.clicked.connect(
+        lambda: _show_license_management_dialog(settings_stage)
+    )
+    settings_stage_layout.addWidget(license_button)
+
     layout.addWidget(settings_stage)
     layout.addSpacing(6)
     layout.addLayout(
@@ -3465,6 +3482,12 @@ def _build_settings_screen_content(layout, shell_spec: PrototypeShellSpec) -> No
             shell_spec=shell_spec,
         )
     )
+
+
+def _show_license_management_dialog(parent) -> None:
+    from desktop.license_dialog import show_license_dialog
+
+    show_license_dialog(parent)
 
 
 def _build_companion_mode_widget(

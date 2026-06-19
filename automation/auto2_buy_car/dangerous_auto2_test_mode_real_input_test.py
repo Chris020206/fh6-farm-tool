@@ -23,6 +23,7 @@ from core.input.real_keyboard_backend import (
 )
 from core.input.stop_hotkey import StopHotkeyError, register_stop_hotkey
 from core.stop import StopManager
+from licensing import EntitlementDeniedError, LicenseService, require_execution_entitlement
 from profiles.profile_selection import ProfileSelectionError, load_profile_for_automation
 
 
@@ -144,13 +145,23 @@ def run_auto2_test_mode_real_input(
     cycle_count: int,
     profile_data: dict,
     logger: ProjectLogger,
+    license_service: LicenseService | None = None,
 ) -> Auto2LoopResult:
     stop_manager = StopManager()
 
     try:
+        require_execution_entitlement(
+            "auto2",
+            mode="test",
+            license_service=license_service,
+        )
         input_controller = InputController(create_real_keyboard_backend())
         stop_hotkey_registration = register_f8_stop_hotkey(stop_manager, logger)
-    except (RealKeyboardBackendError, StopHotkeyError) as error:
+    except (
+        EntitlementDeniedError,
+        RealKeyboardBackendError,
+        StopHotkeyError,
+    ) as error:
         raise Auto2TestModeRealInputError(str(error)) from error
 
     runner = Auto2BuyCarRunner(

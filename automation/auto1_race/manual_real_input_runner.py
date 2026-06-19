@@ -11,6 +11,7 @@ from core.input.real_keyboard_backend import (
 )
 from core.input.stop_hotkey import StopHotkeyError, register_stop_hotkey
 from core.stop import StopManager
+from licensing import EntitlementDeniedError, LicenseService, require_execution_entitlement
 from profiles import ProfileLoadError, ProfileManager
 
 
@@ -33,14 +34,21 @@ def run_manual_real_input_auto1(
     logger: ProjectLogger,
     profile_data: dict[str, Any] | None = None,
     stop_manager: StopManager | None = None,
+    license_service: LicenseService | None = None,
 ) -> Auto1LoopResult:
     stop_manager = stop_manager or StopManager()
 
     try:
+        require_execution_entitlement("auto1", license_service=license_service)
         profile_data = load_manual_profile(use_fast_timings, profile_data)
         input_controller = InputController(create_real_keyboard_backend())
         stop_hotkey_registration = register_f8_stop_hotkey(stop_manager, logger)
-    except (ProfileLoadError, RealKeyboardBackendError, StopHotkeyError) as error:
+    except (
+        EntitlementDeniedError,
+        ProfileLoadError,
+        RealKeyboardBackendError,
+        StopHotkeyError,
+    ) as error:
         raise Auto1ManualRunError(str(error)) from error
 
     runner = Auto1RaceRunner(
