@@ -16,6 +16,7 @@ class LicenseParseError(ValueError):
 def canonical_payload_bytes(payload: Mapping[str, object]) -> bytes:
     return json.dumps(
         payload,
+        allow_nan=False,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -24,7 +25,7 @@ def canonical_payload_bytes(payload: Mapping[str, object]) -> bytes:
 
 def parse_signed_license_json(raw_text: str) -> SignedLicense:
     try:
-        document = json.loads(raw_text)
+        document = _load_json(raw_text)
     except (TypeError, json.JSONDecodeError) as error:
         raise LicenseParseError("License file is not valid JSON.") from error
 
@@ -52,13 +53,22 @@ def parse_signed_license_json(raw_text: str) -> SignedLicense:
 
 def parse_license_key(raw_key: str) -> SignedLicense:
     parts = raw_key.strip().split(".")
-    if len(parts) != 3 or parts[0] != "FAA-LIC-v1":
+    if parts[0] != "FAA-LIC-v1" or len(parts) not in (3, 4):
         raise LicenseParseError("License key format is not supported.")
 
-    payload_bytes = _decode_base64url(parts[1], "payload")
-    signature = _decode_base64url(parts[2], "signature")
+    if len(parts) == 4:
+        signing_key_id = _decode_key_id(parts[1])
+        payload_part, signature_part = parts[2], parts[3]
+    else:
+        # Legacy Milestone 1 keys did not carry a key ID. They remain tied to
+        # the default bundled key and cannot participate in key rotation.
+        signing_key_id = DEFAULT_SIGNING_KEY_ID
+        payload_part, signature_part = parts[1], parts[2]
+
+    payload_bytes = _decode_base64url(payload_part, "payload")
+    signature = _decode_base64url(signature_part, "signature")
     try:
-        payload_data = json.loads(payload_bytes.decode("utf-8"))
+        payload_data = _load_json(payload_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise LicenseParseError("License key payload is not valid JSON.") from error
 
@@ -70,12 +80,12 @@ def parse_license_key(raw_key: str) -> SignedLicense:
     normalized_document = {
         "payload": payload_data,
         "signature": base64.b64encode(signature).decode("ascii"),
-        "signing_key_id": DEFAULT_SIGNING_KEY_ID,
+        "signing_key_id": signing_key_id,
     }
     return SignedLicense(
         payload=payload,
         signature=signature,
-        signing_key_id=DEFAULT_SIGNING_KEY_ID,
+        signing_key_id=signing_key_id,
         signed_payload=canonical_payload,
         serialized_json=json.dumps(normalized_document, indent=2, ensure_ascii=False) + "\n",
     )
@@ -171,3 +181,20 @@ def _decode_base64url(value: str, field_name: str) -> bytes:
         return base64.b64decode(value + padding, altchars=b"-_", validate=True)
     except (ValueError, base64.binascii.Error) as error:
         raise LicenseParseError(f"License key {field_name} is not valid base64url.") from error
+
+
+def _decode_key_id(value: str) -> str:
+    try:
+        decoded = _decode_base64url(value, "signing key ID").decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise LicenseParseError("License key signing key ID is not valid UTF-8.") from error
+    if not decoded.strip():
+        raise LicenseParseError("License key signing key ID must not be empty.")
+    return decoded
+
+
+def _load_json(raw_text: str) -> object:
+    def reject_non_finite(value: str) -> object:
+        raise LicenseParseError(f"Non-finite JSON number is not supported: {value}.")
+
+    return json.loads(raw_text, parse_constant=reject_non_finite)

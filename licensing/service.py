@@ -78,7 +78,12 @@ class LicenseService:
             return self._rejected_import(str(error))
         return self._import_verified_candidate(candidate)
 
-    def check_execution(self, automation_id: str, mode: str | None = None) -> EntitlementDecision:
+    def evaluate_execution(
+        self,
+        automation_id: str,
+        mode: str | None = None,
+    ) -> EntitlementDecision:
+        """Evaluate an execution request without mutating usage state."""
         state = self.current_state()
         entitlements = state.entitlements
 
@@ -95,10 +100,10 @@ class LicenseService:
                     "Auto1 execution limit is unavailable.",
                 )
             try:
-                allowed, usage = self.usage_store.consume_auto1_execution(maximum)
+                usage = self.usage_store.execution_count()
             except LicenseStorageError as error:
                 return self._denied(state, LIMIT_AUTO1_MAX_RUNS, str(error))
-            if not allowed:
+            if usage >= maximum:
                 return EntitlementDecision(
                     allowed=False,
                     message=(
@@ -112,7 +117,7 @@ class LicenseService:
                 )
             return EntitlementDecision(
                 allowed=True,
-                message=f"Auto1 execution allowed ({usage}/{maximum} Community runs used).",
+                message=f"Auto1 execution is available ({usage}/{maximum} Community runs used).",
                 edition=state.entitlements.edition,
                 required_feature=FEATURE_AUTO1_FULL,
                 current_usage=usage,
@@ -120,13 +125,25 @@ class LicenseService:
             )
 
         if automation_id == "auto2":
-            required = FEATURE_AUTO2_FULL if mode == "purchase" else FEATURE_AUTO2_NAVIGATION_TEST
+            if mode not in {"test", "purchase"}:
+                return self._unknown_mode_decision(state, "Auto2", mode)
+            required = (
+                FEATURE_AUTO2_FULL
+                if mode == "purchase"
+                else FEATURE_AUTO2_NAVIGATION_TEST
+            )
             if entitlements.allows(FEATURE_AUTO2_FULL) or entitlements.allows(required):
                 return self._allowed(state, required)
             return self._denied(state, required)
 
         if automation_id == "auto3":
-            required = FEATURE_AUTO3_FULL if mode == "unlock" else FEATURE_AUTO3_NAVIGATION_TEST
+            if mode not in {"test", "unlock"}:
+                return self._unknown_mode_decision(state, "Auto3", mode)
+            required = (
+                FEATURE_AUTO3_FULL
+                if mode == "unlock"
+                else FEATURE_AUTO3_NAVIGATION_TEST
+            )
             if entitlements.allows(FEATURE_AUTO3_FULL) or entitlements.allows(required):
                 return self._allowed(state, required)
             return self._denied(state, required)
@@ -135,6 +152,47 @@ class LicenseService:
             state,
             f"FAA.{automation_id}.Full",
             "This automation is not available through the current entitlement boundary.",
+        )
+
+    def consume_auto1_execution(self) -> EntitlementDecision:
+        """Atomically consume one Community run immediately before Auto1 starts."""
+        state = self.current_state()
+        entitlements = state.entitlements
+        if entitlements.allows(FEATURE_AUTO1_UNLIMITED):
+            return self._allowed(state, FEATURE_AUTO1_UNLIMITED)
+        if not entitlements.allows(FEATURE_AUTO1_FULL):
+            return self._denied(state, FEATURE_AUTO1_FULL)
+
+        maximum = entitlements.limits.get(LIMIT_AUTO1_MAX_RUNS)
+        if not isinstance(maximum, int):
+            return self._denied(
+                state,
+                LIMIT_AUTO1_MAX_RUNS,
+                "Auto1 execution limit is unavailable.",
+            )
+        try:
+            allowed, usage = self.usage_store.consume_auto1_execution(maximum)
+        except LicenseStorageError as error:
+            return self._denied(state, LIMIT_AUTO1_MAX_RUNS, str(error))
+        if not allowed:
+            return EntitlementDecision(
+                allowed=False,
+                message=(
+                    f"Community Edition Auto1 limit reached ({usage}/{maximum}). "
+                    "Import a license to continue with unlimited Auto1 execution."
+                ),
+                edition=entitlements.edition,
+                required_feature=FEATURE_AUTO1_UNLIMITED,
+                current_usage=usage,
+                usage_limit=maximum,
+            )
+        return EntitlementDecision(
+            allowed=True,
+            message=f"Auto1 execution started ({usage}/{maximum} Community runs used).",
+            edition=entitlements.edition,
+            required_feature=FEATURE_AUTO1_FULL,
+            current_usage=usage,
+            usage_limit=maximum,
         )
 
     def _import_verified_candidate(self, candidate: SignedLicense) -> LicenseImportResult:
@@ -192,6 +250,20 @@ class LicenseService:
             ),
             state.entitlements.edition,
             feature,
+        )
+
+    @staticmethod
+    def _unknown_mode_decision(
+        state: LicenseState,
+        automation_name: str,
+        mode: str | None,
+    ) -> EntitlementDecision:
+        display_mode = "missing" if mode is None else repr(mode)
+        return EntitlementDecision(
+            False,
+            f"{automation_name} execution mode {display_mode} is not supported.",
+            state.entitlements.edition,
+            f"FAA.{automation_name}.KnownMode",
         )
 
 

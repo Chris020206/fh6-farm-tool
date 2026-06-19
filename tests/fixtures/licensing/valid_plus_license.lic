@@ -1,0 +1,28 @@
+{
+  "payload": {
+    "license_id": "FAA-DEV-FIXTURE-0001",
+    "product": "forza_automation_assist",
+    "license_version": 1,
+    "discord_user_id": "100000000000000001",
+    "edition": "plus",
+    "features": [
+      "FAA.Auto1.Unlimited",
+      "FAA.Auto2.Full",
+      "FAA.Auto3.Full",
+      "FAA.Profiles.Plus"
+    ],
+    "limits": {
+      "FAA.Auto1.MaxRuns": null,
+      "FAA.Auto2.MaxBatch": 50,
+      "FAA.Auto3.MaxBatch": 50
+    },
+    "issued_at": "2026-06-19T12:00:00Z",
+    "expires_at": null,
+    "replaces_license_id": null,
+    "metadata": {
+      "fixture": "milestone_1_conformance"
+    }
+  },
+  "signature": "Q+O/69LMv1lGHUIkm1yAG1nj1oHPtxWO2Xflphb8iB5nO1QuZhg9MMBXjpkMuFlg31W2RpqEy9z0SPRDo9nbBQ==",
+  "signing_key_id": "FAA_KEY_DEV_2026_01"
+}

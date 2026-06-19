@@ -1,5 +1,5 @@
 import base64
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -57,11 +57,26 @@ class LicenseFoundationTest(unittest.TestCase):
 
         self.assertEqual(32, len(bundled_keys[DEFAULT_SIGNING_KEY_ID]))
 
+    def test_fixed_fixture_verifies_with_bundled_public_key(self) -> None:
+        fixture_path = (
+            Path(__file__).parent
+            / "fixtures"
+            / "licensing"
+            / "valid_plus_license.lic"
+        )
+        signed = parse_signed_license_json(fixture_path.read_text(encoding="utf-8"))
+
+        LicenseVerifier().verify(signed)
+
+        self.assertEqual("FAA-DEV-FIXTURE-0001", signed.payload.license_id)
+        self.assertEqual(DEFAULT_SIGNING_KEY_ID, signed.signing_key_id)
+
     def test_pasteable_key_decodes_to_same_license_payload(self) -> None:
         payload = self._payload()
         payload_bytes = canonical_payload_bytes(payload)
         signature = self.private_key.sign(payload_bytes)
-        key = "FAA-LIC-v1.{}.{}".format(
+        key = "FAA-LIC-v1.{}.{}.{}".format(
+            _base64url(DEFAULT_SIGNING_KEY_ID.encode("utf-8")),
             _base64url(payload_bytes),
             _base64url(signature),
         )
@@ -70,6 +85,38 @@ class LicenseFoundationTest(unittest.TestCase):
         self.verifier.verify(signed)
 
         self.assertEqual(payload["license_id"], signed.payload.license_id)
+        self.assertEqual(DEFAULT_SIGNING_KEY_ID, signed.signing_key_id)
+
+    def test_legacy_pasteable_key_uses_default_signing_key_id(self) -> None:
+        payload = self._payload()
+        payload_bytes = canonical_payload_bytes(payload)
+        key = "FAA-LIC-v1.{}.{}".format(
+            _base64url(payload_bytes),
+            _base64url(self.private_key.sign(payload_bytes)),
+        )
+
+        signed = parse_license_key(key)
+
+        self.assertEqual(DEFAULT_SIGNING_KEY_ID, signed.signing_key_id)
+
+    def test_pasteable_key_selects_the_encoded_signing_key_id(self) -> None:
+        signing_key_id = "FAA_KEY_ROTATED_TEST"
+        payload = self._payload()
+        payload_bytes = canonical_payload_bytes(payload)
+        key = "FAA-LIC-v1.{}.{}.{}".format(
+            _base64url(signing_key_id.encode("utf-8")),
+            _base64url(payload_bytes),
+            _base64url(self.private_key.sign(payload_bytes)),
+        )
+        public_key = self.private_key.public_key().public_bytes(
+            Encoding.Raw,
+            PublicFormat.Raw,
+        )
+
+        signed = parse_license_key(key)
+        LicenseVerifier({signing_key_id: public_key}).verify(signed)
+
+        self.assertEqual(signing_key_id, signed.signing_key_id)
 
     def test_malformed_invalid_expired_and_unsupported_licenses_fail_closed(self) -> None:
         with self.assertRaises(LicenseParseError):
@@ -117,7 +164,11 @@ class LicenseFoundationTest(unittest.TestCase):
 
             payload = self._payload()
             payload_bytes = canonical_payload_bytes(payload)
-            key = f"FAA-LIC-v1.{_base64url(payload_bytes)}.{_base64url(self.private_key.sign(payload_bytes))}"
+            key = "FAA-LIC-v1.{}.{}.{}".format(
+                _base64url(DEFAULT_SIGNING_KEY_ID.encode("utf-8")),
+                _base64url(payload_bytes),
+                _base64url(self.private_key.sign(payload_bytes)),
+            )
             key_result = service.import_key(key)
             self.assertTrue(key_result.accepted)
 
@@ -183,25 +234,49 @@ class LicenseFoundationTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             service = self._service(Path(directory))
 
-            decisions = [service.check_execution("auto1") for _ in range(6)]
+            evaluations = [service.evaluate_execution("auto1") for _ in range(6)]
+            self.assertTrue(all(decision.allowed for decision in evaluations))
+            self.assertEqual(0, service.usage_store.execution_count())
+
+            decisions = [service.consume_auto1_execution() for _ in range(6)]
 
             self.assertTrue(all(decision.allowed for decision in decisions[:5]))
             self.assertFalse(decisions[5].allowed)
             self.assertEqual(COMMUNITY_AUTO1_MAX_RUNS, decisions[5].current_usage)
+            self.assertFalse(service.evaluate_execution("auto1").allowed)
 
     def test_community_and_paid_feature_gates(self) -> None:
         with TemporaryDirectory() as directory:
             service = self._service(Path(directory))
-            self.assertTrue(service.check_execution("auto2", "test").allowed)
-            self.assertFalse(service.check_execution("auto2", "purchase").allowed)
-            self.assertTrue(service.check_execution("auto3", "test").allowed)
-            self.assertFalse(service.check_execution("auto3", "unlock").allowed)
-            self.assertFalse(service.check_execution("auto4", "full").allowed)
+            self.assertTrue(service.evaluate_execution("auto2", "test").allowed)
+            self.assertFalse(service.evaluate_execution("auto2", "purchase").allowed)
+            self.assertTrue(service.evaluate_execution("auto3", "test").allowed)
+            self.assertFalse(service.evaluate_execution("auto3", "unlock").allowed)
+            self.assertFalse(service.evaluate_execution("auto4", "full").allowed)
 
             self.assertTrue(service.import_json(self._signed_json()).accepted)
-            self.assertTrue(service.check_execution("auto1").allowed)
-            self.assertTrue(service.check_execution("auto2", "purchase").allowed)
-            self.assertTrue(service.check_execution("auto3", "unlock").allowed)
+            self.assertTrue(service.evaluate_execution("auto1").allowed)
+            self.assertTrue(service.evaluate_execution("auto2", "purchase").allowed)
+            self.assertTrue(service.evaluate_execution("auto3", "unlock").allowed)
+
+    def test_unknown_auto2_and_auto3_modes_fail_closed(self) -> None:
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+
+            for automation_id, mode in (
+                ("auto2", None),
+                ("auto2", "purchsae"),
+                ("auto3", None),
+                ("auto3", "unlok"),
+            ):
+                with self.subTest(automation_id=automation_id, mode=mode):
+                    decision = service.evaluate_execution(automation_id, mode)
+                    self.assertFalse(decision.allowed)
+                    self.assertIn("not supported", decision.message)
+
+            self.assertTrue(service.import_json(self._signed_json()).accepted)
+            self.assertFalse(service.evaluate_execution("auto2", "unknown").allowed)
+            self.assertFalse(service.evaluate_execution("auto3", "unknown").allowed)
 
     def test_corrupt_usage_state_fails_closed(self) -> None:
         with TemporaryDirectory() as directory:
@@ -209,7 +284,7 @@ class LicenseFoundationTest(unittest.TestCase):
             (root / "community_usage.json").write_text("broken", encoding="utf-8")
             service = self._service(root)
 
-            decision = service.check_execution("auto1")
+            decision = service.evaluate_execution("auto1")
 
             self.assertFalse(decision.allowed)
             self.assertIn("unavailable or malformed", decision.message)

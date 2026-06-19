@@ -11,7 +11,12 @@ from core.input.real_keyboard_backend import (
 )
 from core.input.stop_hotkey import StopHotkeyError, register_stop_hotkey
 from core.stop import StopManager
-from licensing import EntitlementDeniedError, LicenseService, require_execution_entitlement
+from licensing import (
+    EntitlementDeniedError,
+    ExecutionEntitlementService,
+    consume_auto1_execution_entitlement,
+    require_execution_entitlement,
+)
 from profiles import ProfileLoadError, ProfileManager
 
 
@@ -34,7 +39,7 @@ def run_manual_real_input_auto1(
     logger: ProjectLogger,
     profile_data: dict[str, Any] | None = None,
     stop_manager: StopManager | None = None,
-    license_service: LicenseService | None = None,
+    license_service: ExecutionEntitlementService | None = None,
 ) -> Auto1LoopResult:
     stop_manager = stop_manager or StopManager()
 
@@ -51,15 +56,17 @@ def run_manual_real_input_auto1(
     ) as error:
         raise Auto1ManualRunError(str(error)) from error
 
-    runner = Auto1RaceRunner(
-        input_controller=input_controller,
-        stop_manager=stop_manager,
-        profile_data=profile_data,
-        logger=logger,
-    )
-
     try:
+        runner = Auto1RaceRunner(
+            input_controller=input_controller,
+            stop_manager=stop_manager,
+            profile_data=profile_data,
+            logger=logger,
+        )
+        consume_auto1_execution_entitlement(license_service=license_service)
         return runner.run_cycles(cycle_count)
+    except EntitlementDeniedError as error:
+        raise Auto1ManualRunError(str(error)) from error
     finally:
         stop_hotkey_registration.unregister()
 

@@ -21,7 +21,11 @@ from core.input.real_keyboard_backend import (
 )
 from core.input.stop_hotkey import StopHotkeyError, register_stop_hotkey
 from core.stop import StopManager
-from licensing import EntitlementDeniedError, LicenseService, require_execution_entitlement
+from licensing import (
+    EntitlementDeniedError,
+    ExecutionEntitlementService,
+    require_execution_entitlement,
+)
 from profiles.profile_selection import ProfileSelectionError, load_profile_for_automation
 
 
@@ -141,7 +145,7 @@ def run_auto2_one_car_purchase_test(
     cycle_count: int,
     profile_data: dict,
     logger: ProjectLogger,
-    license_service: LicenseService | None = None,
+    license_service: ExecutionEntitlementService | None = None,
 ) -> Auto2LoopResult:
     stop_manager = StopManager()
 
