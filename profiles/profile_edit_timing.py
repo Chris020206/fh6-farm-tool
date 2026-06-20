@@ -43,7 +43,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    print("FH6 Farm Tool - Timing Editing")
+    print("Forza Automation Assist - Timing Editing")
     print()
     print("Recommendation: create a profile backup before editing timings.")
     print()

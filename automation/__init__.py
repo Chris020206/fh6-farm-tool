@@ -1,1 +1,1 @@
-"""Automation package placeholder."""
+"""Automation modules for validated Forza Horizon workflows."""

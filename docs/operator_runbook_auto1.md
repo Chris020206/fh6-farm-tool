@@ -48,11 +48,13 @@ adaptive FH6 state detection.
 Official guarded Auto1 command:
 
 ```powershell
-python -B -m automation.auto1_race.run_auto1 25 --confirm
+python -B -m automation.auto1_race.run_auto1 5 --confirm
 ```
 
-`25` is the finite cycle count. One cycle means one Auto1 race restart and
-drive sequence.
+`5` is the finite Community Edition cycle count. One cycle means one Auto1
+race restart and drive sequence. Community Edition permits 1-5 cycles per
+execution and may be started again later. Licensed editions permit up to 25
+cycles per execution.
 
 `--confirm` is required. It confirms that the operator understands Auto1 will
 send real keyboard input.
@@ -60,7 +62,7 @@ send real keyboard input.
 Optional profile usage:
 
 ```powershell
-python -B -m automation.auto1_race.run_auto1 25 --confirm --profile auto1_safe_slow
+python -B -m automation.auto1_race.run_auto1 5 --confirm --profile auto1_safe_slow
 ```
 
 If `--profile` is omitted, the official Auto1 profile is used.

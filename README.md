@@ -22,12 +22,20 @@ and exits without running automation or sending keyboard input.
 - `app/` application coordination
 - `automation/` Auto1, Auto2, and Auto3 automation modules
 - `core/` shared runtime systems
+- `product/` automation, profile, and readiness product models
+- `frontend/` frontend-safe preparation controller
+- `sessions/` run-session and operational-history models
 - `profiles/` official/custom profile storage, validation, and commands
-- `settings/` future configuration handling
+- `settings/` application configuration loading
 - `app_logging/` application logging support
 - `ui/` product-facing non-visual UI structure
 - `desktop/` PySide6 desktop UI application foundation
+- `integrations/` isolated Windows integration helpers
+- `licensing/` offline verification, entitlement, and admin tooling
 - `assets/` static project assets
+- `package_files/` portable beta package documents
+- `packaging/` repeatable beta package assembly
+- `tools/` manual diagnostic utilities
 - `tests/` test suite
 - `config/` configuration files
 - `docs/` project documentation
@@ -93,11 +101,13 @@ stop hotkey.
 The official guarded manual Auto1 command is:
 
 ```powershell
-python -B -m automation.auto1_race.run_auto1 25 --confirm
+python -B -m automation.auto1_race.run_auto1 5 --confirm
 ```
 
-It still requires a finite cycle count and explicit confirmation, and it is not
-connected to normal startup.
+Community Edition permits 1-5 cycles per execution and may be started again
+later. Licensed editions retain the validated maximum of 25 cycles per
+execution. The command always requires a finite cycle count and explicit
+confirmation, and it is not connected to normal startup.
 
 Auto2 currently provides guarded real-input commands for test-mode menu
 validation and purchase validation. Validated behavior includes test mode,

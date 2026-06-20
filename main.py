@@ -4,7 +4,7 @@ from settings.config_loader import ConfigurationError, load_default_settings
 
 def main() -> int:
     logger = configure_logging()
-    logger.info("FH6 Farm Tool startup started.", category="startup")
+    logger.info("Forza Automation Assist startup started.", category="startup")
 
     try:
         settings = load_default_settings()
@@ -17,7 +17,7 @@ def main() -> int:
         logger = configure_logging(str(logging_settings.get("level", "INFO")))
 
     logger.info("Configuration loaded successfully.", category="config")
-    logger.info("FH6 Farm Tool startup completed.", category="startup")
+    logger.info("Forza Automation Assist startup completed.", category="startup")
     return 0
 
 

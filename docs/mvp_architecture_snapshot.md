@@ -103,7 +103,7 @@ Current status:
 - current start-row assumption is row `A`
 - no-unlock test modes stop before perk unlock
 - F8 stop supported in guarded real-input commands
-- no production Auto3 command exists
+- no unattended or unguarded Auto3 command exists
 
 Important commands:
 

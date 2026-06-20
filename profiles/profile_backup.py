@@ -35,7 +35,7 @@ def main() -> int:
         return 1
 
     print_info_summary(
-        "FH6 Farm Tool - Profile Backup",
+        "Forza Automation Assist - Profile Backup",
         [
             ("Backup location", backup_path),
             ("Files copied", files_copied),

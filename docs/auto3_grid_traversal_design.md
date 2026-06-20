@@ -10,7 +10,7 @@ Current validated boundary:
 - start row: `A`
 - validated traversal: `A1 -> B1 -> C1 -> A2`
 - guarded/manual real-input validation exists
-- no production Auto3 command exists
+- no unattended or unguarded Auto3 command exists
 - no unattended Auto3 mode exists
 
 ## Grid Model

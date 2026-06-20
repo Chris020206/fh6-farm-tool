@@ -11,7 +11,7 @@ Current hard limits:
 - start row: `A`
 - validated traversal: `A1 -> B1 -> C1 -> A2`
 - real-input Auto3 remains dangerous/manual/test-only
-- no production Auto3 command exists
+- no unattended or unguarded Auto3 command exists
 - no unattended Auto3 mode exists
 - no Auto4/remove-car behavior exists
 

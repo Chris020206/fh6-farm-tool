@@ -203,16 +203,16 @@ Postponed:
 
 Current baseline:
 
-- No installer or packaged release exists.
+- A repeatable PyInstaller onedir and ZIP assembly workflow exists.
+- The generated portable beta artifact has passed clean-folder validation.
 - Desktop UI exists and is validated for controlled/manual use.
 - The UI is not public launch-ready.
 
 Remaining gaps:
 
-- Packaging strategy.
-- Dependency installation instructions.
-- Release checklist.
-- Versioned changelog.
+- Repeatable release-build ownership and release recordkeeping.
+- Founding-tester distribution and support validation.
+- Versioned release notes and artifact checksum publication.
 - Public-launch UX hardening.
 
 Postponed:

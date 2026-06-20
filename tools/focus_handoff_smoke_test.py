@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
 
-    print("FH6 Farm Tool - Focus Handoff Smoke Test")
+    print("Forza Automation Assist - Focus Handoff Smoke Test")
     print("Mode: manual feasibility spike")
     print("Safety: no automation keys are pressed")
     print()

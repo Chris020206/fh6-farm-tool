@@ -27,7 +27,7 @@ The following systems are included in the MVP scope:
 The following systems are explicitly outside the current MVP scope:
 
 - Auto4 Remove Cars.
-- Packaging/installer.
+- Public installer and signed release packaging.
 - F7 start hotkey.
 - Pause/resume.
 - Auto3 production/unattended command.
@@ -38,10 +38,9 @@ The following systems are explicitly outside the current MVP scope:
 - Profile navigation-count editing.
 - Timing optimization.
 
-UI/dashboard work is outside the current controlled developer/manual MVP
-surface. Per the M11 strategic doctrine, this does not mean UI is post-launch
-or optional for public release. A restrained premium desktop UI is required
-before a public paid launch.
+The guarded desktop UI is part of the current controlled developer/manual MVP
+surface. It is not public launch-ready. Public paid launch still requires
+further desktop hardening, packaging, and release validation.
 
 ## Why Auto3 Is Included
 

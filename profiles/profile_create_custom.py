@@ -43,7 +43,7 @@ def main() -> int:
         return 1
 
     print_info_summary(
-        "FH6 Farm Tool - Custom Profile Creation",
+        "Forza Automation Assist - Custom Profile Creation",
         [
             ("Source profile", args.source),
             ("Created profile path", created_profile_path),

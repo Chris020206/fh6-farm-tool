@@ -5,7 +5,7 @@ from typing import Protocol
 from app_logging.log_manager import ProjectLogger
 
 
-APP_TITLE = "FH6 Farm Tool"
+APP_TITLE = "Forza Automation Assist"
 
 
 @dataclass(frozen=True)

@@ -1,1 +1,1 @@
-"""Test package placeholder."""
+"""Forza Automation Assist test suite."""

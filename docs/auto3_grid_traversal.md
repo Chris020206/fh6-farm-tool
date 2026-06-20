@@ -12,7 +12,7 @@ Current validated boundary:
 - start row: `A`
 - validated traversal: `A1 -> B1 -> C1 -> A2`
 - real-input usage remains dangerous/manual/test-only
-- no production Auto3 command exists
+- no unattended or unguarded Auto3 command exists
 - no unattended Auto3 mode exists
 
 ## Grid Model

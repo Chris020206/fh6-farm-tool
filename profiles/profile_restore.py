@@ -51,7 +51,7 @@ def main() -> int:
         return 1
 
     print_info_summary(
-        "FH6 Farm Tool - Profile Restore",
+        "Forza Automation Assist - Profile Restore",
         [
             ("Backup restored", restore_source),
             ("Safety backup location", safety_backup_path),

@@ -1,1 +1,1 @@
-"""Settings package placeholder."""
+"""Application configuration loading."""

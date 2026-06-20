@@ -19,7 +19,7 @@ DISPLAY_FIELDS = [
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Read-only summary of official FH6 Farm Tool profiles. Example: "
+            "Read-only summary of official Forza Automation Assist profiles. Example: "
             "python -B -m profiles.profile_summary --type auto2_buy_car"
         )
     )
