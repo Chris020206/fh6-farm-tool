@@ -91,6 +91,15 @@ def parse_license_key(raw_key: str) -> SignedLicense:
     )
 
 
+def encode_license_key(signed_license: SignedLicense) -> str:
+    """Encode a verified-format license as the current four-segment paste key."""
+    return "FAA-LIC-v1.{}.{}.{}".format(
+        _encode_base64url(signed_license.signing_key_id.encode("utf-8")),
+        _encode_base64url(signed_license.signed_payload),
+        _encode_base64url(signed_license.signature),
+    )
+
+
 def _parse_payload(data: Mapping[str, object]) -> LicensePayload:
     license_version = _require_int(data, "license_version")
     features_data = data.get("features")
@@ -181,6 +190,10 @@ def _decode_base64url(value: str, field_name: str) -> bytes:
         return base64.b64decode(value + padding, altchars=b"-_", validate=True)
     except (ValueError, base64.binascii.Error) as error:
         raise LicenseParseError(f"License key {field_name} is not valid base64url.") from error
+
+
+def _encode_base64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 
 
 def _decode_key_id(value: str) -> str:

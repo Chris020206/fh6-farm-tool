@@ -8,6 +8,7 @@ Documents are ordered as follows:
 2. Feature Gating & Edition Logic (Part 7)
 3. Final Licensing System Architecture & Roadmap (Parts 1-9)
 4. FAA License Format v1 (byte-level signing and paste-key contract)
+5. FAA Manual License Administration v1 (Milestone 2 CLI contract)
 
 The Final Licensing System Architecture & Roadmap is the primary implementation reference.
 
