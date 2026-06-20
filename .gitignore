@@ -27,6 +27,7 @@ build/
 dist/
 output/
 *.spec
+*.zip
 
 # Local licensing authority secrets and records
 *.pem

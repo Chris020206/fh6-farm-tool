@@ -14,12 +14,14 @@ Recommended path:
 - validate launch, UI rendering, assets, profiles, and no automation-on-startup
   before any founding tester distribution
 
-Main blockers discovered:
+Current build readiness:
 
-- PyInstaller is not installed in the current environment.
-- No dependency file exists yet in the repo root.
-- Package text files such as `README_INSTALL.txt`, `SAFETY_AND_TRANSPARENCY.txt`,
-  `VERSION.txt`, and `KNOWN_ISSUES.txt` do not exist yet as package-ready files.
+- PyInstaller is installed in the current environment.
+- Root dependency requirements are documented in `requirements.txt`.
+- Required package text files exist under `package_files/`.
+- The assembly script creates both the ZIP-ready folder and the named beta ZIP.
+- A current `dist/Forza Automation Assist/` PyInstaller build is still required
+  before assembly can run successfully.
 
 No automation behavior needs to change for the first packaging prototype.
 
@@ -101,7 +103,7 @@ Observed in the current environment:
 
 - PySide6 is installed.
 - `keyboard` is installed.
-- PyInstaller is not installed.
+- PyInstaller is installed.
 
 Likely packaging dependencies:
 
@@ -219,7 +221,8 @@ Current lower risks:
 
 ## First Build Command Recommendation
 
-Install PyInstaller in the packaging environment first.
+Install the dependencies from `requirements.txt` in a clean packaging
+environment before building.
 
 Initial prototype command direction:
 
@@ -230,7 +233,8 @@ python -B -m PyInstaller --noconfirm --clean --windowed --onedir --name "Forza A
   --add-data "assets;assets" `
   --add-data "profiles;profiles" `
   --add-data "config;config" `
-  --hidden-import automation.auto1_race.run_auto1 `
+  --hidden-import keyboard `
+  --hidden-import automation.auto1_race.manual_real_input_runner `
   --hidden-import automation.auto2_buy_car.dangerous_auto2_test_mode_real_input_test `
   --hidden-import automation.auto2_buy_car.dangerous_auto2_one_car_purchase_test `
   --hidden-import automation.auto3_skill_tree.dangerous_auto3_multi_car_test_mode_real_input_test `
@@ -306,18 +310,19 @@ optimize early.
 
 Next action:
 
-Create the first PyInstaller `--onedir` packaging prototype in a controlled
-local packaging pass.
+Create a current PyInstaller `--onedir` build named `Forza Automation Assist`,
+then run the repeatable package assembly script.
 
 Before building:
 
-- install PyInstaller in the packaging environment
-- generate package-ready text files
+- install `requirements.txt` in the packaging environment
+- confirm the package-ready text files
 - confirm package asset paths
 - keep build output out of source control
 
 After building:
 
+- run `python -B packaging/build_beta_package.py`
 - launch the packaged executable
 - verify assets, profiles, and config
 - record package size

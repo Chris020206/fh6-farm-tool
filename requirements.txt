@@ -1,2 +1,4 @@
 PySide6
 cryptography>=42,<47
+keyboard
+pyinstaller>=6,<7

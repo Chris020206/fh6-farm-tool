@@ -2,7 +2,7 @@ Forza Automation Assist
 
 Version: v0.2.0-beta
 Build Type: Founding Tester Beta
-Release Date: 2026-07-17-01
+Release Date: TBD
 
 Changelog
 - Initial founding tester beta package candidate.
