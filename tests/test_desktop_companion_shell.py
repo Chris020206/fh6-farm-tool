@@ -1,4 +1,9 @@
 import unittest
+from unittest.mock import Mock
+
+from desktop.execution.auto1_desktop_execution import (
+    current_auto1_loop_count_limit,
+)
 
 from desktop.companion_shell import (
     AUTO1_LOOP_COUNT_MAX,
@@ -51,6 +56,7 @@ from integrations.windows_focus_handoff import (
     FocusHandoffStatus,
     WindowCandidate,
 )
+from licensing.models import EntitlementDecision
 from ui.automation_environment import AutomationEnvironmentSectionId
 from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 
@@ -278,7 +284,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             _parse_auto1_race_duration_override("not-a-number")
 
-    def test_auto1_loop_count_is_bounded_basic_runtime_value(self) -> None:
+    def test_auto1_loop_count_is_bounded_licensed_runtime_value(self) -> None:
         self.assertEqual(1, AUTO1_LOOP_COUNT_MIN)
         self.assertEqual(25, AUTO1_LOOP_COUNT_MAX)
         self.assertEqual(1, _parse_auto1_loop_count("1"))
@@ -294,6 +300,37 @@ class DesktopCompanionShellTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             _parse_auto1_loop_count("not-a-number")
+
+    def test_community_auto1_loop_count_is_capped_at_five(self) -> None:
+        self.assertEqual(5, _parse_auto1_loop_count("5", maximum=5))
+
+        with self.assertRaisesRegex(ValueError, "between 1 and 5"):
+            _parse_auto1_loop_count("6", maximum=5)
+
+    def test_auto1_loop_limit_comes_from_current_entitlement(self) -> None:
+        service = Mock()
+        service.evaluate_execution.return_value = EntitlementDecision(
+            allowed=True,
+            message="Allowed.",
+            edition="community",
+            required_feature="FAA.Auto1.Full",
+            max_loops_per_execution=5,
+        )
+
+        self.assertEqual(5, current_auto1_loop_count_limit(service))
+        service.evaluate_execution.assert_called_once_with("auto1")
+
+    def test_licensed_auto1_loop_limit_remains_twenty_five(self) -> None:
+        service = Mock()
+        service.evaluate_execution.return_value = EntitlementDecision(
+            allowed=True,
+            message="Allowed.",
+            edition="basic",
+            required_feature="FAA.Auto1.Unlimited",
+            max_loops_per_execution=25,
+        )
+
+        self.assertEqual(25, current_auto1_loop_count_limit(service))
 
     def test_auto2_purchase_count_is_bounded_runtime_value(self) -> None:
         self.assertEqual(1, _parse_auto2_purchase_count("1"))

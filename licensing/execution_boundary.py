@@ -15,28 +15,21 @@ class ExecutionEntitlementService(Protocol):
         self,
         automation_id: str,
         mode: str | None = None,
+        requested_count: int | None = None,
     ) -> EntitlementDecision: ...
-
-    def consume_auto1_execution(self) -> EntitlementDecision: ...
 
 
 def require_execution_entitlement(
     automation_id: str,
     mode: str | None = None,
+    requested_count: int | None = None,
     license_service: ExecutionEntitlementService | None = None,
 ) -> EntitlementDecision:
     service = license_service or LicenseService()
-    decision = service.evaluate_execution(automation_id, mode)
-    if not decision.allowed:
-        raise EntitlementDeniedError(decision.message)
-    return decision
-
-
-def consume_auto1_execution_entitlement(
-    license_service: ExecutionEntitlementService | None = None,
-) -> EntitlementDecision:
-    service = license_service or LicenseService()
-    decision = service.consume_auto1_execution()
+    if requested_count is None:
+        decision = service.evaluate_execution(automation_id, mode)
+    else:
+        decision = service.evaluate_execution(automation_id, mode, requested_count)
     if not decision.allowed:
         raise EntitlementDeniedError(decision.message)
     return decision

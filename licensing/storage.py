@@ -1,15 +1,11 @@
-"""Atomic local storage for the active license and Community usage state."""
+"""Atomic local storage for the active offline license."""
 
-import json
 import os
 from pathlib import Path
-import threading
 
 
 APP_DATA_DIRECTORY_NAME = "ForzaAutomationAssist"
 LICENSE_FILE_NAME = "license.lic"
-USAGE_FILE_NAME = "community_usage.json"
-_USAGE_LOCK = threading.Lock()
 
 
 class LicenseStorageError(OSError):
@@ -38,40 +34,6 @@ class LicenseStorage:
 
     def write(self, serialized_license: str) -> None:
         _atomic_write_text(self.license_path, serialized_license)
-
-
-class CommunityUsageStore:
-    def __init__(self, directory: Path | None = None) -> None:
-        self.directory = Path(directory) if directory is not None else default_app_data_directory()
-        self.usage_path = self.directory / USAGE_FILE_NAME
-
-    def execution_count(self) -> int:
-        with _USAGE_LOCK:
-            return self._read_count()
-
-    def consume_auto1_execution(self, maximum: int) -> tuple[bool, int]:
-        with _USAGE_LOCK:
-            current = self._read_count()
-            if current >= maximum:
-                return False, current
-            updated = current + 1
-            _atomic_write_text(
-                self.usage_path,
-                json.dumps({"version": 1, "auto1_executions": updated}, indent=2) + "\n",
-            )
-            return True, updated
-
-    def _read_count(self) -> int:
-        if not self.usage_path.exists():
-            return 0
-        try:
-            data = json.loads(self.usage_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise LicenseStorageError("Community usage state is unavailable or malformed.") from error
-        count = data.get("auto1_executions") if isinstance(data, dict) else None
-        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-            raise LicenseStorageError("Community usage state is unavailable or malformed.")
-        return count
 
 
 def _atomic_write_text(path: Path, content: str) -> None:

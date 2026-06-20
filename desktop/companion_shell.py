@@ -15,6 +15,7 @@ from desktop.execution.auto1_desktop_execution import (
     AUTO1_RACE_DURATION_MIN_SECONDS,
     auto1_execution_race_duration,
     build_auto1_ui_execution_profile,
+    current_auto1_loop_count_limit,
     load_auto1_default_race_duration,
     parse_auto1_loop_count,
     parse_auto1_race_duration_override,
@@ -597,6 +598,9 @@ def launch_pyside6_shell_prototype() -> int:
                 )
                 if screen.screen_id == ScreenId.HOME
                 else None,
+                on_license_changed=(
+                    lambda: reset_preparation_state["callback"]()
+                ),
             )
         )
 
@@ -1252,8 +1256,11 @@ def _parse_auto1_race_duration_override(raw_value: str | None) -> float:
     return parse_auto1_race_duration_override(raw_value)
 
 
-def _parse_auto1_loop_count(raw_value: str | None) -> int:
-    return parse_auto1_loop_count(raw_value)
+def _parse_auto1_loop_count(
+    raw_value: str | None,
+    maximum: int = AUTO1_LOOP_COUNT_MAX,
+) -> int:
+    return parse_auto1_loop_count(raw_value, maximum)
 
 
 def _auto1_execution_race_duration(displayed_race_duration: float) -> float:
@@ -1556,6 +1563,7 @@ def _build_screen_widget(
     home_concept: PrototypeHomeConcept | None = None,
     open_automation_environment=None,
     open_profiles=None,
+    on_license_changed=None,
 ):
     from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
@@ -1602,7 +1610,11 @@ def _build_screen_widget(
         return container
 
     if screen.screen_id == ScreenId.SETTINGS:
-        _build_settings_screen_content(layout, shell_spec=shell_spec)
+        _build_settings_screen_content(
+            layout,
+            shell_spec=shell_spec,
+            on_license_changed=on_license_changed,
+        )
         layout.addStretch()
         return container
 
@@ -1856,6 +1868,15 @@ def _build_automation_environment_widget(
                 selected=button_automation_id == automation_id,
             )
 
+        auto1_loop_limit = current_auto1_loop_count_limit()
+        auto1_entitlement_label = (
+            "Community"
+            if auto1_loop_limit < AUTO1_LOOP_COUNT_MAX
+            else "licensed"
+        )
+        if automation_id == "auto1":
+            auto1_loop_count_input.setMaximum(auto1_loop_limit)
+
         definition = get_automation_definition(automation_id)
         profile_id = definition.available_profiles[0]
         requested_count = _desktop_requested_count(
@@ -1951,7 +1972,8 @@ def _build_automation_environment_widget(
                     "Race drive duration range: "
                     f"{AUTO1_RACE_DURATION_MIN_SECONDS:.0f}-"
                     f"{AUTO1_RACE_DURATION_MAX_SECONDS:.0f} seconds. "
-                    f"Loop range: {AUTO1_LOOP_COUNT_MIN}-{AUTO1_LOOP_COUNT_MAX}.",
+                    f"Loop range: {AUTO1_LOOP_COUNT_MIN}-{auto1_loop_limit} "
+                    f"for the active {auto1_entitlement_label} entitlement.",
                 ),
             )
         elif automation_id == "auto2":
@@ -3388,7 +3410,11 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
     update_section_styles(0)
 
 
-def _build_settings_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
+def _build_settings_screen_content(
+    layout,
+    shell_spec: PrototypeShellSpec,
+    on_license_changed=None,
+) -> None:
     from PySide6.QtWidgets import (
         QFrame,
         QHBoxLayout,
@@ -3456,9 +3482,12 @@ def _build_settings_screen_content(layout, shell_spec: PrototypeShellSpec) -> No
     license_button.setToolTip(
         "View Community or licensed entitlements and import a signed FAA license."
     )
-    license_button.clicked.connect(
-        lambda: _show_license_management_dialog(settings_stage)
-    )
+    def manage_license() -> None:
+        _show_license_management_dialog(settings_stage)
+        if on_license_changed is not None:
+            on_license_changed()
+
+    license_button.clicked.connect(manage_license)
     settings_stage_layout.addWidget(license_button)
 
     layout.addWidget(settings_stage)

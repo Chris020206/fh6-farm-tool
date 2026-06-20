@@ -15,7 +15,9 @@ FEATURE_PROFILES_BASIC = "FAA.Profiles.Basic"
 FEATURE_PROFILES_PLUS = "FAA.Profiles.Plus"
 FEATURE_BATCH_LIMIT_EXTENDED = "FAA.BatchLimit.Extended"
 
-LIMIT_AUTO1_MAX_RUNS = "FAA.Auto1.MaxRuns"
+# The signed claim identifier is retained for v1 license compatibility. Its
+# enforced meaning is the maximum Auto1 loops allowed in one execution.
+LIMIT_AUTO1_MAX_LOOPS_PER_EXECUTION = "FAA.Auto1.MaxRuns"
 
 SUPPORTED_EDITIONS = frozenset(
     {"basic", "plus", "founding", "developer_admin"}

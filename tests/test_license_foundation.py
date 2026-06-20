@@ -15,7 +15,10 @@ from licensing.constants import (
     FEATURE_AUTO3_FULL,
     PRODUCT_ID,
 )
-from licensing.entitlements import COMMUNITY_AUTO1_MAX_RUNS
+from licensing.entitlements import (
+    COMMUNITY_AUTO1_MAX_LOOPS_PER_EXECUTION,
+    LICENSED_AUTO1_MAX_LOOPS_PER_EXECUTION,
+)
 from licensing.parsing import (
     LicenseParseError,
     canonical_payload_bytes,
@@ -23,7 +26,7 @@ from licensing.parsing import (
     parse_signed_license_json,
 )
 from licensing.service import LicenseService
-from licensing.storage import CommunityUsageStore, LicenseStorage
+from licensing.storage import LicenseStorage
 from licensing.verification import (
     LicenseVerificationError,
     LicenseVerifier,
@@ -230,20 +233,48 @@ class LicenseFoundationTest(unittest.TestCase):
                         service.current_state().license.payload.license_id,
                     )
 
-    def test_community_auto1_allows_exactly_five_execution_attempts(self) -> None:
+    def test_community_auto1_allows_repeated_five_loop_executions(self) -> None:
         with TemporaryDirectory() as directory:
             service = self._service(Path(directory))
 
-            evaluations = [service.evaluate_execution("auto1") for _ in range(6)]
+            evaluations = [
+                service.evaluate_execution("auto1", requested_count=5)
+                for _ in range(10)
+            ]
+
             self.assertTrue(all(decision.allowed for decision in evaluations))
-            self.assertEqual(0, service.usage_store.execution_count())
+            self.assertTrue(
+                all(
+                    decision.max_loops_per_execution
+                    == COMMUNITY_AUTO1_MAX_LOOPS_PER_EXECUTION
+                    for decision in evaluations
+                )
+            )
 
-            decisions = [service.consume_auto1_execution() for _ in range(6)]
+    def test_community_auto1_refuses_more_than_five_loops(self) -> None:
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
 
-            self.assertTrue(all(decision.allowed for decision in decisions[:5]))
-            self.assertFalse(decisions[5].allowed)
-            self.assertEqual(COMMUNITY_AUTO1_MAX_RUNS, decisions[5].current_usage)
-            self.assertFalse(service.evaluate_execution("auto1").allowed)
+            decision = service.evaluate_execution("auto1", requested_count=6)
+
+            self.assertFalse(decision.allowed)
+            self.assertIn("at most 5 Auto1 loops", decision.message)
+
+    def test_licensed_auto1_allows_up_to_twenty_five_loops(self) -> None:
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+            self.assertTrue(service.import_json(self._signed_json()).accepted)
+
+            allowed = service.evaluate_execution("auto1", requested_count=25)
+            refused = service.evaluate_execution("auto1", requested_count=26)
+
+            self.assertTrue(allowed.allowed)
+            self.assertEqual(
+                LICENSED_AUTO1_MAX_LOOPS_PER_EXECUTION,
+                allowed.max_loops_per_execution,
+            )
+            self.assertFalse(refused.allowed)
+            self.assertIn("at most 25 Auto1 loops", refused.message)
 
     def test_community_and_paid_feature_gates(self) -> None:
         with TemporaryDirectory() as directory:
@@ -278,21 +309,19 @@ class LicenseFoundationTest(unittest.TestCase):
             self.assertFalse(service.evaluate_execution("auto2", "unknown").allowed)
             self.assertFalse(service.evaluate_execution("auto3", "unknown").allowed)
 
-    def test_corrupt_usage_state_fails_closed(self) -> None:
+    def test_legacy_community_usage_state_no_longer_limits_auto1(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "community_usage.json").write_text("broken", encoding="utf-8")
             service = self._service(root)
 
-            decision = service.evaluate_execution("auto1")
+            decision = service.evaluate_execution("auto1", requested_count=5)
 
-            self.assertFalse(decision.allowed)
-            self.assertIn("unavailable or malformed", decision.message)
+            self.assertTrue(decision.allowed)
 
     def _service(self, directory: Path) -> LicenseService:
         return LicenseService(
             storage=LicenseStorage(directory),
-            usage_store=CommunityUsageStore(directory),
             verifier=self.verifier,
         )
 

@@ -1,10 +1,13 @@
 """Offline licensing foundation for Forza Automation Assist."""
 
-from licensing.entitlements import COMMUNITY_AUTO1_MAX_RUNS, community_entitlements
+from licensing.entitlements import (
+    COMMUNITY_AUTO1_MAX_LOOPS_PER_EXECUTION,
+    LICENSED_AUTO1_MAX_LOOPS_PER_EXECUTION,
+    community_entitlements,
+)
 from licensing.execution_boundary import (
     EntitlementDeniedError,
     ExecutionEntitlementService,
-    consume_auto1_execution_entitlement,
     require_execution_entitlement,
 )
 from licensing.models import (
@@ -18,7 +21,7 @@ from licensing.models import (
 from licensing.service import LicenseService
 
 __all__ = [
-    "COMMUNITY_AUTO1_MAX_RUNS",
+    "COMMUNITY_AUTO1_MAX_LOOPS_PER_EXECUTION",
     "EntitlementDecision",
     "EntitlementDeniedError",
     "EntitlementProfile",
@@ -27,8 +30,8 @@ __all__ = [
     "LicensePayload",
     "LicenseService",
     "LicenseState",
+    "LICENSED_AUTO1_MAX_LOOPS_PER_EXECUTION",
     "SignedLicense",
     "community_entitlements",
-    "consume_auto1_execution_entitlement",
     "require_execution_entitlement",
 ]

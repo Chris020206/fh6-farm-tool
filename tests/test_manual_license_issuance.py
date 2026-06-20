@@ -28,7 +28,7 @@ from licensing.constants import (
 )
 from licensing.parsing import parse_license_key, parse_signed_license_json
 from licensing.service import LicenseService
-from licensing.storage import CommunityUsageStore, LicenseStorage
+from licensing.storage import LicenseStorage
 from licensing.verification import LicenseVerifier
 
 
@@ -176,7 +176,6 @@ class ManualLicenseIssuanceTest(unittest.TestCase):
         desktop_root = self.root / "desktop_state"
         desktop_service = LicenseService(
             storage=LicenseStorage(desktop_root),
-            usage_store=CommunityUsageStore(desktop_root),
             verifier=self.verifier,
         )
         self.assertTrue(

@@ -52,9 +52,11 @@ def start_auto1_ui_execution(
                 run_manual_real_input_auto1,
             )
 
+            loop_limit = current_auto1_loop_count_limit()
             result = run_manual_real_input_auto1(
                 cycle_count=parse_auto1_loop_count(
-                    companion_state.get("requested_cycles")
+                    companion_state.get("requested_cycles"),
+                    maximum=loop_limit,
                 ),
                 use_fast_timings=False,
                 logger=logger,
@@ -140,18 +142,44 @@ def parse_auto1_race_duration_override(raw_value: str | None) -> float:
     return race_duration
 
 
-def parse_auto1_loop_count(raw_value: str | None) -> int:
+def parse_auto1_loop_count(
+    raw_value: str | None,
+    maximum: int = AUTO1_LOOP_COUNT_MAX,
+) -> int:
+    if (
+        isinstance(maximum, bool)
+        or not isinstance(maximum, int)
+        or not AUTO1_LOOP_COUNT_MIN <= maximum <= AUTO1_LOOP_COUNT_MAX
+    ):
+        raise ValueError("Auto1 loop count limit is invalid.")
     try:
         loop_count = int(raw_value or str(AUTO1_LOOP_COUNT_MIN))
     except (TypeError, ValueError) as error:
         raise ValueError("Auto1 loop count must be an integer.") from error
 
-    if not AUTO1_LOOP_COUNT_MIN <= loop_count <= AUTO1_LOOP_COUNT_MAX:
+    if not AUTO1_LOOP_COUNT_MIN <= loop_count <= maximum:
         raise ValueError(
-            f"Auto1 loop count must be between {AUTO1_LOOP_COUNT_MIN} and {AUTO1_LOOP_COUNT_MAX}."
+            f"Auto1 loop count must be between {AUTO1_LOOP_COUNT_MIN} and {maximum}."
         )
 
     return loop_count
+
+
+def current_auto1_loop_count_limit(license_service=None) -> int:
+    from licensing.service import LicenseService
+
+    service = license_service or LicenseService()
+    decision = service.evaluate_execution("auto1")
+    if not decision.allowed:
+        raise ValueError(decision.message)
+    maximum = decision.max_loops_per_execution
+    if (
+        isinstance(maximum, bool)
+        or not isinstance(maximum, int)
+        or not AUTO1_LOOP_COUNT_MIN <= maximum <= AUTO1_LOOP_COUNT_MAX
+    ):
+        raise ValueError("Auto1 loop count limit is unavailable.")
+    return maximum
 
 
 def auto1_execution_race_duration(displayed_race_duration: float) -> float:

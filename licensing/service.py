@@ -10,9 +10,13 @@ from licensing.constants import (
     FEATURE_AUTO2_NAVIGATION_TEST,
     FEATURE_AUTO3_FULL,
     FEATURE_AUTO3_NAVIGATION_TEST,
-    LIMIT_AUTO1_MAX_RUNS,
+    LIMIT_AUTO1_MAX_LOOPS_PER_EXECUTION,
 )
-from licensing.entitlements import community_entitlements, entitlements_from_license
+from licensing.entitlements import (
+    LICENSED_AUTO1_MAX_LOOPS_PER_EXECUTION,
+    community_entitlements,
+    entitlements_from_license,
+)
 from licensing.models import (
     EntitlementDecision,
     LicenseImportResult,
@@ -20,7 +24,7 @@ from licensing.models import (
     SignedLicense,
 )
 from licensing.parsing import LicenseParseError, parse_license_key, parse_signed_license_json
-from licensing.storage import CommunityUsageStore, LicenseStorage, LicenseStorageError
+from licensing.storage import LicenseStorage, LicenseStorageError
 from licensing.verification import LicenseVerificationError, LicenseVerifier
 
 
@@ -28,11 +32,9 @@ class LicenseService:
     def __init__(
         self,
         storage: LicenseStorage | None = None,
-        usage_store: CommunityUsageStore | None = None,
         verifier: LicenseVerifier | None = None,
     ) -> None:
         self.storage = storage or LicenseStorage()
-        self.usage_store = usage_store or CommunityUsageStore(self.storage.directory)
         self.verifier = verifier or LicenseVerifier()
 
     def current_state(self) -> LicenseState:
@@ -82,46 +84,65 @@ class LicenseService:
         self,
         automation_id: str,
         mode: str | None = None,
+        requested_count: int | None = None,
     ) -> EntitlementDecision:
-        """Evaluate an execution request without mutating usage state."""
+        """Evaluate an execution request without mutating local state."""
         state = self.current_state()
         entitlements = state.entitlements
 
         if automation_id == "auto1":
             if entitlements.allows(FEATURE_AUTO1_UNLIMITED):
-                return self._allowed(state, FEATURE_AUTO1_UNLIMITED)
-            if not entitlements.allows(FEATURE_AUTO1_FULL):
-                return self._denied(state, FEATURE_AUTO1_FULL)
-            maximum = entitlements.limits.get(LIMIT_AUTO1_MAX_RUNS)
-            if not isinstance(maximum, int):
+                maximum = LICENSED_AUTO1_MAX_LOOPS_PER_EXECUTION
+                required_feature = FEATURE_AUTO1_UNLIMITED
+            else:
+                if not entitlements.allows(FEATURE_AUTO1_FULL):
+                    return self._denied(state, FEATURE_AUTO1_FULL)
+                maximum = entitlements.limits.get(
+                    LIMIT_AUTO1_MAX_LOOPS_PER_EXECUTION
+                )
+                required_feature = FEATURE_AUTO1_FULL
+
+            if isinstance(maximum, bool) or not isinstance(maximum, int):
                 return self._denied(
                     state,
-                    LIMIT_AUTO1_MAX_RUNS,
-                    "Auto1 execution limit is unavailable.",
+                    LIMIT_AUTO1_MAX_LOOPS_PER_EXECUTION,
+                    "Auto1 per-execution loop limit is unavailable.",
                 )
-            try:
-                usage = self.usage_store.execution_count()
-            except LicenseStorageError as error:
-                return self._denied(state, LIMIT_AUTO1_MAX_RUNS, str(error))
-            if usage >= maximum:
-                return EntitlementDecision(
-                    allowed=False,
-                    message=(
-                        f"Community Edition Auto1 limit reached ({usage}/{maximum}). "
-                        "Import a license to continue with unlimited Auto1 execution."
-                    ),
-                    edition=state.entitlements.edition,
-                    required_feature=FEATURE_AUTO1_UNLIMITED,
-                    current_usage=usage,
-                    usage_limit=maximum,
+            if maximum < 1:
+                return self._denied(
+                    state,
+                    LIMIT_AUTO1_MAX_LOOPS_PER_EXECUTION,
+                    "Auto1 per-execution loop limit is invalid.",
                 )
+            if requested_count is not None:
+                if (
+                    isinstance(requested_count, bool)
+                    or not isinstance(requested_count, int)
+                    or requested_count < 1
+                ):
+                    return self._denied(
+                        state,
+                        required_feature,
+                        "Auto1 loop count must be a positive integer.",
+                    )
+                if requested_count > maximum:
+                    return self._denied(
+                        state,
+                        required_feature,
+                        (
+                            f"{state.entitlements.edition.title()} Edition allows "
+                            f"at most {maximum} Auto1 loops per execution."
+                        ),
+                    )
             return EntitlementDecision(
                 allowed=True,
-                message=f"Auto1 execution is available ({usage}/{maximum} Community runs used).",
+                message=(
+                    f"Auto1 execution is available for up to {maximum} loop(s) "
+                    "per execution."
+                ),
                 edition=state.entitlements.edition,
-                required_feature=FEATURE_AUTO1_FULL,
-                current_usage=usage,
-                usage_limit=maximum,
+                required_feature=required_feature,
+                max_loops_per_execution=maximum,
             )
 
         if automation_id == "auto2":
@@ -152,47 +173,6 @@ class LicenseService:
             state,
             f"FAA.{automation_id}.Full",
             "This automation is not available through the current entitlement boundary.",
-        )
-
-    def consume_auto1_execution(self) -> EntitlementDecision:
-        """Atomically consume one Community run immediately before Auto1 starts."""
-        state = self.current_state()
-        entitlements = state.entitlements
-        if entitlements.allows(FEATURE_AUTO1_UNLIMITED):
-            return self._allowed(state, FEATURE_AUTO1_UNLIMITED)
-        if not entitlements.allows(FEATURE_AUTO1_FULL):
-            return self._denied(state, FEATURE_AUTO1_FULL)
-
-        maximum = entitlements.limits.get(LIMIT_AUTO1_MAX_RUNS)
-        if not isinstance(maximum, int):
-            return self._denied(
-                state,
-                LIMIT_AUTO1_MAX_RUNS,
-                "Auto1 execution limit is unavailable.",
-            )
-        try:
-            allowed, usage = self.usage_store.consume_auto1_execution(maximum)
-        except LicenseStorageError as error:
-            return self._denied(state, LIMIT_AUTO1_MAX_RUNS, str(error))
-        if not allowed:
-            return EntitlementDecision(
-                allowed=False,
-                message=(
-                    f"Community Edition Auto1 limit reached ({usage}/{maximum}). "
-                    "Import a license to continue with unlimited Auto1 execution."
-                ),
-                edition=entitlements.edition,
-                required_feature=FEATURE_AUTO1_UNLIMITED,
-                current_usage=usage,
-                usage_limit=maximum,
-            )
-        return EntitlementDecision(
-            allowed=True,
-            message=f"Auto1 execution started ({usage}/{maximum} Community runs used).",
-            edition=entitlements.edition,
-            required_feature=FEATURE_AUTO1_FULL,
-            current_usage=usage,
-            usage_limit=maximum,
         )
 
     def _import_verified_candidate(self, candidate: SignedLicense) -> LicenseImportResult:

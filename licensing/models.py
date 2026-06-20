@@ -73,5 +73,4 @@ class EntitlementDecision:
     message: str
     edition: str
     required_feature: str
-    current_usage: int | None = None
-    usage_limit: int | None = None
+    max_loops_per_execution: int | None = None

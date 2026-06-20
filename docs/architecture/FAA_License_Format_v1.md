@@ -73,10 +73,13 @@ FAA-LIC-v1.<base64url(canonical_payload)>.<base64url(signature)>
 Legacy keys always select the default bundled key and therefore do not support
 key rotation.
 
-## Community Usage State
+## Community Auto1 Limit
 
-The Community Auto1 counter is local, offline state under the FAA AppData
-directory. It is intended to enforce normal product use and discourage casual
-overuse. It is not strong anti-tamper storage: a user with control of the local
-machine can edit or delete local application state. FAA does not claim that
-this counter resists deliberate local modification.
+Community Edition may start Auto1 repeatedly. Each execution is limited to a
+maximum of five consecutive race loops. No lifetime or local usage counter is
+consumed. Licensed Basic, Plus, and Founding editions retain the validated
+desktop maximum of 25 loops per execution.
+
+The v1 claim identifier `FAA.Auto1.MaxRuns` is retained for signed-license
+compatibility. Its enforced meaning is the Auto1 loop maximum for one
+execution.

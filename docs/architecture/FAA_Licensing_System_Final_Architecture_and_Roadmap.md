@@ -999,6 +999,11 @@ Everything asks:
 Does current entitlement allow this?
 ```
 
+For v1 compatibility, the `FAA.Auto1.MaxRuns` claim name is retained. The
+value is enforced as the maximum number of consecutive Auto1 race loops in one
+execution. Community Edition may start another execution later without
+consuming a lifetime counter.
+
 ## Execution Boundary Check
 
 Before any automation runs, FAA checks entitlement.
@@ -1263,7 +1268,7 @@ Build:
 - Ed25519 signature verification.
 - Public key bundled with FAA.
 - Community Edition entitlement profile.
-- 5-run Auto1 Community limit.
+- 5-loop-per-execution Auto1 Community limit.
 - Local license storage in AppData.
 - Import license file.
 - Paste license key.
@@ -1275,7 +1280,8 @@ Done when:
 FAA starts without a license → Community Edition
 FAA imports valid license → paid features unlock
 FAA imports invalid license → Community Edition
-Auto1 Community limit blocks after 5 runs
+Auto1 Community refuses more than 5 loops in one execution
+Auto1 Community may start later executions without a lifetime counter
 Auto2/Auto3 full execution require license claims
 ```
 

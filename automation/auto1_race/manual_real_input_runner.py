@@ -14,7 +14,6 @@ from core.stop import StopManager
 from licensing import (
     EntitlementDeniedError,
     ExecutionEntitlementService,
-    consume_auto1_execution_entitlement,
     require_execution_entitlement,
 )
 from profiles import ProfileLoadError, ProfileManager
@@ -44,7 +43,11 @@ def run_manual_real_input_auto1(
     stop_manager = stop_manager or StopManager()
 
     try:
-        require_execution_entitlement("auto1", license_service=license_service)
+        require_execution_entitlement(
+            "auto1",
+            requested_count=cycle_count,
+            license_service=license_service,
+        )
         profile_data = load_manual_profile(use_fast_timings, profile_data)
         input_controller = InputController(create_real_keyboard_backend())
         stop_hotkey_registration = register_f8_stop_hotkey(stop_manager, logger)
@@ -63,7 +66,6 @@ def run_manual_real_input_auto1(
             profile_data=profile_data,
             logger=logger,
         )
-        consume_auto1_execution_entitlement(license_service=license_service)
         return runner.run_cycles(cycle_count)
     except EntitlementDeniedError as error:
         raise Auto1ManualRunError(str(error)) from error
