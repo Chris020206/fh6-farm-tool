@@ -78,6 +78,20 @@ class LicenseService:
             return self._rejected_import(str(error))
         return self._import_verified_candidate(candidate)
 
+    def remove_license(self) -> LicenseImportResult:
+        current = self.current_state()
+        try:
+            removed = self.storage.remove()
+        except LicenseStorageError as error:
+            return LicenseImportResult(False, current, str(error))
+        if not removed:
+            return LicenseImportResult(False, current, "No local license is installed.")
+        state = self._community_state(
+            "community",
+            "Local license removed. Community Edition is active.",
+        )
+        return LicenseImportResult(True, state, "License removed successfully.")
+
     def evaluate_execution(
         self,
         automation_id: str,

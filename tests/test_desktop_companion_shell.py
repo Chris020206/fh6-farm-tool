@@ -42,10 +42,12 @@ from desktop.companion_shell import (
     _parse_auto2_purchase_count,
     _request_auto1_ui_stop,
     _should_show_auto1_runtime_adjustment,
+    _should_show_community_feature_dialog,
     _summarize_auto1_ui_execution_error,
     build_desktop_app_spec,
 )
 from core.stop import StopManager
+from licensing.models import EntitlementDecision
 from integrations.windows_focus_handoff import (
     FocusHandoffResult,
     FocusHandoffStatus,
@@ -58,6 +60,15 @@ from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 class DesktopCompanionShellTest(unittest.TestCase):
     def setUp(self) -> None:
         self.shell_spec = build_desktop_app_spec()
+
+    def test_only_denied_community_decisions_show_edition_guidance(self) -> None:
+        denied = EntitlementDecision(False, "Denied", "community", "test.feature")
+        allowed = EntitlementDecision(True, "Allowed", "community", "test.feature")
+        licensed_denied = EntitlementDecision(False, "Denied", "basic", "test.feature")
+
+        self.assertTrue(_should_show_community_feature_dialog(denied))
+        self.assertFalse(_should_show_community_feature_dialog(allowed))
+        self.assertFalse(_should_show_community_feature_dialog(licensed_denied))
 
     def test_sidebar_maps_to_stable_destinations(self) -> None:
         destination_ids = tuple(
@@ -213,7 +224,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertIn("supervised desktop automation utility", about_text)
         self.assertIn("Controlled/manual beta. Not unattended automation.", about_text)
         self.assertIn("Keep F8 available during automation.", about_text)
-        self.assertIn("Support: project Discord", about_text)
+        self.assertIn("Support: https://discord.gg/SgARD8YenU", about_text)
 
     def test_visible_desktop_version_uses_about_metadata(self) -> None:
         self.assertEqual(DESKTOP_APP_VERSION, _desktop_visible_version_text())

@@ -1,133 +1,147 @@
+from datetime import datetime, timezone
 import unittest
 
+from licensing.constants import (
+    FEATURE_AUTO1_UNLIMITED,
+    FEATURE_AUTO2_FULL,
+    FEATURE_AUTO3_FULL,
+    FEATURE_PROFILES_BASIC,
+)
+from licensing.entitlements import community_entitlements
+from licensing.models import (
+    EntitlementProfile,
+    LicensePayload,
+    LicenseState,
+    SignedLicense,
+)
 from ui.settings_screen import (
-    SettingCategory,
-    SettingImportance,
     SettingsSectionId,
     build_settings_screen,
+    product_facing_edition_name,
+    version_information_text,
 )
+from product.support import OFFICIAL_DISCORD_URL
 
 
 class SettingsScreenStructureTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.screen = build_settings_screen()
-
-    def test_expected_application_behavior_is_primary(self) -> None:
-        section = self.screen.expected_application_behavior
-
-        self.assertEqual(
-            SettingsSectionId.EXPECTED_APPLICATION_BEHAVIOR,
-            section.section_id,
+    def test_community_settings_are_edition_first(self) -> None:
+        screen = build_settings_screen(
+            LicenseState(
+                status="community",
+                entitlements=community_entitlements(),
+                message="Community Edition is active.",
+            )
         )
+
+        section = screen.license_and_edition
+        self.assertEqual(SettingsSectionId.LICENSE_AND_EDITION, section.section_id)
         self.assertTrue(section.is_primary)
-        self.assertTrue(section.settings)
-        self.assertTrue(
-            all(setting.importance == SettingImportance.PRIMARY for setting in section.settings)
-        )
-
-    def test_safety_and_operational_preferences_are_secondary(self) -> None:
-        section = self.screen.safety_and_operational_preferences
-
+        self.assertEqual("Community Edition", section.edition_name)
         self.assertEqual(
-            SettingsSectionId.SAFETY_AND_OPERATIONAL_PREFERENCES,
-            section.section_id,
+            ("Auto1 Community", "Auto2 Navigation Test", "Auto3 Navigation Test"),
+            tuple(feature.label for feature in section.included_features),
         )
-        self.assertTrue(section.is_secondary)
-        self.assertTrue(
-            all(setting.importance == SettingImportance.SECONDARY for setting in section.settings)
-        )
-
-    def test_advanced_system_preferences_are_tertiary(self) -> None:
-        section = self.screen.advanced_system_preferences
-
         self.assertEqual(
-            SettingsSectionId.ADVANCED_SYSTEM_PREFERENCES,
-            section.section_id,
-        )
-        self.assertTrue(section.is_tertiary)
-        self.assertTrue(
-            all(setting.importance == SettingImportance.TERTIARY for setting in section.settings)
+            ("No license required", "Community Edition", "Community access", "No license required"),
+            tuple(item.value for item in section.status_items),
         )
 
-    def test_settings_has_one_primary_intention(self) -> None:
+    def test_licensed_features_and_status_come_from_entitlements(self) -> None:
+        screen = build_settings_screen(_licensed_state("founding"))
+
+        section = screen.license_and_edition
+        self.assertEqual("Founding Tester Edition", section.edition_name)
         self.assertEqual(
-            "Control application-level behavior without editing automation execution.",
-            self.screen.primary_intention,
+            (
+                "Auto1 Unlimited",
+                "Auto2 Full Automation",
+                "Auto3 Full Automation",
+                "Basic Profiles",
+            ),
+            tuple(feature.label for feature in section.included_features),
+        )
+        self.assertEqual(
+            ("Licensed", "Founding Tester Edition", "Lifetime", "Offline"),
+            tuple(item.value for item in section.status_items),
         )
 
-    def test_settings_does_not_include_execution_timing_or_profile_behavior(self) -> None:
-        all_settings = _all_settings(self.screen)
-        serialized_values = " ".join(
-            " ".join(
-                (
-                    setting.setting_id,
-                    setting.label,
-                    setting.description,
-                    setting.category.value,
-                )
-            ).lower()
-            for setting in all_settings
+    def test_about_is_secondary_and_copy_text_is_stable(self) -> None:
+        screen = build_settings_screen(version="v0.2.0-beta")
+
+        self.assertEqual(SettingsSectionId.ABOUT, screen.about.section_id)
+        self.assertTrue(screen.about.is_secondary)
+        self.assertEqual("FAA Desktop", screen.about.product)
+        self.assertEqual("https://discord.gg/SgARD8YenU", OFFICIAL_DISCORD_URL)
+        self.assertEqual(OFFICIAL_DISCORD_URL, screen.about.discord_url)
+        self.assertEqual(
+            "FAA Desktop\nVersion: v0.2.0-beta\nEdition: Community Edition\nPlatform: Windows",
+            version_information_text(screen.about),
         )
 
-        self.assertNotIn("timing", serialized_values)
-        self.assertNotIn("wait_after", serialized_values)
-        self.assertNotIn("menu_key_delay", serialized_values)
-        self.assertNotIn("navigation", serialized_values)
-        self.assertNotIn("profile editing", serialized_values)
-        self.assertNotIn("execution tuning", serialized_values)
-
-    def test_settings_does_not_duplicate_profiles_responsibility(self) -> None:
-        all_settings = _all_settings(self.screen)
-        setting_ids = {
-            setting.setting_id
-            for setting in all_settings
-        }
-
-        self.assertNotIn("profile_selection", setting_ids)
-        self.assertNotIn("profile_editor", setting_ids)
-        self.assertNotIn("custom_profile", setting_ids)
-
-    def test_expected_app_settings_are_represented(self) -> None:
-        categories = {
-            setting.category
-            for setting in self.screen.expected_application_behavior.settings
-        }
-
-        self.assertIn(SettingCategory.APPEARANCE, categories)
-        self.assertIn(SettingCategory.NOTIFICATIONS, categories)
-        self.assertIn(SettingCategory.STARTUP, categories)
-        self.assertIn(SettingCategory.WINDOW, categories)
-
-    def test_emergency_stop_and_confirmation_preferences_are_safety_settings(self) -> None:
-        setting_ids = {
-            setting.setting_id
-            for setting in self.screen.safety_and_operational_preferences.settings
-        }
-        categories = {
-            setting.category
-            for setting in self.screen.safety_and_operational_preferences.settings
-        }
-
-        self.assertIn("emergency_stop_visibility", setting_ids)
-        self.assertIn("confirmation_preferences", setting_ids)
-        self.assertIn(SettingCategory.SAFETY, categories)
-        self.assertIn(SettingCategory.CONFIRMATION, categories)
-
-    def test_advanced_system_preferences_are_structurally_secondary(self) -> None:
-        section = self.screen.advanced_system_preferences
-
-        self.assertTrue(section.is_tertiary)
-        self.assertIn("Tertiary", section.purpose)
-        self.assertTrue(
-            all(not setting.is_editable_now for setting in section.settings)
+    def test_supported_editions_have_distinct_product_names(self) -> None:
+        self.assertEqual("Community Edition", product_facing_edition_name("community"))
+        self.assertEqual("Basic Edition", product_facing_edition_name("basic"))
+        self.assertEqual("Plus Edition", product_facing_edition_name("plus"))
+        self.assertEqual(
+            "Founding Tester Edition",
+            product_facing_edition_name("founding"),
         )
 
+    def test_placeholder_and_execution_settings_are_absent(self) -> None:
+        serialized = repr(build_settings_screen()).lower()
 
-def _all_settings(screen) -> tuple:
-    return (
-        screen.expected_application_behavior.settings
-        + screen.safety_and_operational_preferences.settings
-        + screen.advanced_system_preferences.settings
+        for prohibited in (
+            "theme",
+            "notification",
+            "startup behavior",
+            "window behavior",
+            "safety preferences",
+            "advanced system",
+            "update behavior",
+            "environment detection",
+            "execution tuning",
+            "profile editor",
+        ):
+            self.assertNotIn(prohibited, serialized)
+
+
+def _licensed_state(edition: str) -> LicenseState:
+    issued_at = datetime(2026, 6, 21, tzinfo=timezone.utc)
+    payload = LicensePayload(
+        license_id="FAA-TEST-1",
+        product="forza_automation_assist",
+        license_version=1,
+        discord_user_id="123",
+        edition=edition,
+        features=frozenset(
+            {
+                FEATURE_AUTO1_UNLIMITED,
+                FEATURE_AUTO2_FULL,
+                FEATURE_AUTO3_FULL,
+                FEATURE_PROFILES_BASIC,
+            }
+        ),
+        limits={},
+        issued_at=issued_at,
+        expires_at=None,
+    )
+    signed = SignedLicense(
+        payload=payload,
+        signature=b"signature",
+        signing_key_id="test-key",
+        signed_payload=b"{}",
+        serialized_json="{}",
+    )
+    return LicenseState(
+        status="licensed",
+        entitlements=EntitlementProfile(
+            edition=edition,
+            features=payload.features,
+            limits={},
+            license_id=payload.license_id,
+        ),
+        message="License active.",
+        license=signed,
     )
 
 

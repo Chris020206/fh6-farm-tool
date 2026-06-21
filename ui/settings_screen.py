@@ -1,158 +1,170 @@
+"""Product-facing structure for the locked desktop Settings screen."""
+
 from dataclasses import dataclass
 from enum import Enum
 
+from licensing.constants import (
+    FEATURE_AUTO1_FULL,
+    FEATURE_AUTO1_UNLIMITED,
+    FEATURE_AUTO2_FULL,
+    FEATURE_AUTO2_NAVIGATION_TEST,
+    FEATURE_AUTO3_FULL,
+    FEATURE_AUTO3_NAVIGATION_TEST,
+    FEATURE_PROFILES_BASIC,
+    FEATURE_PROFILES_PLUS,
+)
+from licensing.entitlements import community_entitlements
+from licensing.models import LicenseState
+from product.support import OFFICIAL_DISCORD_URL
+
 
 class SettingsSectionId(str, Enum):
-    EXPECTED_APPLICATION_BEHAVIOR = "expected_application_behavior"
-    SAFETY_AND_OPERATIONAL_PREFERENCES = "safety_and_operational_preferences"
-    ADVANCED_SYSTEM_PREFERENCES = "advanced_system_preferences"
-
-
-class SettingCategory(str, Enum):
-    APPEARANCE = "appearance"
-    NOTIFICATIONS = "notifications"
-    STARTUP = "startup"
-    WINDOW = "window"
-    SAFETY = "safety"
-    CONFIRMATION = "confirmation"
-    SYSTEM = "system"
-
-
-class SettingImportance(str, Enum):
-    PRIMARY = "primary"
-    SECONDARY = "secondary"
-    TERTIARY = "tertiary"
+    LICENSE_AND_EDITION = "license_and_edition"
+    ABOUT = "about"
 
 
 @dataclass(frozen=True)
-class SettingItem:
-    setting_id: str
+class EditionFeature:
+    feature_id: str
     label: str
-    description: str
-    category: SettingCategory
-    importance: SettingImportance
-    is_editable_now: bool = False
 
 
 @dataclass(frozen=True)
-class ExpectedApplicationBehaviorSection:
+class LicenseStatusItem:
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
+class LicenseAndEditionSection:
     section_id: SettingsSectionId
-    purpose: str
-    settings: tuple[SettingItem, ...]
+    edition_name: str
+    description: str
+    included_features: tuple[EditionFeature, ...]
+    status_items: tuple[LicenseStatusItem, ...]
     is_primary: bool = True
 
 
 @dataclass(frozen=True)
-class SafetyAndOperationalPreferencesSection:
+class AboutSection:
     section_id: SettingsSectionId
-    purpose: str
-    settings: tuple[SettingItem, ...]
+    product: str
+    version: str
+    edition_name: str
+    platform: str
+    discord_url: str
     is_secondary: bool = True
-
-
-@dataclass(frozen=True)
-class AdvancedSystemPreferencesSection:
-    section_id: SettingsSectionId
-    purpose: str
-    settings: tuple[SettingItem, ...]
-    is_tertiary: bool = True
 
 
 @dataclass(frozen=True)
 class SettingsScreen:
     primary_intention: str
-    expected_application_behavior: ExpectedApplicationBehaviorSection
-    safety_and_operational_preferences: SafetyAndOperationalPreferencesSection
-    advanced_system_preferences: AdvancedSystemPreferencesSection
+    license_and_edition: LicenseAndEditionSection
+    about: AboutSection
 
 
-def build_settings_screen() -> SettingsScreen:
+def build_settings_screen(
+    license_state: LicenseState | None = None,
+    *,
+    version: str = "v0.2.0-beta",
+) -> SettingsScreen:
+    license_state = license_state or LicenseState(
+        status="community",
+        entitlements=community_entitlements(),
+        message="Community Edition is active.",
+    )
+    edition_name = product_facing_edition_name(license_state.entitlements.edition)
     return SettingsScreen(
-        primary_intention="Control application-level behavior without editing automation execution.",
-        expected_application_behavior=ExpectedApplicationBehaviorSection(
-            section_id=SettingsSectionId.EXPECTED_APPLICATION_BEHAVIOR,
-            purpose="Primary system behavior settings for how the app presents and starts.",
-            settings=_build_expected_application_behavior_settings(),
+        primary_intention="Review your edition, manage your offline license, and view product information.",
+        license_and_edition=LicenseAndEditionSection(
+            section_id=SettingsSectionId.LICENSE_AND_EDITION,
+            edition_name=edition_name,
+            description=(
+                "Your current edition determines which automation features are available "
+                "in FAA. Manage your license below."
+            ),
+            included_features=_included_features(license_state),
+            status_items=_status_items(license_state, edition_name),
         ),
-        safety_and_operational_preferences=SafetyAndOperationalPreferencesSection(
-            section_id=SettingsSectionId.SAFETY_AND_OPERATIONAL_PREFERENCES,
-            purpose="Secondary safety preferences that support guarded manual operation.",
-            settings=_build_safety_settings(),
-        ),
-        advanced_system_preferences=AdvancedSystemPreferencesSection(
-            section_id=SettingsSectionId.ADVANCED_SYSTEM_PREFERENCES,
-            purpose="Tertiary future system preferences that should remain quiet.",
-            settings=_build_advanced_system_settings(),
-        ),
-    )
-
-
-def _build_expected_application_behavior_settings() -> tuple[SettingItem, ...]:
-    return (
-        SettingItem(
-            setting_id="theme",
-            label="Theme",
-            description="Expected visual preference for the application shell.",
-            category=SettingCategory.APPEARANCE,
-            importance=SettingImportance.PRIMARY,
-        ),
-        SettingItem(
-            setting_id="notifications",
-            label="Notifications",
-            description="Expected notification behavior for calm operational updates.",
-            category=SettingCategory.NOTIFICATIONS,
-            importance=SettingImportance.PRIMARY,
-        ),
-        SettingItem(
-            setting_id="startup_behavior",
-            label="Startup Behavior",
-            description="Expected app startup posture without launching automation.",
-            category=SettingCategory.STARTUP,
-            importance=SettingImportance.PRIMARY,
-        ),
-        SettingItem(
-            setting_id="window_behavior",
-            label="Window Behavior",
-            description="Expected window and companion-mode presentation behavior.",
-            category=SettingCategory.WINDOW,
-            importance=SettingImportance.PRIMARY,
+        about=AboutSection(
+            section_id=SettingsSectionId.ABOUT,
+            product="FAA Desktop",
+            version=version,
+            edition_name=edition_name,
+            platform="Windows",
+            discord_url=OFFICIAL_DISCORD_URL,
         ),
     )
 
 
-def _build_safety_settings() -> tuple[SettingItem, ...]:
+def product_facing_edition_name(edition: str) -> str:
+    names = {
+        "community": "Community Edition",
+        "basic": "Basic Edition",
+        "plus": "Plus Edition",
+        "founding": "Founding Tester Edition",
+        "developer_admin": "Developer/Admin Edition",
+    }
+    return names.get(edition, "Community Edition")
+
+
+def version_information_text(about: AboutSection) -> str:
     return (
-        SettingItem(
-            setting_id="emergency_stop_visibility",
-            label="Emergency Stop Visibility",
-            description="Expected visibility of stop guidance during guarded operation.",
-            category=SettingCategory.SAFETY,
-            importance=SettingImportance.SECONDARY,
-        ),
-        SettingItem(
-            setting_id="confirmation_preferences",
-            label="Confirmation Preferences",
-            description="Expected handling for risk-sensitive confirmation reminders.",
-            category=SettingCategory.CONFIRMATION,
-            importance=SettingImportance.SECONDARY,
-        ),
+        f"{about.product}\n"
+        f"Version: {about.version}\n"
+        f"Edition: {about.edition_name}\n"
+        f"Platform: {about.platform}"
     )
 
 
-def _build_advanced_system_settings() -> tuple[SettingItem, ...]:
+def _included_features(state: LicenseState) -> tuple[EditionFeature, ...]:
+    entitlements = state.entitlements
+    features: list[EditionFeature] = []
+
+    if entitlements.allows(FEATURE_AUTO1_UNLIMITED):
+        features.append(EditionFeature(FEATURE_AUTO1_UNLIMITED, "Auto1 Unlimited"))
+    elif entitlements.allows(FEATURE_AUTO1_FULL):
+        features.append(EditionFeature(FEATURE_AUTO1_FULL, "Auto1 Community"))
+
+    if entitlements.allows(FEATURE_AUTO2_FULL):
+        features.append(EditionFeature(FEATURE_AUTO2_FULL, "Auto2 Full Automation"))
+    elif entitlements.allows(FEATURE_AUTO2_NAVIGATION_TEST):
+        features.append(
+            EditionFeature(FEATURE_AUTO2_NAVIGATION_TEST, "Auto2 Navigation Test")
+        )
+
+    if entitlements.allows(FEATURE_AUTO3_FULL):
+        features.append(EditionFeature(FEATURE_AUTO3_FULL, "Auto3 Full Automation"))
+    elif entitlements.allows(FEATURE_AUTO3_NAVIGATION_TEST):
+        features.append(
+            EditionFeature(FEATURE_AUTO3_NAVIGATION_TEST, "Auto3 Navigation Test")
+        )
+
+    if entitlements.allows(FEATURE_PROFILES_PLUS):
+        features.append(EditionFeature(FEATURE_PROFILES_PLUS, "Plus Profile Library"))
+    elif entitlements.allows(FEATURE_PROFILES_BASIC):
+        features.append(EditionFeature(FEATURE_PROFILES_BASIC, "Basic Profiles"))
+
+    return tuple(features)
+
+
+def _status_items(
+    state: LicenseState,
+    edition_name: str,
+) -> tuple[LicenseStatusItem, ...]:
+    if state.is_licensed:
+        expires_at = state.license.payload.expires_at
+        access = "Lifetime" if expires_at is None else f"Until {expires_at.date().isoformat()}"
+        status = "Licensed"
+        license_type = "Offline"
+    else:
+        access = "Community access"
+        status = "No license required" if state.status == "community" else "Community fallback"
+        license_type = "No license required"
+
     return (
-        SettingItem(
-            setting_id="update_behavior",
-            label="Update Behavior",
-            description="Future system-level update preference placeholder.",
-            category=SettingCategory.SYSTEM,
-            importance=SettingImportance.TERTIARY,
-        ),
-        SettingItem(
-            setting_id="environment_detection",
-            label="Environment Detection",
-            description="Future system-level environment awareness placeholder.",
-            category=SettingCategory.SYSTEM,
-            importance=SettingImportance.TERTIARY,
-        ),
+        LicenseStatusItem("Status", status),
+        LicenseStatusItem("Edition", edition_name),
+        LicenseStatusItem("Access", access),
+        LicenseStatusItem("License Type", license_type),
     )

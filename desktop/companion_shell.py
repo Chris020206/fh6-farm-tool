@@ -52,6 +52,7 @@ from product.profile_metadata_registry import get_all_profile_metadata
 from product.profile_metadata_registry import get_profile_metadata
 from product.readiness_registry import get_all_readiness_models
 from product.readiness_registry import get_readiness_model
+from product.support import OFFICIAL_DISCORD_URL
 from sessions.operational_history import OperationalHistoryEntry
 from sessions.session_status import SessionStatus
 from ui.automation_environment import (
@@ -68,7 +69,7 @@ from ui.automation_environment import (
 from ui.help_screen import build_help_screen
 from ui.history_screen import build_history_screen
 from ui.profiles_screen import build_profiles_screen
-from ui.settings_screen import build_settings_screen
+from ui.settings_screen import build_settings_screen, version_information_text
 from ui.shell import (
     ScreenDescriptor,
     ScreenId,
@@ -118,7 +119,7 @@ DESKTOP_ABOUT_LINES = (
     "Controlled/manual beta. Not unattended automation.",
     "Keep F8 available during automation.",
     "",
-    "Support: project Discord",
+    f"Support: {OFFICIAL_DISCORD_URL}",
     f"© 2026 {DESKTOP_PRODUCT_NAME}",
 )
 DESKTOP_TRAY_TOOLTIP = DESKTOP_PRODUCT_NAME
@@ -1264,6 +1265,10 @@ def _should_show_auto1_runtime_adjustment(automation_id: str) -> bool:
     return automation_id == "auto1"
 
 
+def _should_show_community_feature_dialog(decision) -> bool:
+    return not decision.allowed and decision.edition == "community"
+
+
 def _is_desktop_execution_supported(automation_id: str) -> bool:
     return is_desktop_execution_supported(automation_id)
 
@@ -1661,6 +1666,9 @@ def _build_automation_environment_widget(
     controller = FrontendAutomationController(
         session_id_provider=lambda: "desktop-prepared-session",
     )
+    from licensing.service import LicenseService
+
+    license_service = LicenseService()
     active_automations = tuple(get_active_automation_definitions())
     selected_automation_id = {"value": active_automations[0].automation_id}
     selected_companion_state = {"value": None}
@@ -2096,9 +2104,22 @@ def _build_automation_environment_widget(
     auto3_cars_input.valueChanged.connect(
         lambda _value: rerender_if_selected("auto3")
     )
-    prepare_button.clicked.connect(
-        lambda: render_preparation_state(selected_automation_id["value"], prepared=True)
-    )
+    def prepare_selected_automation() -> None:
+        automation_id = selected_automation_id["value"]
+        mode = None
+        if automation_id == "auto2":
+            mode = str(auto2_mode_input.currentData())
+        elif automation_id == "auto3":
+            mode = str(auto3_mode_input.currentData())
+        decision = license_service.evaluate_execution(automation_id, mode)
+        if _should_show_community_feature_dialog(decision):
+            from desktop.license_dialog import show_community_feature_dialog
+
+            show_community_feature_dialog(container)
+            return
+        render_preparation_state(automation_id, prepared=True)
+
+    prepare_button.clicked.connect(prepare_selected_automation)
     companion_button.clicked.connect(
         lambda: open_commitment_layer(selected_companion_state["value"])
         if selected_companion_state["value"] is not None
@@ -3391,103 +3412,238 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
 def _build_settings_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
     from PySide6.QtWidgets import (
         QFrame,
+        QGridLayout,
         QHBoxLayout,
         QLabel,
+        QMessageBox,
         QPushButton,
         QSizePolicy,
         QVBoxLayout,
         QWidget,
     )
+    from licensing.service import LicenseService
+    from desktop.license_dialog import (
+        license_import_feedback,
+        select_and_import_license_file,
+    )
+    from desktop.support_actions import open_official_discord
 
-    screen = build_settings_screen()
+    service = LicenseService()
 
-    expected = screen.expected_application_behavior.settings
-    safety = screen.safety_and_operational_preferences.settings
-    advanced = screen.advanced_system_preferences.settings
+    edition_card = QFrame()
+    edition_card.setObjectName("DesktopCard")
+    edition_card.setFrameShape(QFrame.Shape.NoFrame)
+    edition_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(edition_card, treatment="hero")
+    edition_layout = QVBoxLayout(edition_card)
+    edition_layout.setContentsMargins(15, 13, 15, 13)
+    edition_layout.setSpacing(5)
+    edition_eyebrow = QLabel("CURRENT EDITION")
+    _style_eyebrow_label(edition_eyebrow, primary=True)
+    edition_name_label = QLabel()
+    edition_name_label.setObjectName("SettingsCurrentEdition")
+    _style_action_title(edition_name_label, primary=True)
+    edition_description_label = QLabel()
+    _style_detail_label(edition_description_label, shell_spec=shell_spec)
+    edition_layout.addWidget(edition_eyebrow)
+    edition_layout.addWidget(edition_name_label)
+    edition_layout.addWidget(edition_description_label)
+    layout.addWidget(edition_card)
 
-    layout.addWidget(
-        _build_visual_card(
-            title="Quiet system control",
-            summary=screen.primary_intention,
-            details=(
-                "Settings control the app shell, not automation timing or profile behavior.",
-            ),
-            shell_spec=shell_spec,
-            treatment="hero",
+    information_row = QHBoxLayout()
+    information_row.setContentsMargins(0, 0, 0, 0)
+    information_row.setSpacing(7)
+
+    features_card = QFrame()
+    features_card.setObjectName("DesktopCard")
+    _style_visual_card(features_card, treatment="primary")
+    features_layout = QVBoxLayout(features_card)
+    features_layout.setContentsMargins(12, 10, 12, 10)
+    features_layout.setSpacing(6)
+    features_title = QLabel("INCLUDED FEATURES")
+    _style_eyebrow_label(features_title, primary=True)
+    features_label = QLabel()
+    features_label.setObjectName("SettingsIncludedFeatures")
+    _style_summary_label(features_label, shell_spec=shell_spec)
+    features_layout.addWidget(features_title)
+    features_layout.addWidget(features_label)
+    features_layout.addStretch(1)
+    information_row.addWidget(features_card, 1)
+
+    status_card = QFrame()
+    status_card.setObjectName("DesktopCard")
+    _style_visual_card(status_card, treatment="secondary")
+    status_layout = QVBoxLayout(status_card)
+    status_layout.setContentsMargins(12, 10, 12, 10)
+    status_layout.setSpacing(6)
+    status_title = QLabel("STATUS")
+    _style_eyebrow_label(status_title, primary=False)
+    status_layout.addWidget(status_title)
+    status_grid = QGridLayout()
+    status_grid.setContentsMargins(0, 0, 0, 0)
+    status_grid.setHorizontalSpacing(9)
+    status_grid.setVerticalSpacing(4)
+    status_value_labels = []
+    for row in range(4):
+        name_label = QLabel()
+        value_label = QLabel()
+        _style_detail_label(name_label, shell_spec=shell_spec)
+        _style_summary_label(value_label, shell_spec=shell_spec)
+        status_grid.addWidget(name_label, row, 0)
+        status_grid.addWidget(value_label, row, 1)
+        status_value_labels.append((name_label, value_label))
+    status_layout.addLayout(status_grid)
+    status_layout.addStretch(1)
+    information_row.addWidget(status_card, 1)
+    layout.addLayout(information_row)
+
+    actions_card = QFrame()
+    actions_card.setObjectName("DesktopCard")
+    _style_visual_card(actions_card, treatment="secondary")
+    actions_layout = QVBoxLayout(actions_card)
+    actions_layout.setContentsMargins(12, 10, 12, 10)
+    actions_layout.setSpacing(7)
+    actions_title = QLabel("LICENSE ACTIONS")
+    _style_eyebrow_label(actions_title, primary=False)
+    actions_layout.addWidget(actions_title)
+    action_buttons = QHBoxLayout()
+    action_buttons.setContentsMargins(0, 0, 0, 0)
+    action_buttons.setSpacing(7)
+    import_button = QPushButton("Import")
+    replace_button = QPushButton("Replace")
+    remove_button = QPushButton("Remove")
+    _style_primary_button(import_button, shell_spec=shell_spec)
+    _style_secondary_button(replace_button, shell_spec=shell_spec)
+    _style_secondary_button(remove_button, shell_spec=shell_spec)
+    action_buttons.addWidget(import_button)
+    action_buttons.addWidget(replace_button)
+    action_buttons.addWidget(remove_button)
+    action_buttons.addStretch(1)
+    actions_layout.addLayout(action_buttons)
+    action_result_label = QLabel()
+    _style_detail_label(action_result_label, shell_spec=shell_spec)
+    actions_layout.addWidget(action_result_label)
+    support_label = QLabel("Need help? Visit the official FAA Discord.")
+    _style_detail_label(support_label, shell_spec=shell_spec)
+    support_row = QHBoxLayout()
+    support_row.setContentsMargins(0, 0, 0, 0)
+    support_row.setSpacing(7)
+    support_row.addWidget(support_label)
+    open_support_button = QPushButton("Open Discord")
+    _style_secondary_button(open_support_button, shell_spec=shell_spec)
+    support_row.addWidget(open_support_button)
+    support_row.addStretch(1)
+    actions_layout.addLayout(support_row)
+    layout.addWidget(actions_card)
+
+    about_card = QFrame()
+    about_card.setObjectName("DesktopCard")
+    _style_visual_card(about_card, treatment="tertiary")
+    about_layout = QVBoxLayout(about_card)
+    about_layout.setContentsMargins(12, 10, 12, 10)
+    about_layout.setSpacing(7)
+    about_title = QLabel("ABOUT")
+    _style_eyebrow_label(about_title, primary=False)
+    about_layout.addWidget(about_title)
+    about_grid = QGridLayout()
+    about_grid.setContentsMargins(0, 0, 0, 0)
+    about_grid.setHorizontalSpacing(12)
+    about_grid.setVerticalSpacing(3)
+    about_value_labels = []
+    for row in range(4):
+        name_label = QLabel()
+        value_label = QLabel()
+        _style_detail_label(name_label, shell_spec=shell_spec)
+        _style_summary_label(value_label, shell_spec=shell_spec)
+        about_grid.addWidget(name_label, row, 0)
+        about_grid.addWidget(value_label, row, 1)
+        about_value_labels.append((name_label, value_label))
+    about_layout.addLayout(about_grid)
+    about_buttons = QHBoxLayout()
+    about_discord_button = QPushButton("Discord")
+    copy_button = QPushButton("Copy Version Information")
+    _style_secondary_button(about_discord_button, shell_spec=shell_spec)
+    _style_secondary_button(copy_button, shell_spec=shell_spec)
+    about_buttons.addWidget(about_discord_button)
+    about_buttons.addWidget(copy_button)
+    about_buttons.addStretch(1)
+    about_layout.addLayout(about_buttons)
+    copy_result_label = QLabel()
+    _style_detail_label(copy_result_label, shell_spec=shell_spec)
+    about_layout.addWidget(copy_result_label)
+    layout.addWidget(about_card)
+
+    current_screen = {"value": None}
+
+    def refresh() -> None:
+        state = service.current_state()
+        screen = build_settings_screen(state, version=DESKTOP_APP_VERSION)
+        current_screen["value"] = screen
+        section = screen.license_and_edition
+        edition_name_label.setText(section.edition_name)
+        edition_description_label.setText(section.description)
+        features_label.setText(
+            "\n".join(f"✓  {feature.label}" for feature in section.included_features)
         )
-    )
-    layout.addSpacing(6)
-
-    settings_stage = QFrame()
-    settings_stage.setObjectName("DesktopCard")
-    settings_stage.setFrameShape(QFrame.Shape.NoFrame)
-    settings_stage.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-    _style_visual_card(settings_stage, treatment="primary")
-
-    settings_stage_layout = QVBoxLayout(settings_stage)
-    settings_stage_layout.setContentsMargins(12, 10, 12, 10)
-    settings_stage_layout.setSpacing(7)
-
-    expected_label = QLabel("Expected application behavior")
-    _style_eyebrow_label(expected_label, primary=True)
-    settings_stage_layout.addWidget(expected_label)
-
-    expected_grid = QHBoxLayout()
-    expected_grid.setContentsMargins(0, 0, 0, 0)
-    expected_grid.setSpacing(7)
-    for setting in expected:
-        expected_grid.addWidget(
-            _build_setting_item_card(
-                setting,
-                shell_spec=shell_spec,
-                status_text=_setting_status_label(setting),
-                treatment="primary",
-            )
+        for labels, item in zip(status_value_labels, section.status_items):
+            labels[0].setText(item.label)
+            labels[1].setText(item.value)
+        about_items = (
+            ("Product", screen.about.product),
+            ("Version", screen.about.version),
+            ("Edition", screen.about.edition_name),
+            ("Platform", screen.about.platform),
         )
-    settings_stage_layout.addLayout(expected_grid)
+        for labels, item in zip(about_value_labels, about_items):
+            labels[0].setText(item[0])
+            labels[1].setText(item[1])
+        replace_button.setVisible(state.is_licensed)
+        remove_button.setVisible(state.license is not None or state.status == "invalid")
 
-    boundary_note = QLabel(
-        "Execution behavior stays in Profiles. Settings only controls the app shell."
-    )
-    _style_detail_label(boundary_note, shell_spec=shell_spec)
-    settings_stage_layout.addWidget(boundary_note)
-
-    license_button = QPushButton("Manage offline license")
-    license_button.setToolTip(
-        "View Community or licensed entitlements and import a signed FAA license."
-    )
-    license_button.clicked.connect(
-        lambda: _show_license_management_dialog(settings_stage)
-    )
-    settings_stage_layout.addWidget(license_button)
-
-    layout.addWidget(settings_stage)
-    layout.addSpacing(6)
-    layout.addLayout(
-        _build_card_row(
-            cards=(
-                _build_settings_section_card(
-                    title="Safety preferences",
-                    settings=safety,
-                    shell_spec=shell_spec,
-                    treatment="secondary",
-                ),
-                _build_settings_section_card(
-                    title="Advanced system",
-                    settings=advanced,
-                    shell_spec=shell_spec,
-                    treatment="tertiary",
-                ),
-            ),
-            shell_spec=shell_spec,
+    def import_license(*, replacing: bool) -> None:
+        result = select_and_import_license_file(
+            actions_card,
+            service,
+            replacing=replacing,
         )
+        if result is None:
+            return
+        action_result_label.setText(
+            license_import_feedback(result.accepted, result.message)
+        )
+        refresh()
+
+    def remove_license() -> None:
+        answer = QMessageBox.question(
+            actions_card,
+            "Remove local license",
+            "Remove the installed offline license and return to Community Edition?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        result = service.remove_license()
+        action_result_label.setText(result.message)
+        refresh()
+
+    def copy_version_information() -> None:
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.clipboard().setText(version_information_text(current_screen["value"].about))
+        copy_result_label.setText("Version information copied.")
+
+    import_button.clicked.connect(lambda: import_license(replacing=False))
+    replace_button.clicked.connect(lambda: import_license(replacing=True))
+    remove_button.clicked.connect(remove_license)
+    open_support_button.clicked.connect(
+        lambda _checked=False: open_official_discord()
     )
-
-
-def _show_license_management_dialog(parent) -> None:
-    from desktop.license_dialog import show_license_dialog
-
-    show_license_dialog(parent)
+    about_discord_button.clicked.connect(
+        lambda _checked=False: open_official_discord()
+    )
+    copy_button.clicked.connect(copy_version_information)
+    refresh()
 
 
 def _build_companion_mode_widget(
