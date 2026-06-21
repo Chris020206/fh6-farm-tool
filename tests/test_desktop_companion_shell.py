@@ -1,3 +1,4 @@
+import inspect
 import unittest
 
 from desktop.companion_shell import (
@@ -25,6 +26,7 @@ from desktop.companion_shell import (
     _desktop_baseline_summary,
     _desktop_visible_version_text,
     _build_commitment_readiness_details,
+    _build_history_screen_content,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
     _auto1_execution_race_duration,
@@ -41,6 +43,8 @@ from desktop.companion_shell import (
     _parse_auto1_loop_count,
     _parse_auto2_purchase_count,
     _request_auto1_ui_stop,
+    _record_operational_history_entry,
+    _session_status_for_completion_state,
     _should_show_auto1_runtime_adjustment,
     _should_show_community_feature_dialog,
     _summarize_auto1_ui_execution_error,
@@ -48,6 +52,7 @@ from desktop.companion_shell import (
 )
 from core.stop import StopManager
 from licensing.models import EntitlementDecision
+from sessions.session_status import SessionStatus
 from integrations.windows_focus_handoff import (
     FocusHandoffResult,
     FocusHandoffStatus,
@@ -60,6 +65,54 @@ from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 class DesktopCompanionShellTest(unittest.TestCase):
     def setUp(self) -> None:
         self.shell_spec = build_desktop_app_spec()
+
+    def test_desktop_history_does_not_construct_fake_session_data(self) -> None:
+        source = inspect.getsource(_build_history_screen_content)
+
+        self.assertNotIn("Desktop UI session is active", source)
+        self.assertNotIn("No persisted run profile", source)
+        self.assertNotIn("current-desktop-session", source)
+        self.assertIn("history_entries_provider", source)
+
+    def test_completed_run_appends_session_local_history_entry(self) -> None:
+        entries = []
+
+        entry = _record_operational_history_entry(
+            entries,
+            state_id="completed",
+            companion_state={
+                "automation_id": "auto1",
+                "automation_name": "Auto1 - Race Automation",
+                "profile_id": "auto1_race_default",
+                "profile_name": "Auto1 Race Default",
+                "requested_cycles": "3",
+            },
+            execution_message="Auto1 completed normally.",
+            session_id="desktop-test-session",
+        )
+
+        self.assertEqual([entry], entries)
+        self.assertEqual(SessionStatus.COMPLETED, entry.outcome)
+        self.assertEqual((3, 3), (entry.requested_count, entry.completed_count))
+        self.assertEqual(("Auto1 completed normally.",), entry.expandable_details)
+
+    def test_stopped_and_refused_completion_states_map_honestly(self) -> None:
+        self.assertEqual(
+            SessionStatus.STOPPED,
+            _session_status_for_completion_state("stopped"),
+        )
+        self.assertEqual(
+            SessionStatus.REFUSED,
+            _session_status_for_completion_state("refused"),
+        )
+        self.assertEqual(
+            SessionStatus.INTERRUPTED,
+            _session_status_for_completion_state("interrupted"),
+        )
+        self.assertEqual(
+            SessionStatus.FAILURE,
+            _session_status_for_completion_state("failure"),
+        )
 
     def test_only_denied_community_decisions_show_edition_guidance(self) -> None:
         denied = EntitlementDecision(False, "Denied", "community", "test.feature")

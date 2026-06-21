@@ -92,7 +92,10 @@ class UiShellSkeletonTest(unittest.TestCase):
         history_descriptor = get_screen_descriptor(ScreenId.HISTORY)
 
         self.assertEqual("Operational History", history_descriptor.title)
-        self.assertIn("trust recovery", history_descriptor.primary_intention)
+        self.assertEqual(
+            "Recent operational history and session outcomes.",
+            history_descriptor.primary_intention,
+        )
 
 
 if __name__ == "__main__":

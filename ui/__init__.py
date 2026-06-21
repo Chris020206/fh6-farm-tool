@@ -28,6 +28,7 @@ from ui.architecture_integration_review import (
 )
 from ui.history_screen import (
     HistoryDetailLayer,
+    HistoryEmptyState,
     HistoryFilterState,
     HistoryScreen,
     HistorySectionId,
@@ -108,6 +109,7 @@ __all__ = [
     "HelpTopicType",
     "HARD_BOUNDARIES_PRESERVED",
     "HistoryDetailLayer",
+    "HistoryEmptyState",
     "HistoryFilterState",
     "HistoryScreen",
     "HistorySectionId",

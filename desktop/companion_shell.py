@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from frontend.automation_controller import (
     AutomationRunRequest,
@@ -562,7 +563,14 @@ def launch_pyside6_shell_prototype() -> int:
     commitment_layer_index = automation_environment_index + 1
     companion_mode_index = commitment_layer_index + 1
     completion_state_index = companion_mode_index + 1
+    history_screen_index = next(
+        index
+        for index, screen in enumerate(shell_spec.screens)
+        if screen.screen_id == ScreenId.HISTORY
+    )
     reset_preparation_state = {"callback": lambda: None}
+    history_refresh = {"callback": lambda: None}
+    operational_history_entries: list[OperationalHistoryEntry] = []
     execution_control = {
         "stop_manager": None,
         "companion_state": None,
@@ -598,6 +606,10 @@ def launch_pyside6_shell_prototype() -> int:
                 )
                 if screen.screen_id == ScreenId.HOME
                 else None,
+                history_entries_provider=lambda: tuple(operational_history_entries),
+                register_history_refresh=(
+                    lambda callback: history_refresh.__setitem__("callback", callback)
+                ),
             )
         )
 
@@ -619,6 +631,13 @@ def launch_pyside6_shell_prototype() -> int:
         completion_state = dict(companion_state)
         completion_state["execution_active"] = "false"
         completion_state["execution_message"] = execution_message
+        _record_operational_history_entry(
+            operational_history_entries,
+            state_id=state_id,
+            companion_state=completion_state,
+            execution_message=execution_message,
+        )
+        history_refresh["callback"]()
         update_completion_state(state_id, completion_state)
         stacked_screens.setCurrentIndex(completion_state_index)
 
@@ -777,6 +796,8 @@ def launch_pyside6_shell_prototype() -> int:
     def set_navigation_index(index: int) -> None:
         if index < 0:
             return
+        if index == history_screen_index:
+            history_refresh["callback"]()
         stacked_screens.setCurrentIndex(index)
         for row, button in enumerate(collapsed_nav_buttons):
             _style_navigation_button(
@@ -1345,6 +1366,164 @@ def _completion_state_id_for_auto1_status(status: str) -> str:
     return completion_state_id_for_auto1_status(status)
 
 
+def _session_status_for_completion_state(state_id: str) -> SessionStatus:
+    return {
+        "completed": SessionStatus.COMPLETED,
+        "stopped": SessionStatus.STOPPED,
+        "refused": SessionStatus.REFUSED,
+        "interrupted": SessionStatus.INTERRUPTED,
+        "failure": SessionStatus.FAILURE,
+        "failed": SessionStatus.FAILURE,
+    }.get(state_id, SessionStatus.FAILURE)
+
+
+def _record_operational_history_entry(
+    entries: list[OperationalHistoryEntry],
+    *,
+    state_id: str,
+    companion_state: dict[str, Any],
+    execution_message: str,
+    session_id: str | None = None,
+    timestamp: datetime | None = None,
+) -> OperationalHistoryEntry:
+    status = _session_status_for_completion_state(state_id)
+    requested_count = _history_requested_count(companion_state)
+    completed_count = _history_completed_count(
+        companion_state,
+        status=status,
+        requested_count=requested_count,
+    )
+    automation_name = str(
+        companion_state.get("automation_name", "Prepared operation")
+    )
+    warnings = _history_warnings(companion_state.get("warnings"))
+    recovery_note = None
+    if status in {
+        SessionStatus.STOPPED,
+        SessionStatus.REFUSED,
+        SessionStatus.INTERRUPTED,
+        SessionStatus.FAILURE,
+    }:
+        recovery_note = "Review FH6 baseline and readiness before another attempt."
+
+    entry = OperationalHistoryEntry(
+        session_id=session_id or f"desktop-{uuid4().hex}",
+        automation_id=str(companion_state.get("automation_id", "unknown")),
+        automation_name=automation_name,
+        profile_id=str(companion_state.get("profile_id", "unknown")),
+        profile_name=str(companion_state.get("profile_name", "Selected profile")),
+        outcome=status,
+        summary=_history_summary(
+            automation_name,
+            status=status,
+            requested_count=requested_count,
+            completed_count=completed_count,
+        ),
+        timestamp=timestamp or datetime.now(timezone.utc),
+        requested_count=requested_count,
+        completed_count=completed_count,
+        confidence_note=_history_confidence_note(status),
+        warnings=warnings,
+        recovery_note=recovery_note,
+        suggested_next_step=_history_suggested_next_step(status),
+        expandable_details=(execution_message,) if execution_message.strip() else (),
+    )
+    entries.append(entry)
+    return entry
+
+
+def _history_requested_count(companion_state: dict[str, Any]) -> int:
+    explicit_count = _positive_int(companion_state.get("requested_count"))
+    if explicit_count is not None:
+        return explicit_count
+
+    automation_id = companion_state.get("automation_id")
+    if automation_id == "auto1":
+        candidate = companion_state.get("requested_cycles")
+    elif automation_id == "auto2":
+        candidate = (
+            companion_state.get("auto2_purchase_count")
+            if companion_state.get("auto2_mode") == "purchase"
+            else 1
+        )
+    elif automation_id == "auto3":
+        candidate = companion_state.get("auto3_cars")
+    else:
+        candidate = 1
+    return _positive_int(candidate) or 1
+
+
+def _history_completed_count(
+    companion_state: dict[str, Any],
+    *,
+    status: SessionStatus,
+    requested_count: int,
+) -> int:
+    explicit_count = _non_negative_int(companion_state.get("completed_count"))
+    if explicit_count is not None:
+        return min(explicit_count, requested_count)
+    return requested_count if status == SessionStatus.COMPLETED else 0
+
+
+def _history_warnings(raw_warnings: Any) -> tuple[str, ...]:
+    if isinstance(raw_warnings, str):
+        return (raw_warnings,) if raw_warnings.strip() else ()
+    if isinstance(raw_warnings, (tuple, list)):
+        return tuple(str(warning) for warning in raw_warnings if str(warning).strip())
+    return ()
+
+
+def _history_summary(
+    automation_name: str,
+    *,
+    status: SessionStatus,
+    requested_count: int,
+    completed_count: int,
+) -> str:
+    if status == SessionStatus.COMPLETED:
+        return f"{automation_name} completed {completed_count} of {requested_count} requested operation(s)."
+    if status == SessionStatus.STOPPED:
+        return f"{automation_name} stopped after {completed_count} of {requested_count} requested operation(s)."
+    if status == SessionStatus.REFUSED:
+        return f"{automation_name} was refused before guarded execution could continue."
+    if status == SessionStatus.INTERRUPTED:
+        return f"{automation_name} was interrupted before completing the requested operation."
+    return f"{automation_name} ended with a failure before completing the requested operation."
+
+
+def _history_confidence_note(status: SessionStatus) -> str:
+    if status == SessionStatus.COMPLETED:
+        return "The supervised operation reached its recorded completion state."
+    if status == SessionStatus.STOPPED:
+        return "The operator stopped the supervised operation intentionally."
+    if status == SessionStatus.REFUSED:
+        return "The operation remained fail-closed and did not continue."
+    return "Review the recorded result before preparing another operation."
+
+
+def _history_suggested_next_step(status: SessionStatus) -> str:
+    if status == SessionStatus.COMPLETED:
+        return "Prepare another supervised operation when ready."
+    if status == SessionStatus.STOPPED:
+        return "Return to preparation and confirm the FH6 baseline."
+    return "Review readiness in Automation Environment before continuing."
+
+
+def _positive_int(value: Any) -> int | None:
+    parsed = _non_negative_int(value)
+    return parsed if parsed is not None and parsed > 0 else None
+
+
+def _non_negative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
 def _summarize_auto1_ui_execution_error(error: Exception) -> str:
     return summarize_auto1_ui_execution_error(error)
 
@@ -1561,6 +1740,8 @@ def _build_screen_widget(
     home_concept: PrototypeHomeConcept | None = None,
     open_automation_environment=None,
     open_profiles=None,
+    history_entries_provider=None,
+    register_history_refresh=None,
 ):
     from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
@@ -1569,16 +1750,16 @@ def _build_screen_widget(
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(shell_spec.vertical_rhythm.header_spacing)
     title_label = QLabel(screen.title)
-    primary_intention_text = (
-        "Overview and next steps for your farming operations."
-        if home_concept is not None
-        else screen.primary_intention
-    )
+    if home_concept is not None:
+        primary_intention_text = "Overview and next steps for your farming operations."
+    else:
+        primary_intention_text = screen.primary_intention
     primary_intention_label = QLabel(primary_intention_text)
     _style_screen_title(title_label, shell_spec=shell_spec)
     _style_summary_label(primary_intention_label, shell_spec=shell_spec)
     layout.addWidget(title_label)
-    layout.addWidget(primary_intention_label)
+    if primary_intention_text:
+        layout.addWidget(primary_intention_label)
 
     if home_concept is not None:
         _build_home_screen_content(
@@ -1597,8 +1778,13 @@ def _build_screen_widget(
         return container
 
     if screen.screen_id == ScreenId.HISTORY:
-        _build_history_screen_content(layout, shell_spec=shell_spec)
-        layout.addStretch()
+        refresh_history = _build_history_screen_content(
+            layout,
+            shell_spec=shell_spec,
+            history_entries_provider=history_entries_provider,
+        )
+        if register_history_refresh is not None:
+            register_history_refresh(refresh_history)
         return container
 
     if screen.screen_id == ScreenId.HELP:
@@ -2736,64 +2922,143 @@ def _build_profiles_screen_content(layout, shell_spec: PrototypeShellSpec) -> No
         render_selected_profile(first_profile)
 
 
-def _build_history_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
-    screen = build_history_screen(
-        (
-            OperationalHistoryEntry(
-                session_id="current-desktop-session",
-                automation_id="desktop",
-                automation_name="Desktop UI",
-                profile_id="none",
-                profile_name="No persisted run profile",
-                outcome=SessionStatus.PREPARED,
-                summary="Desktop UI session is active. Run persistence is not connected yet.",
-                timestamp=datetime.now(timezone.utc),
-                requested_count=0,
-                completed_count=0,
-                confidence_note="History is session-oriented and will show completed supervised runs once persistence is added.",
-                warnings=(),
-                recovery_note=None,
-                suggested_next_step="Prepare a supervised operation from Automation Environment.",
-                expandable_details=(),
-            ),
+def _build_history_screen_content(
+    layout,
+    shell_spec: PrototypeShellSpec,
+    history_entries: tuple = (),
+    history_entries_provider=None,
+):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QFrame, QScrollArea, QVBoxLayout, QWidget
+
+    provider = history_entries_provider or (lambda: history_entries)
+    content = QWidget()
+    content.setStyleSheet("background: transparent; border: none;")
+    content_layout = QVBoxLayout(content)
+    content_layout.setContentsMargins(0, 0, 0, 0)
+    content_layout.setSpacing(0)
+    scroll_area = QScrollArea()
+    scroll_area.setWidgetResizable(True)
+    scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+    scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+    scroll_area.setWidget(content)
+    layout.addWidget(scroll_area, 1)
+
+    def refresh() -> None:
+        _clear_layout(content_layout)
+        _render_history_screen_content(
+            content_layout,
+            shell_spec=shell_spec,
+            history_entries=tuple(provider()),
         )
-    )
-    recent = screen.recent_sessions.sessions[0]
+
+    refresh()
+    return refresh
+
+
+def _render_history_screen_content(
+    layout,
+    *,
+    shell_spec: PrototypeShellSpec,
+    history_entries: tuple[OperationalHistoryEntry, ...],
+) -> None:
+    screen = build_history_screen(history_entries)
 
     layout.addWidget(
         _build_visual_card(
             title="Operational memory",
             summary=screen.primary_intention,
             details=(
-                "History summarizes sessions, not raw logs.",
-                "Persistence is intentionally not connected in this pass.",
+                "History summarizes completed, stopped, refused, interrupted, and failed sessions.",
+                "It is not a raw log file.",
             ),
             shell_spec=shell_spec,
             treatment="hero",
+            content_spacing=2,
         )
     )
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addWidget(
-        _build_visual_card(
-            title=recent.outcome_message,
-            summary=recent.summary,
-            details=(
-                recent.confidence_note,
-                recent.suggested_next_step or "Review the current preparation state.",
-            ),
-            shell_spec=shell_spec,
-            treatment="primary action",
+
+    if not screen.has_sessions:
+        empty_state = screen.empty_state
+        layout.addWidget(
+            _build_visual_card(
+                title=empty_state.title,
+                summary=empty_state.summary,
+                details=empty_state.details,
+                shell_spec=shell_spec,
+                treatment="primary action",
+                content_spacing=2,
+            )
         )
-    )
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addWidget(
-        _build_visual_card(
-            title="Older sessions",
-            summary="No stored older sessions yet",
-            details=("When persistence is added, this remains recency-first and session-oriented.",),
-            shell_spec=shell_spec,
-            treatment="tertiary",
+        layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+        layout.addWidget(
+            _build_visual_card(
+                title="What will appear here",
+                summary="Each recorded session will provide operational context.",
+                details=(
+                    "Automation name and profile used",
+                    "Outcome and requested/completed count",
+                    "Warnings and recovery guidance",
+                    "Suggested safest next step",
+                ),
+                shell_spec=shell_spec,
+                treatment="tertiary",
+                content_spacing=2,
+            )
         )
+        layout.addStretch(1)
+        return
+
+    for session in screen.recent_sessions.sessions:
+        layout.addWidget(
+            _build_history_session_card(
+                session,
+                shell_spec=shell_spec,
+                treatment="primary action",
+            )
+        )
+        layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+
+    if screen.older_sessions is not None:
+        for session in screen.older_sessions.sessions:
+            layout.addWidget(
+                _build_history_session_card(
+                    session,
+                    shell_spec=shell_spec,
+                    treatment="tertiary",
+                )
+            )
+            layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
+
+    layout.addStretch(1)
+
+
+def _build_history_session_card(session, shell_spec: PrototypeShellSpec, treatment: str):
+    details = [
+        f"Automation: {session.automation_name}",
+        f"Profile: {session.profile_name}",
+        f"Requested/completed: {session.requested_count}/{session.completed_count}",
+        f"Recorded: {session.timestamp_label}",
+        session.confidence_note,
+    ]
+    details.extend(f"Warning: {warning}" for warning in session.warnings)
+    if session.recovery_note:
+        details.append(f"Recovery: {session.recovery_note}")
+    if session.suggested_next_step:
+        details.append(f"Next step: {session.suggested_next_step}")
+    if session.detail_layer.is_available:
+        details.extend(
+            " ".join(detail.split()) for detail in session.detail_layer.details
+        )
+    return _build_visual_card(
+        title=f"{session.automation_name} - {session.outcome_message}",
+        summary=session.summary,
+        details=tuple(details),
+        shell_spec=shell_spec,
+        treatment=treatment,
+        content_spacing=2,
     )
 
 
@@ -4405,6 +4670,7 @@ def _build_visual_card(
     details: tuple[str, ...],
     shell_spec: PrototypeShellSpec,
     treatment: str,
+    content_spacing: int = 6,
 ):
     from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
@@ -4430,7 +4696,7 @@ def _build_visual_card(
     content.setStyleSheet("background: transparent; border: none;")
     content_layout = QVBoxLayout(content)
     content_layout.setContentsMargins(0, 0, 0, 0)
-    content_layout.setSpacing(6)
+    content_layout.setSpacing(content_spacing)
 
     title_label = QLabel(title)
     summary_label = QLabel(summary)
