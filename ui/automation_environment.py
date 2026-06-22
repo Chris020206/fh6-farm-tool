@@ -10,7 +10,6 @@ from product.readiness_model import AcknowledgementLevel, ReadinessModel
 class AutomationEnvironmentSectionId(str, Enum):
     OVERVIEW = "overview"
     PROFILE = "profile"
-    READINESS = "readiness"
     CONTEXTUAL_WARNINGS = "contextual_warnings"
     ADVANCED = "advanced"
     RUN = "run"
@@ -33,19 +32,6 @@ class ProfileSection:
     behavior_summary: str
     reliability_posture: str
     customization_status: str
-
-
-@dataclass(frozen=True)
-class ReadinessSection:
-    section_id: AutomationEnvironmentSectionId
-    expected_baseline: str
-    manual_positioning_assumption: str
-    recommended_setup: tuple[str, ...]
-    focus_requirement: str
-    cursor_requirement: str | None
-    acknowledgement_level: AcknowledgementLevel
-    readiness_wording: str
-    confidence_notes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -80,7 +66,6 @@ class AutomationEnvironmentScreen:
     sections: tuple[
         OverviewSection
         | ProfileSection
-        | ReadinessSection
         | ContextualWarningsSection
         | AdvancedSection
         | RunSection,
@@ -91,7 +76,6 @@ class AutomationEnvironmentScreen:
 SECTION_ORDER: tuple[AutomationEnvironmentSectionId, ...] = (
     AutomationEnvironmentSectionId.OVERVIEW,
     AutomationEnvironmentSectionId.PROFILE,
-    AutomationEnvironmentSectionId.READINESS,
     AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS,
     AutomationEnvironmentSectionId.ADVANCED,
     AutomationEnvironmentSectionId.RUN,
@@ -127,17 +111,6 @@ def build_automation_environment_screen(
                 behavior_summary=profile_metadata.behavior_summary,
                 reliability_posture=profile_metadata.reliability_posture,
                 customization_status=profile_metadata.customization_status,
-            ),
-            ReadinessSection(
-                section_id=AutomationEnvironmentSectionId.READINESS,
-                expected_baseline=readiness_model.expected_baseline,
-                manual_positioning_assumption=readiness_model.manual_positioning_assumption,
-                recommended_setup=readiness_model.recommended_setup,
-                focus_requirement=readiness_model.focus_requirement,
-                cursor_requirement=readiness_model.cursor_requirement,
-                acknowledgement_level=readiness_model.acknowledgement_level,
-                readiness_wording=readiness_model.readiness_wording,
-                confidence_notes=readiness_model.confidence_notes,
             ),
             ContextualWarningsSection(
                 section_id=AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS,

@@ -1,6 +1,7 @@
 """Shared product support references and user-facing licensing guidance."""
 
 OFFICIAL_DISCORD_URL = "https://discord.gg/SgARD8YenU"
+OFFICIAL_YOUTUBE_URL = "https://www.youtube.com/channel/UCzFa9Q-6bE1KcvwH5WJ6mCg"
 
 
 def license_activation_failure_message() -> str:

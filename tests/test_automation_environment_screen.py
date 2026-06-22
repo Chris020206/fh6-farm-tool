@@ -11,7 +11,6 @@ from ui.automation_environment import (
     ContextualWarningsSection,
     OverviewSection,
     ProfileSection,
-    ReadinessSection,
     RunSection,
     SECTION_ORDER,
     build_automation_environment_screen,
@@ -38,8 +37,8 @@ class AutomationEnvironmentScreenTest(unittest.TestCase):
             run_plan=self.accepted_plan,
         )
 
-    def test_all_six_sections_exist(self) -> None:
-        self.assertEqual(6, len(self.accepted_screen.sections))
+    def test_five_preparation_sections_exist(self) -> None:
+        self.assertEqual(5, len(self.accepted_screen.sections))
 
     def test_section_order_is_preserved(self) -> None:
         section_order = tuple(
@@ -75,21 +74,8 @@ class AutomationEnvironmentScreenTest(unittest.TestCase):
             profile.behavior_summary,
         )
 
-    def test_readiness_section_uses_readiness_model(self) -> None:
-        readiness = self.accepted_screen.sections[2]
-
-        self.assertIsInstance(readiness, ReadinessSection)
-        self.assertEqual(
-            self.accepted_plan.readiness_model.expected_baseline,
-            readiness.expected_baseline,
-        )
-        self.assertEqual(
-            self.accepted_plan.readiness_model.acknowledgement_level,
-            readiness.acknowledgement_level,
-        )
-
     def test_warnings_combine_readiness_and_run_plan_warnings_safely(self) -> None:
-        warnings = self.accepted_screen.sections[3]
+        warnings = self.accepted_screen.sections[2]
 
         self.assertIsInstance(warnings, ContextualWarningsSection)
         self.assertEqual(
@@ -102,7 +88,7 @@ class AutomationEnvironmentScreenTest(unittest.TestCase):
         )
 
     def test_run_section_reflects_accepted_plan(self) -> None:
-        run = self.accepted_screen.sections[5]
+        run = self.accepted_screen.sections[4]
 
         self.assertIsInstance(run, RunSection)
         self.assertTrue(run.can_prepare_commitment)
@@ -124,14 +110,14 @@ class AutomationEnvironmentScreenTest(unittest.TestCase):
             readiness_model=self.accepted_plan.readiness_model,
             run_plan=refused_plan,
         )
-        run = screen.sections[5]
+        run = screen.sections[4]
 
         self.assertFalse(run.can_prepare_commitment)
         self.assertEqual("refused", run.status_label)
         self.assertIn("not active", run.refusal_message)
 
     def test_advanced_section_is_present_and_collapsed_by_default(self) -> None:
-        advanced = self.accepted_screen.sections[4]
+        advanced = self.accepted_screen.sections[3]
 
         self.assertIsInstance(advanced, AdvancedSection)
         self.assertEqual(AutomationEnvironmentSectionId.ADVANCED, advanced.section_id)

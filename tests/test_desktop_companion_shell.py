@@ -26,9 +26,14 @@ from desktop.companion_shell import (
     _desktop_baseline_summary,
     _desktop_visible_version_text,
     _build_commitment_readiness_details,
+    _build_commitment_layer_widget,
+    _build_community_support_card,
+    _build_automation_environment_widget,
+    _build_home_screen_content,
     _build_history_screen_content,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
+    _commitment_readiness_content,
     _auto1_execution_race_duration,
     _desktop_execution_confirmation_summary,
     _desktop_execution_refusal_details,
@@ -48,6 +53,7 @@ from desktop.companion_shell import (
     _should_show_auto1_runtime_adjustment,
     _should_show_community_feature_dialog,
     _summarize_auto1_ui_execution_error,
+    _wrap_in_page_scroll_area,
     build_desktop_app_spec,
 )
 from core.stop import StopManager
@@ -285,9 +291,16 @@ class DesktopCompanionShellTest(unittest.TestCase):
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)
-        self.assertEqual(960, self.shell_spec.window_height)
+        self.assertEqual(860, self.shell_spec.window_height)
         self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
+
+    def test_tall_desktop_pages_use_shared_scroll_wrapper(self) -> None:
+        source = inspect.getsource(_wrap_in_page_scroll_area)
+
+        self.assertIn("setWidgetResizable(True)", source)
+        self.assertIn("ScrollBarAlwaysOff", source)
+        self.assertIn("ScrollBarAsNeeded", source)
 
     def test_companion_mode_represents_running_supervision_without_execution(self) -> None:
         companion_mode = self.shell_spec.companion_mode
@@ -692,8 +705,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
             (
                 "RECOMMENDED NEXT STEP",
                 "REVIEW & PLAN",
-                "RECENT CONTEXT",
-                "QUIET STATUS",
+                "COMMUNITY & SUPPORT",
             ),
             signal_titles,
         )
@@ -702,12 +714,24 @@ class DesktopCompanionShellTest(unittest.TestCase):
                 ZoneRole.PRIMARY,
                 ZoneRole.PRIMARY,
                 ZoneRole.SECONDARY,
-                ZoneRole.TERTIARY,
             ),
             signal_roles,
         )
 
-    def test_automation_environment_renders_six_section_structure(self) -> None:
+    def test_home_uses_single_community_support_footer_card(self) -> None:
+        source = inspect.getsource(_build_home_screen_content)
+        card_source = inspect.getsource(_build_community_support_card)
+
+        self.assertIn("_build_community_support_card", source)
+        self.assertNotIn("RECENT CONTEXT", source)
+        self.assertNotIn("QUIET STATUS", source)
+        for label in ("Community & Support", "Discord", "YouTube"):
+            self.assertIn(label, card_source)
+        self.assertNotIn("Documentation", card_source)
+        self.assertIn("button_row.addWidget(button, 1)", card_source)
+        self.assertIn("layout.addStretch(1)", source)
+
+    def test_automation_environment_renders_preparation_only_structure(self) -> None:
         section_ids = tuple(
             section.section_id
             for section in self.shell_spec.automation_environment.sections
@@ -717,7 +741,6 @@ class DesktopCompanionShellTest(unittest.TestCase):
             (
                 AutomationEnvironmentSectionId.OVERVIEW,
                 AutomationEnvironmentSectionId.PROFILE,
-                AutomationEnvironmentSectionId.READINESS,
                 AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS,
                 AutomationEnvironmentSectionId.ADVANCED,
                 AutomationEnvironmentSectionId.RUN,
@@ -773,18 +796,6 @@ class DesktopCompanionShellTest(unittest.TestCase):
             ].readability_treatment,
         )
         self.assertEqual(
-            "primary confidence check",
-            sections_by_id[
-                AutomationEnvironmentSectionId.READINESS
-            ].readability_treatment,
-        )
-        self.assertEqual(
-            "Baseline requirements before operation.",
-            sections_by_id[
-                AutomationEnvironmentSectionId.READINESS
-            ].summary,
-        )
-        self.assertEqual(
             "secondary contextual support",
             sections_by_id[
                 AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS
@@ -812,13 +823,38 @@ class DesktopCompanionShellTest(unittest.TestCase):
             2,
         )
         self.assertLessEqual(
-            len(sections_by_id[AutomationEnvironmentSectionId.READINESS].details),
-            3,
-        )
-        self.assertLessEqual(
             len(sections_by_id[AutomationEnvironmentSectionId.RUN].details),
             2,
         )
+
+    def test_readiness_is_rendered_only_in_commitment_stage(self) -> None:
+        automation_source = inspect.getsource(_build_automation_environment_widget)
+        commitment_source = inspect.getsource(_build_commitment_layer_widget)
+
+        self.assertNotIn('eyebrow="READINESS"', automation_source)
+        self.assertEqual(1, commitment_source.count('eyebrow="READINESS"'))
+        self.assertIn("_commitment_readiness_content", commitment_source)
+
+    def test_commitment_readiness_handles_neutral_startup_state(self) -> None:
+        title, summary, details = _commitment_readiness_content("")
+
+        self.assertEqual("No automation prepared", title)
+        self.assertEqual(
+            "Prepare a supervised operation before reviewing readiness.",
+            summary,
+        )
+        self.assertTrue(details)
+
+    def test_commitment_readiness_resolves_all_supported_automations(self) -> None:
+        for automation_id in ("auto1", "auto2", "auto3"):
+            with self.subTest(automation_id=automation_id):
+                title, summary, details = _commitment_readiness_content(
+                    automation_id
+                )
+
+                self.assertEqual("Required Starting Position", title)
+                self.assertNotEqual("No automation prepared", summary)
+                self.assertTrue(details)
 
 
 if __name__ == "__main__":

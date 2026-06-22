@@ -63,7 +63,6 @@ from ui.automation_environment import (
     ContextualWarningsSection,
     OverviewSection,
     ProfileSection,
-    ReadinessSection,
     RunSection,
     build_automation_environment_screen,
 )
@@ -353,7 +352,7 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
     return PrototypeShellSpec(
         window_title=DESKTOP_PRODUCT_NAME,
         window_width=640,
-        window_height=960,
+        window_height=860,
         is_fixed_size=True,
         sidebar_destinations=sidebar_destinations,
         screens=tuple(
@@ -589,29 +588,35 @@ def launch_pyside6_shell_prototype() -> int:
         collapsed_button.mousePressEvent = lambda _event, row=index: set_navigation_index(row)
         collapsed_nav_buttons.append(collapsed_button)
         collapsed_nav_layout.addWidget(collapsed_button)
-        stacked_screens.addWidget(
-            _build_screen_widget(
-                screen,
-                shell_spec=shell_spec,
-                home_concept=shell_spec.home_concept
-                if screen.screen_id == ScreenId.HOME
-                else None,
-                open_automation_environment=(
-                    lambda: stacked_screens.setCurrentIndex(automation_environment_index)
-                )
-                if screen.screen_id == ScreenId.HOME
-                else None,
-                open_profiles=(
-                    lambda: stacked_screens.setCurrentIndex(1)
-                )
-                if screen.screen_id == ScreenId.HOME
-                else None,
-                history_entries_provider=lambda: tuple(operational_history_entries),
-                register_history_refresh=(
-                    lambda callback: history_refresh.__setitem__("callback", callback)
-                ),
+        screen_widget = _build_screen_widget(
+            screen,
+            shell_spec=shell_spec,
+            home_concept=shell_spec.home_concept
+            if screen.screen_id == ScreenId.HOME
+            else None,
+            open_automation_environment=(
+                lambda: stacked_screens.setCurrentIndex(automation_environment_index)
             )
+            if screen.screen_id == ScreenId.HOME
+            else None,
+            open_profiles=(
+                lambda: stacked_screens.setCurrentIndex(1)
+            )
+            if screen.screen_id == ScreenId.HOME
+            else None,
+            history_entries_provider=lambda: tuple(operational_history_entries),
+            register_history_refresh=(
+                lambda callback: history_refresh.__setitem__("callback", callback)
+            ),
         )
+        if screen.screen_id in {
+            ScreenId.HOME,
+            ScreenId.PROFILES,
+            ScreenId.HISTORY,
+            ScreenId.SETTINGS,
+        }:
+            screen_widget = _wrap_in_page_scroll_area(screen_widget)
+        stacked_screens.addWidget(screen_widget)
 
     completion_state_widget, update_completion_state = _build_completion_state_widget(
         shell_spec=shell_spec,
@@ -746,10 +751,10 @@ def launch_pyside6_shell_prototype() -> int:
         )
     )
     reset_preparation_state["callback"] = reset_automation_environment
-    stacked_screens.addWidget(automation_environment_widget)
-    stacked_screens.addWidget(commitment_layer_widget)
-    stacked_screens.addWidget(companion_mode_widget)
-    stacked_screens.addWidget(completion_state_widget)
+    stacked_screens.addWidget(_wrap_in_page_scroll_area(automation_environment_widget))
+    stacked_screens.addWidget(_wrap_in_page_scroll_area(commitment_layer_widget))
+    stacked_screens.addWidget(_wrap_in_page_scroll_area(companion_mode_widget))
+    stacked_screens.addWidget(_wrap_in_page_scroll_area(completion_state_widget))
 
     overlay_navigation = QWidget(body)
     overlay_navigation.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
@@ -917,7 +922,6 @@ def _build_automation_section(
     section: (
         OverviewSection
         | ProfileSection
-        | ReadinessSection
         | ContextualWarningsSection
         | AdvancedSection
         | RunSection
@@ -941,16 +945,6 @@ def _build_automation_section(
             details=(section.behavior_summary, section.reliability_posture),
             zone_role=ZoneRole.PRIMARY,
             readability_treatment="primary behavior summary",
-        )
-
-    if isinstance(section, ReadinessSection):
-        return PrototypeAutomationEnvironmentSection(
-            section_id=section.section_id,
-            title="Readiness",
-            summary="Baseline requirements before operation.",
-            details=(section.expected_baseline, section.manual_positioning_assumption),
-            zone_role=ZoneRole.PRIMARY,
-            readability_treatment="primary confidence check",
         )
 
     if isinstance(section, ContextualWarningsSection):
@@ -1008,14 +1002,9 @@ def _build_prototype_home_concept() -> PrototypeHomeConcept:
                 zone_role=ZoneRole.PRIMARY,
             ),
             PrototypeHomeSignal(
-                title="RECENT CONTEXT",
-                summary="Last prepared: Auto1 / supervised baseline",
+                title="COMMUNITY & SUPPORT",
+                summary="Community support, tutorials and official updates",
                 zone_role=ZoneRole.SECONDARY,
-            ),
-            PrototypeHomeSignal(
-                title="QUIET STATUS",
-                summary="Ready for supervised operation",
-                zone_role=ZoneRole.TERTIARY,
             ),
         ),
     )
@@ -1734,6 +1723,29 @@ def _style_navigation_button(
     )
 
 
+def _wrap_in_page_scroll_area(content):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QFrame, QScrollArea
+
+    scroll_area = QScrollArea()
+    scroll_area.setObjectName("DesktopPageScrollArea")
+    scroll_area.setWidgetResizable(True)
+    scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+    scroll_area.setHorizontalScrollBarPolicy(
+        Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    )
+    scroll_area.setVerticalScrollBarPolicy(
+        Qt.ScrollBarPolicy.ScrollBarAsNeeded
+    )
+    scroll_area.setStyleSheet(
+        "QScrollArea#DesktopPageScrollArea { background: transparent; border: none; }"
+        "QScrollArea#DesktopPageScrollArea > QWidget > QWidget {"
+        " background: transparent; border: none; }"
+    )
+    scroll_area.setWidget(content)
+    return scroll_area
+
+
 def _build_screen_widget(
     screen: PrototypeScreen,
     shell_spec: PrototypeShellSpec,
@@ -1769,7 +1781,6 @@ def _build_screen_widget(
             open_automation_environment=open_automation_environment,
             open_profiles=open_profiles,
         )
-        layout.addStretch()
         return container
 
     if screen.screen_id == ScreenId.PROFILES:
@@ -1888,11 +1899,6 @@ def _build_automation_environment_widget(
         eyebrow="ACTIVE PROFILE",
         shell_spec=shell_spec,
         treatment="primary behavior summary",
-    )
-    readiness = _build_preparation_text_card(
-        eyebrow="READINESS",
-        shell_spec=shell_spec,
-        treatment="primary confidence check",
     )
     warnings = _build_preparation_text_card(
         eyebrow="CONTEXTUAL WARNINGS",
@@ -2015,8 +2021,6 @@ def _build_automation_environment_widget(
         )
     )
     layout.addSpacing(3)
-    layout.addWidget(readiness["card"])
-    layout.addSpacing(3)
     layout.addWidget(runtime["card"])
     layout.addSpacing(3)
 
@@ -2032,7 +2036,6 @@ def _build_automation_environment_widget(
     preparation_cards = {
         "overview": overview,
         "profile": profile,
-        "readiness": readiness,
         "warnings": warnings,
         "runtime": runtime,
         "run": run,
@@ -2076,7 +2079,6 @@ def _build_automation_environment_widget(
             return
 
         profile_metadata = plan.profile_metadata
-        readiness_model = plan.readiness_model
         desktop_execution_supported = _is_desktop_execution_supported(automation_id)
         desktop_preparation_available = _is_desktop_preparation_available(automation_id)
         runtime["card"].setVisible(automation_id in {"auto1", "auto2", "auto3"})
@@ -2114,12 +2116,6 @@ def _build_automation_environment_widget(
                 _compact_text(profile_metadata.reliability_posture, 78),
                 f"Confidence: {profile_metadata.validation_confidence.value}",
             ),
-        )
-        _set_preparation_card_text(
-            preparation_cards["readiness"],
-            title="Required Starting Position",
-            summary=_desktop_baseline_summary(automation_id),
-            details=_desktop_baseline_details(automation_id, readiness_model),
         )
         _set_preparation_card_text(
             preparation_cards["warnings"],
@@ -2346,6 +2342,11 @@ def _build_commitment_layer_widget(
     layout.addSpacing(8)
 
     readiness_card = _build_preparation_text_card(
+        eyebrow="READINESS",
+        shell_spec=shell_spec,
+        treatment="primary confidence check",
+    )
+    commitment_summary_card = _build_preparation_text_card(
         eyebrow="LAST SAFE CHECKPOINT",
         shell_spec=shell_spec,
         treatment="primary action",
@@ -2367,6 +2368,8 @@ def _build_commitment_layer_widget(
     )
 
     layout.addWidget(readiness_card["card"])
+    layout.addSpacing(6)
+    layout.addWidget(commitment_summary_card["card"])
     layout.addSpacing(6)
     layout.addLayout(
         _build_card_row(
@@ -2407,8 +2410,18 @@ def _build_commitment_layer_widget(
         countdown_position["value"] = 0
         automatic_focus_button.setEnabled(True)
         manual_focus_button.setEnabled(True)
+        automation_id = companion_state.get("automation_id", "")
+        readiness_title, readiness_summary, readiness_details = (
+            _commitment_readiness_content(automation_id)
+        )
         _set_preparation_card_text(
             readiness_card,
+            title=readiness_title,
+            summary=readiness_summary,
+            details=readiness_details,
+        )
+        _set_preparation_card_text(
+            commitment_summary_card,
             title=shell_spec.commitment_layer.readiness_label,
             summary=companion_state.get("automation_name", "Prepared operation"),
             details=_build_commitment_readiness_details(companion_state),
@@ -2650,27 +2663,64 @@ def _build_home_screen_content(
     )
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
-    layout.addLayout(
-        _build_card_row(
-            cards=(
-                _build_visual_card(
-                    title=home_concept.signals[2].title,
-                    summary=home_concept.signals[2].summary,
-                    details=(),
-                    shell_spec=shell_spec,
-                    treatment="secondary",
-                ),
-                _build_visual_card(
-                    title=home_concept.signals[3].title,
-                    summary=home_concept.signals[3].summary,
-                    details=(),
-                    shell_spec=shell_spec,
-                    treatment="tertiary",
-                ),
-            ),
+    layout.addStretch(1)
+    layout.addWidget(
+        _build_community_support_card(
             shell_spec=shell_spec,
         )
     )
+
+
+def _build_community_support_card(shell_spec: PrototypeShellSpec):
+    from PySide6.QtWidgets import (
+        QFrame,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QSizePolicy,
+        QVBoxLayout,
+    )
+
+    from desktop.support_actions import open_official_discord, open_official_youtube
+
+    card = QFrame()
+    card.setObjectName("DesktopCard")
+    card.setFrameShape(QFrame.Shape.NoFrame)
+    card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(card, treatment="secondary")
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(14, 12, 14, 12)
+    card_layout.setSpacing(7)
+
+    title = QLabel("Community & Support")
+    summary = QLabel(
+        "Connect with the FAA community for support, tutorials, release announcements "
+        "and development updates."
+    )
+    _style_card_title(title, shell_spec=shell_spec, treatment="secondary")
+    _style_summary_label(summary, shell_spec=shell_spec)
+    card_layout.addWidget(title)
+    card_layout.addWidget(summary)
+
+    button_row = QHBoxLayout()
+    button_row.setContentsMargins(0, 2, 0, 0)
+    button_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    discord_button = QPushButton("Discord")
+    youtube_button = QPushButton("YouTube")
+    for button in (discord_button, youtube_button):
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        _style_secondary_button(button, shell_spec=shell_spec)
+        button_row.addWidget(button, 1)
+    card_layout.addLayout(button_row)
+
+    discord_button.clicked.connect(
+        lambda _checked=False: open_official_discord()
+    )
+    youtube_button.clicked.connect(
+        lambda _checked=False: open_official_youtube()
+    )
+    return card
 
 
 def _is_real_desktop_execution_state(companion_state: dict[str, str]) -> bool:
@@ -4203,7 +4253,6 @@ def _build_automation_environment_content(
 
     overview = sections_by_id[AutomationEnvironmentSectionId.OVERVIEW]
     profile = sections_by_id[AutomationEnvironmentSectionId.PROFILE]
-    readiness = sections_by_id[AutomationEnvironmentSectionId.READINESS]
     warnings = sections_by_id[AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS]
     advanced = sections_by_id[AutomationEnvironmentSectionId.ADVANCED]
     run = sections_by_id[AutomationEnvironmentSectionId.RUN]
@@ -4219,8 +4268,6 @@ def _build_automation_environment_content(
     )
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
     layout.addWidget(_build_section_card(overview, shell_spec=shell_spec))
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addWidget(_build_section_card(readiness, shell_spec=shell_spec))
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
     layout.addLayout(
         _build_card_row(
@@ -4332,6 +4379,24 @@ def _desktop_baseline_summary(automation_id: str) -> str:
         "auto3": "Garage -> Cars -> My Cars -> Recently Added.",
     }
     return summaries.get(automation_id, "Use the documented starting position for this automation.")
+
+
+def _commitment_readiness_content(
+    automation_id: str,
+) -> tuple[str, str, tuple[str, ...]]:
+    if not _is_desktop_preparation_available(automation_id):
+        return (
+            "No automation prepared",
+            "Prepare a supervised operation before reviewing readiness.",
+            ("Return to Automation Environment and prepare Auto1, Auto2, or Auto3.",),
+        )
+
+    readiness_model = get_readiness_model(automation_id)
+    return (
+        "Required Starting Position",
+        _desktop_baseline_summary(automation_id),
+        _desktop_baseline_details(automation_id, readiness_model),
+    )
 
 
 def _desktop_baseline_details(automation_id: str, readiness_model) -> tuple[str, ...]:
