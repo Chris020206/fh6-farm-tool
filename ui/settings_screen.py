@@ -16,10 +16,12 @@ from licensing.constants import (
 from licensing.entitlements import community_entitlements
 from licensing.models import LicenseState
 from product.support import OFFICIAL_DISCORD_URL
+from settings.execution_preferences import ExecutionPreferences
 
 
 class SettingsSectionId(str, Enum):
     LICENSE_AND_EDITION = "license_and_edition"
+    EXECUTION = "execution"
     ABOUT = "about"
 
 
@@ -46,6 +48,22 @@ class LicenseAndEditionSection:
 
 
 @dataclass(frozen=True)
+class ExecutionSafetySetting:
+    setting_id: str
+    label: str
+    description: str
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class ExecutionSection:
+    section_id: SettingsSectionId
+    title: str
+    description: str
+    settings: tuple[ExecutionSafetySetting, ...]
+
+
+@dataclass(frozen=True)
 class AboutSection:
     section_id: SettingsSectionId
     product: str
@@ -60,6 +78,7 @@ class AboutSection:
 class SettingsScreen:
     primary_intention: str
     license_and_edition: LicenseAndEditionSection
+    execution: ExecutionSection
     about: AboutSection
 
 
@@ -67,15 +86,19 @@ def build_settings_screen(
     license_state: LicenseState | None = None,
     *,
     version: str = "v0.2.0-beta",
+    execution_preferences: ExecutionPreferences | None = None,
 ) -> SettingsScreen:
     license_state = license_state or LicenseState(
         status="community",
         entitlements=community_entitlements(),
         message="Community Edition is active.",
     )
+    execution_preferences = execution_preferences or ExecutionPreferences()
     edition_name = product_facing_edition_name(license_state.entitlements.edition)
     return SettingsScreen(
-        primary_intention="Review your edition, manage your offline license, and view product information.",
+        primary_intention=(
+            "Review your edition, execution safety preferences, and product information."
+        ),
         license_and_edition=LicenseAndEditionSection(
             section_id=SettingsSectionId.LICENSE_AND_EDITION,
             edition_name=edition_name,
@@ -85,6 +108,30 @@ def build_settings_screen(
             ),
             included_features=_included_features(license_state),
             status_items=_status_items(license_state, edition_name),
+        ),
+        execution=ExecutionSection(
+            section_id=SettingsSectionId.EXECUTION,
+            title="Execution Safety",
+            description=(
+                "Configure confirmation dialogs shown before resource-spending "
+                "automation modes."
+            ),
+            settings=(
+                ExecutionSafetySetting(
+                    setting_id="show_auto2_purchase_confirmation",
+                    label="Show Auto2 Purchase confirmation",
+                    description=(
+                        "Warn before Auto2 Purchase Mode spends in-game credits."
+                    ),
+                    enabled=execution_preferences.show_auto2_purchase_confirmation,
+                ),
+                ExecutionSafetySetting(
+                    setting_id="show_auto3_unlock_confirmation",
+                    label="Show Auto3 Unlock confirmation",
+                    description="Warn before Auto3 Unlock Mode spends Skill Points.",
+                    enabled=execution_preferences.show_auto3_unlock_confirmation,
+                ),
+            ),
         ),
         about=AboutSection(
             section_id=SettingsSectionId.ABOUT,

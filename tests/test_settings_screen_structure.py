@@ -21,6 +21,7 @@ from ui.settings_screen import (
     version_information_text,
 )
 from product.support import OFFICIAL_DISCORD_URL
+from settings.execution_preferences import ExecutionPreferences
 
 
 class SettingsScreenStructureTest(unittest.TestCase):
@@ -78,6 +79,33 @@ class SettingsScreenStructureTest(unittest.TestCase):
             version_information_text(screen.about),
         )
 
+    def test_execution_safety_contains_exactly_two_real_preferences(self) -> None:
+        screen = build_settings_screen()
+
+        self.assertEqual(SettingsSectionId.EXECUTION, screen.execution.section_id)
+        self.assertEqual("Execution Safety", screen.execution.title)
+        self.assertEqual(
+            (
+                "Show Auto2 Purchase confirmation",
+                "Show Auto3 Unlock confirmation",
+            ),
+            tuple(setting.label for setting in screen.execution.settings),
+        )
+        self.assertTrue(all(setting.enabled for setting in screen.execution.settings))
+
+    def test_execution_safety_reflects_persisted_values(self) -> None:
+        screen = build_settings_screen(
+            execution_preferences=ExecutionPreferences(
+                show_auto2_purchase_confirmation=False,
+                show_auto3_unlock_confirmation=True,
+            )
+        )
+
+        self.assertEqual(
+            (False, True),
+            tuple(setting.enabled for setting in screen.execution.settings),
+        )
+
     def test_supported_editions_have_distinct_product_names(self) -> None:
         self.assertEqual("Community Edition", product_facing_edition_name("community"))
         self.assertEqual("Basic Edition", product_facing_edition_name("basic"))
@@ -87,7 +115,7 @@ class SettingsScreenStructureTest(unittest.TestCase):
             product_facing_edition_name("founding"),
         )
 
-    def test_placeholder_and_execution_settings_are_absent(self) -> None:
+    def test_placeholder_and_unrelated_settings_are_absent(self) -> None:
         serialized = repr(build_settings_screen()).lower()
 
         for prohibited in (
@@ -95,7 +123,6 @@ class SettingsScreenStructureTest(unittest.TestCase):
             "notification",
             "startup behavior",
             "window behavior",
-            "safety preferences",
             "advanced system",
             "update behavior",
             "environment detection",

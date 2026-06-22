@@ -48,6 +48,8 @@ from desktop.companion_shell import (
     _parse_auto1_loop_count,
     _parse_auto2_purchase_count,
     _request_auto1_ui_stop,
+    _request_supervision_transition,
+    _resource_spending_confirmation_for,
     _record_operational_history_entry,
     _session_status_for_completion_state,
     _should_show_auto1_runtime_adjustment,
@@ -55,10 +57,12 @@ from desktop.companion_shell import (
     _summarize_auto1_ui_execution_error,
     _wrap_in_page_scroll_area,
     build_desktop_app_spec,
+    launch_pyside6_shell_prototype,
 )
 from core.stop import StopManager
 from licensing.models import EntitlementDecision
 from sessions.session_status import SessionStatus
+from settings.execution_preferences import ExecutionPreferences
 from integrations.windows_focus_handoff import (
     FocusHandoffResult,
     FocusHandoffStatus,
@@ -129,6 +133,112 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertFalse(_should_show_community_feature_dialog(allowed))
         self.assertFalse(_should_show_community_feature_dialog(licensed_denied))
 
+    def test_auto2_purchase_requires_resource_spending_confirmation(self) -> None:
+        confirmation = _resource_spending_confirmation_for(
+            {"automation_id": "auto2", "auto2_mode": "purchase"}
+        )
+
+        self.assertIsNotNone(confirmation)
+        self.assertEqual("Auto2 Purchase Mode", confirmation.title)
+        self.assertIn("spend in-game credits", confirmation.body)
+        self.assertIn("Autoshow starting position", confirmation.body)
+
+    def test_auto3_unlock_requires_resource_spending_confirmation(self) -> None:
+        confirmation = _resource_spending_confirmation_for(
+            {"automation_id": "auto3", "auto3_mode": "unlock"}
+        )
+
+        self.assertIsNotNone(confirmation)
+        self.assertEqual("Auto3 Unlock Mode", confirmation.title)
+        self.assertIn("spend in-game Skill Points", confirmation.body)
+        self.assertIn("Subaru Impreza 22B-STI", confirmation.body)
+
+    def test_auto2_confirmation_can_be_disabled(self) -> None:
+        companion_state = {"automation_id": "auto2", "auto2_mode": "purchase"}
+        confirmations = []
+        opened_states = []
+
+        transitioned = _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda confirmation: (
+                confirmations.append(confirmation) or False
+            ),
+            open_commitment_layer=opened_states.append,
+            preferences=ExecutionPreferences(
+                show_auto2_purchase_confirmation=False
+            ),
+        )
+
+        self.assertTrue(transitioned)
+        self.assertEqual([], confirmations)
+        self.assertEqual([companion_state], opened_states)
+
+    def test_auto3_confirmation_can_be_disabled(self) -> None:
+        companion_state = {"automation_id": "auto3", "auto3_mode": "unlock"}
+        confirmations = []
+        opened_states = []
+
+        transitioned = _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda confirmation: (
+                confirmations.append(confirmation) or False
+            ),
+            open_commitment_layer=opened_states.append,
+            preferences=ExecutionPreferences(
+                show_auto3_unlock_confirmation=False
+            ),
+        )
+
+        self.assertTrue(transitioned)
+        self.assertEqual([], confirmations)
+        self.assertEqual([companion_state], opened_states)
+
+    def test_auto2_navigation_test_does_not_require_confirmation(self) -> None:
+        self.assertIsNone(
+            _resource_spending_confirmation_for(
+                {"automation_id": "auto2", "auto2_mode": "test"}
+            )
+        )
+
+    def test_auto3_navigation_test_does_not_require_confirmation(self) -> None:
+        self.assertIsNone(
+            _resource_spending_confirmation_for(
+                {"automation_id": "auto3", "auto3_mode": "test"}
+            )
+        )
+
+    def test_auto1_does_not_require_resource_spending_confirmation(self) -> None:
+        self.assertIsNone(
+            _resource_spending_confirmation_for({"automation_id": "auto1"})
+        )
+
+    def test_resource_spending_cancel_keeps_preparation_state(self) -> None:
+        companion_state = {"automation_id": "auto2", "auto2_mode": "purchase"}
+        opened_states = []
+
+        transitioned = _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda _confirmation: False,
+            open_commitment_layer=opened_states.append,
+        )
+
+        self.assertFalse(transitioned)
+        self.assertEqual([], opened_states)
+        self.assertEqual("purchase", companion_state["auto2_mode"])
+
+    def test_resource_spending_continue_opens_commitment_checkpoint(self) -> None:
+        companion_state = {"automation_id": "auto3", "auto3_mode": "unlock"}
+        opened_states = []
+
+        transitioned = _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda _confirmation: True,
+            open_commitment_layer=opened_states.append,
+        )
+
+        self.assertTrue(transitioned)
+        self.assertEqual([companion_state], opened_states)
+
     def test_sidebar_maps_to_stable_destinations(self) -> None:
         destination_ids = tuple(
             destination.destination_id
@@ -138,7 +248,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertEqual(
             (
                 SidebarDestinationId.HOME,
-                SidebarDestinationId.PROFILES,
+                SidebarDestinationId.AUTOMATION_ENVIRONMENT,
                 SidebarDestinationId.HISTORY,
                 SidebarDestinationId.HELP,
                 SidebarDestinationId.SETTINGS,
@@ -204,11 +314,21 @@ class DesktopCompanionShellTest(unittest.TestCase):
         )
 
         self.assertEqual(sidebar_screen_ids, prototype_screen_ids)
-        self.assertNotIn(ScreenId.AUTOMATION_ENVIRONMENT, prototype_screen_ids)
+        self.assertEqual(1, prototype_screen_ids.count(ScreenId.AUTOMATION_ENVIRONMENT))
+
+    def test_sidebar_reuses_existing_automation_environment_page(self) -> None:
+        source = inspect.getsource(launch_pyside6_shell_prototype)
+
+        self.assertIn("stack_index_by_screen_id", source)
+        self.assertIn(
+            "if screen.screen_id == ScreenId.AUTOMATION_ENVIRONMENT:",
+            source,
+        )
+        self.assertEqual(1, source.count("_build_automation_environment_widget("))
 
     def test_sidebar_support_screens_have_real_desktop_content_paths(self) -> None:
         self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HOME))
-        self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.PROFILES))
+        self.assertFalse(_has_specialized_desktop_screen_content(ScreenId.PROFILES))
         self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HISTORY))
         self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HELP))
         self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.SETTINGS))
@@ -291,7 +411,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
         self.assertEqual(640, self.shell_spec.window_width)
-        self.assertEqual(860, self.shell_spec.window_height)
+        self.assertEqual(760, self.shell_spec.window_height)
         self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
 
@@ -327,6 +447,22 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertFalse(commitment.introduces_execution)
         self.assertIn("FH6 focus handoff", commitment.focus_label)
         self.assertIn("F8", commitment.stop_label)
+
+    def test_commitment_layer_uses_shared_page_spacing(self) -> None:
+        source = inspect.getsource(_build_commitment_layer_widget)
+
+        self.assertIn(
+            "layout.setSpacing(shell_spec.vertical_rhythm.card_spacing)",
+            source,
+        )
+        self.assertNotIn("layout.addSpacing(", source)
+        self.assertIn(
+            "action_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)",
+            source,
+        )
+        self.assertIn("action_row.addWidget(automatic_focus_button, 1)", source)
+        self.assertIn("action_row.addWidget(manual_focus_button, 1)", source)
+        self.assertIn("action_row.addWidget(return_button, 1)", source)
 
     def test_execution_wiring_supports_mvp_automations_and_fails_closed_for_auto4(self) -> None:
         execution_wiring = self.shell_spec.execution_wiring
@@ -629,10 +765,11 @@ class DesktopCompanionShellTest(unittest.TestCase):
 
         self.assertEqual(18, rhythm.content_margin)
         self.assertEqual(8, rhythm.header_spacing)
+        self.assertEqual(8, rhythm.card_spacing)
         self.assertEqual(14, rhythm.section_spacing)
         self.assertEqual(10, rhythm.group_spacing)
-        self.assertEqual(10, rhythm.group_inner_margin)
-        self.assertEqual(16, rhythm.important_element_spacing)
+        self.assertEqual(12, rhythm.card_horizontal_padding)
+        self.assertEqual(10, rhythm.card_vertical_padding)
         self.assertTrue(rhythm.is_single_frame)
         self.assertFalse(rhythm.introduces_scrolling)
         self.assertEqual("restrained but not empty", rhythm.density_principle)
@@ -704,14 +841,12 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertEqual(
             (
                 "RECOMMENDED NEXT STEP",
-                "REVIEW & PLAN",
                 "COMMUNITY & SUPPORT",
             ),
             signal_titles,
         )
         self.assertEqual(
             (
-                ZoneRole.PRIMARY,
                 ZoneRole.PRIMARY,
                 ZoneRole.SECONDARY,
             ),
@@ -730,6 +865,29 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertNotIn("Documentation", card_source)
         self.assertIn("button_row.addWidget(button, 1)", card_source)
         self.assertIn("layout.addStretch(1)", source)
+
+    def test_home_has_no_review_and_plan_card(self) -> None:
+        source = inspect.getsource(_build_home_screen_content)
+
+        self.assertNotIn("Review & Plan", source)
+        self.assertNotIn("Review Profiles", source)
+        self.assertNotIn("open_profiles", source)
+
+    def test_home_identity_card_uses_final_product_copy(self) -> None:
+        source = inspect.getsource(_build_home_screen_content)
+
+        self.assertIn('title="Forza Automation Assist"', source)
+        self.assertIn("farming Super", source)
+        self.assertIn("purchasing the Subaru Impreza", source)
+        self.assertIn("validated behavior, supervised", source)
+        self.assertIn('"System ready."', source)
+        self.assertNotIn('title="Ready when the baseline is clear"', source)
+
+    def test_desktop_automation_environment_hides_profile_and_warnings_cards(self) -> None:
+        source = inspect.getsource(_build_automation_environment_widget)
+
+        self.assertNotIn('eyebrow="ACTIVE PROFILE"', source)
+        self.assertNotIn('eyebrow="CONTEXTUAL WARNINGS"', source)
 
     def test_automation_environment_renders_preparation_only_structure(self) -> None:
         section_ids = tuple(
