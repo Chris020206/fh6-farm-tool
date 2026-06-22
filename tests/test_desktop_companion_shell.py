@@ -1,3 +1,4 @@
+import inspect
 import unittest
 from unittest.mock import Mock
 
@@ -8,9 +9,11 @@ from desktop.execution.auto1_desktop_execution import (
 from desktop.companion_shell import (
     AUTO1_LOOP_COUNT_MAX,
     AUTO1_LOOP_COUNT_MIN,
+    AUTO1_REQUIRED_GAME_SETTINGS,
     AUTO1_RACE_DURATION_EXECUTION_BUFFER_SECONDS,
     AUTO1_RACE_DURATION_MAX_SECONDS,
     AUTO1_RACE_DURATION_MIN_SECONDS,
+    AUTO1_VALIDATED_EVENTLAB_SHARE_CODE,
     DEFAULT_FH6_TARGET_TITLE,
     DESKTOP_BRAND_LOGO_MAX_HEIGHT,
     DESKTOP_BRAND_LOGO_MAX_WIDTH,
@@ -30,6 +33,8 @@ from desktop.companion_shell import (
     _desktop_baseline_summary,
     _desktop_visible_version_text,
     _build_commitment_readiness_details,
+    _build_automation_environment_widget,
+    _build_help_screen_content,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
     _auto1_execution_race_duration,
@@ -307,6 +312,14 @@ class DesktopCompanionShellTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "between 1 and 5"):
             _parse_auto1_loop_count("6", maximum=5)
 
+    def test_desktop_auto1_selector_applies_current_entitlement_limit(self) -> None:
+        source = inspect.getsource(_build_automation_environment_widget)
+
+        self.assertIn(
+            "auto1_loop_count_input.setMaximum(auto1_loop_limit)",
+            source,
+        )
+
     def test_auto1_loop_limit_comes_from_current_entitlement(self) -> None:
         service = Mock()
         service.evaluate_execution.return_value = EntitlementDecision(
@@ -331,6 +344,35 @@ class DesktopCompanionShellTest(unittest.TestCase):
         )
 
         self.assertEqual(25, current_auto1_loop_count_limit(service))
+
+    def test_auto1_guide_starts_with_required_settings_and_eventlab(self) -> None:
+        self.assertEqual(
+            (
+                "Steering: Auto-Steering",
+                "Traction Control: On",
+                "Stability Control: On",
+                "Shifting: Automatic",
+                "Launch Control: On",
+            ),
+            AUTO1_REQUIRED_GAME_SETTINGS,
+        )
+        self.assertEqual(
+            "890 169 683",
+            AUTO1_VALIDATED_EVENTLAB_SHARE_CODE,
+        )
+
+        source = inspect.getsource(_build_help_screen_content)
+        auto1_content = source[source.index("def build_auto1_content") :]
+        required_settings_position = auto1_content.index("Required Game Settings")
+        eventlab_position = auto1_content.index(
+            "Current Validated EventLab Farm Race"
+        )
+        setup_position = auto1_content.index("Purpose:")
+
+        self.assertLess(required_settings_position, eventlab_position)
+        self.assertLess(eventlab_position, setup_position)
+        self.assertIn("AUTO1_REQUIRED_GAME_SETTINGS", auto1_content)
+        self.assertIn("AUTO1_VALIDATED_EVENTLAB_SHARE_CODE", auto1_content)
 
     def test_auto2_purchase_count_is_bounded_runtime_value(self) -> None:
         self.assertEqual(1, _parse_auto2_purchase_count("1"))

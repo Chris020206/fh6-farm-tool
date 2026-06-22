@@ -11,7 +11,9 @@ if _SPEC is None or _SPEC.loader is None:
 _PACKAGING = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_PACKAGING)
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_NAME = _PACKAGING.APP_NAME
+EDITION_NAME = _PACKAGING.EDITION_NAME
 PACKAGE_NAME = _PACKAGING.PACKAGE_NAME
 REQUIRED_PACKAGE_FILES = _PACKAGING.REQUIRED_PACKAGE_FILES
 ZIP_NAME = _PACKAGING.ZIP_NAME
@@ -21,6 +23,45 @@ build_beta_zip = _PACKAGING.build_beta_zip
 
 
 class BetaPackagingTest(unittest.TestCase):
+    def test_package_identity_is_community_edition(self) -> None:
+        self.assertEqual("Community Edition", EDITION_NAME)
+        self.assertEqual(
+            "Forza Automation Assist Community Edition v0.2.0-beta",
+            PACKAGE_NAME,
+        )
+        self.assertEqual(
+            "Forza_Automation_Assist_Community_Edition_v0.2.0-beta.zip",
+            ZIP_NAME,
+        )
+
+    def test_package_documents_are_community_only(self) -> None:
+        package_files = PROJECT_ROOT / "package_files"
+        prohibited_terms = (
+            "founding tester",
+            "basic edition",
+            "plus edition",
+            "purchase",
+            "upgrade",
+            "trial",
+            "demo",
+        )
+        required_terms = (
+            "community edition",
+            "auto1 community",
+            "auto2 navigation test",
+            "auto3 navigation test",
+        )
+
+        for file_name in REQUIRED_PACKAGE_FILES:
+            with self.subTest(file_name=file_name):
+                text = (package_files / file_name).read_text(
+                    encoding="utf-8"
+                ).lower()
+                for term in prohibited_terms:
+                    self.assertNotIn(term, text)
+                for term in required_terms:
+                    self.assertIn(term, text)
+
     def test_assembly_and_zip_use_current_product_name_and_clean_tree(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

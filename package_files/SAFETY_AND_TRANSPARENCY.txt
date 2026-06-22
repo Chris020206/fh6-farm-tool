@@ -1,33 +1,34 @@
-Forza Automation Assist - Safety and Transparency
+Forza Automation Assist Community Edition - Safety and Transparency
 
-This file explains what the tool does and does not do.
+Community Edition includes:
+- Auto1 Community
+- Auto2 Navigation Test
+- Auto3 Navigation Test
 
-The tool does:
-- Send keyboard input.
-- Automate predefined FH6 menu traversal and gameplay flows using keyboard input.
-- Require (strongly recommends) user supervision during real-input automation.
-- Provide F8 emergency stop support for guarded automation runs.
+Forza Automation Assist does:
+- Send normal keyboard input.
+- Automate predefined FH6 flows through supervised desktop automation.
+- Provide F8 emergency stop support.
+- Operate externally as a Windows desktop application.
 
-The tool does not:
+Forza Automation Assist does not:
 - Modify FH6 game files.
 - Inject into the game.
 - Edit game memory.
-- Bypass anti-cheat.
 - Access user accounts.
 - Collect passwords.
 - Require login credentials.
 - Run automation on startup.
 
-Real-input behavior
-Forza Automation Assist works by sending normal keyboard input through guarded automation paths. The operator remains responsible for starting from the correct FH6 baseline state and supervising the run.
+Operator responsibility
+FH6 must be prepared at the documented baseline for the selected automation. Keep the visible game state under supervision and use F8 if the operation no longer matches the expected flow.
 
-Antivirus and SmartScreen
-Because this is an early beta package from an "unknown publisher", Windows Defender SmartScreen or antivirus software may show a warning. That warning does not automatically mean the file is unsafe, but you should not ignore warnings blindly.
+Windows security notices
+Windows SmartScreen or antivirus software may warn because the application is not code-signed by a known publisher. Scan the downloaded ZIP and extracted folder if additional confidence is needed. Do not dismiss unexpected security warnings without reviewing them.
 
-Recommended checks
-- Scan the zip file before extracting if you want extra confidence.
-- Scan the extracted folder before first launch if preferred.
-- Ask through the Discord support route if anything looks unexpected.
+No absolute guarantee
+This document describes the application's intended behavior. It does not make an absolute guarantee about game enforcement, antivirus classification, or every possible system configuration.
 
-No absolute safety claim
-This beta is provided for controlled founding tester evaluation. It has validated behavior boundaries, but it is not public release software and should be supervised.
+Support
+Documentation and community help are available through the official FAA Discord:
+https://discord.gg/SgARD8YenU

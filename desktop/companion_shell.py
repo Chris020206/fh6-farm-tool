@@ -129,6 +129,14 @@ DESKTOP_TRAY_ACTION_LABELS = (
     DESKTOP_ABOUT_TITLE,
     "Exit",
 )
+AUTO1_REQUIRED_GAME_SETTINGS = (
+    "Steering: Auto-Steering",
+    "Traction Control: On",
+    "Stability Control: On",
+    "Shifting: Automatic",
+    "Launch Control: On",
+)
+AUTO1_VALIDATED_EVENTLAB_SHARE_CODE = "890 169 683"
 NAVIGATION_ICON_SLOT_WIDTH = 42
 
 
@@ -2977,6 +2985,54 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(7)
+        content_layout.addWidget(
+            build_text_label("Required Game Settings", role="heading")
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Before using Auto1, verify that the following FH6 difficulty "
+                "settings are configured correctly."
+            )
+        )
+        content_layout.addWidget(build_text_label("Difficulty:", role="summary"))
+        content_layout.addWidget(
+            build_bullet_list(AUTO1_REQUIRED_GAME_SETTINGS)
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Using different settings may cause Auto1 to behave unexpectedly "
+                "or fail to complete the race consistently."
+            )
+        )
+        add_section_heading(
+            content_layout,
+            "Current Validated EventLab Farm Race",
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Auto1 is designed to operate with a validated EventLab farm race."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Because EventLab share codes may change or become unavailable over "
+                "time, FAA maintains a current validated recommendation."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Current validated EventLab Share Code: "
+                f"{AUTO1_VALIDATED_EVENTLAB_SHARE_CODE}",
+                role="summary",
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "If this EventLab is no longer available or you experience unexpected "
+                "behaviour after a game update, visit the official FAA Discord for "
+                "the latest validated recommendation."
+            )
+        )
         content_layout.addWidget(build_text_label(f"Purpose: {auto1_guide.purpose}"))
         content_layout.addWidget(
             build_text_label(

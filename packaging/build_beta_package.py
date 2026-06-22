@@ -6,8 +6,9 @@ from pathlib import Path
 
 BETA_VERSION = "v0.2.0-beta"
 APP_NAME = "Forza Automation Assist"
-PACKAGE_NAME = f"{APP_NAME} {BETA_VERSION}"
-ZIP_NAME = "Forza_Automation_Assist_v0.2.0-beta.zip"
+EDITION_NAME = "Community Edition"
+PACKAGE_NAME = f"{APP_NAME} {EDITION_NAME} {BETA_VERSION}"
+ZIP_NAME = "Forza_Automation_Assist_Community_Edition_v0.2.0-beta.zip"
 
 REQUIRED_PACKAGE_FILES = (
     "README_INSTALL.txt",
@@ -114,7 +115,7 @@ def build_beta_package(root: Path | None = None) -> Path:
         _require_file(package_files_dir / file_name, f"package file {file_name}")
 
     print("-----------------------------------")
-    print("Building Beta Package...")
+    print("Building Community Edition Package...")
 
     _clean_previous_output(output_dir)
     output_dir.mkdir(parents=True)
@@ -176,7 +177,7 @@ def build_beta_zip(package_dir: Path, root: Path | None = None) -> Path:
 
     zip_path = root / "output" / ZIP_NAME
     _clean_previous_zip(zip_path)
-    print("Creating beta ZIP...")
+    print("Creating Community Edition ZIP...")
     try:
         created_archive = Path(
             shutil.make_archive(
@@ -202,7 +203,7 @@ def main() -> int:
         build_beta_zip(package_dir)
     except PackageBuildError as exc:
         print("-----------------------------------")
-        print("Beta package build failed.")
+        print("Community Edition package build failed.")
         print(str(exc))
         print("-----------------------------------")
         return 1

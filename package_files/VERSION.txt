@@ -1,17 +1,24 @@
-Forza Automation Assist
+Forza Automation Assist Community Edition
 
 Version: v0.2.0-beta
-Build Type: Founding Tester Beta
-Release Date: TBD
+Build Type: Community Edition
+Release Type: Portable ZIP
+
+Included automation
+- Auto1 Community
+- Auto2 Navigation Test
+- Auto3 Navigation Test
 
 Changelog
-- Initial founding tester beta package candidate.
-- Auto1, Auto2, and Auto3 validated for controlled/manual desktop execution.
-- Portable zip distribution.
+- Community Edition package candidate.
+- Auto1 Community included.
+- Auto2 Navigation Test included.
+- Auto3 Navigation Test included.
+- Portable ZIP distribution.
 
 Compatibility Notes
 - Windows only.
 - Forza Horizon 6 must be installed separately.
-- FH6 must be open and made ready at baseline while being focusable at automation start, and active during automation without interuption.
-- User supervision is required during real-input automation.
+- FH6 baseline preparation is required.
+- User supervision is recommended.
 - F8 emergency stop should be kept ready.

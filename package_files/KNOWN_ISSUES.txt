@@ -1,30 +1,27 @@
-Forza Automation Assist - Known Issues
+Forza Automation Assist Community Edition - Known Issues
 
-Build: v0.2.0-beta
+Version: v0.2.0-beta
 
-Beta software
-This is founding tester beta software. Packaging, onboarding, and desktop polish are still being validated.
+Included automation
+- Auto1 Community
+- Auto2 Navigation Test
+- Auto3 Navigation Test
 
 Known limitations
 - FH6 baseline state matters. Starting from the wrong in-game menu or screen can cause automation to desynchronize.
-- Windows Defender SmartScreen or antivirus software may warn because the beta is not code-signed by a known publisher.
-- Auto3 max validated cars = 4.
-- Auto3 start row assumption = row A.
+- Windows SmartScreen or antivirus software may warn because the application is not code-signed by a known publisher.
+- Auto1 Community supports up to 5 consecutive race loops per execution and may be prepared again for later executions.
+- Auto2 Navigation Test does not buy vehicles.
+- Auto3 Navigation Test does not spend Skill Points.
 - Auto4 is not included.
 - Unattended automation is not recommended.
-- Packaging and onboarding are still under validation.
-
-Automation risk notes
-- Auto2 purchase mode can spend in-game credits.
-- Auto3 unlock mode can spend skill points.
-- Test modes should be used first when navigation confidence is uncertain.
 
 Support
-Report issues through the project Discord support route.
+Report issues through the official FAA Discord:
+https://discord.gg/SgARD8YenU
 
 When reporting an issue, include:
-- Which automation was selected.
-- Whether the run was test mode or spending/unlock mode.
-- What FH6 screen was visible before starting.
+- The selected automation.
+- The FH6 screen visible before starting.
 - What happened before the issue.
-- Whether F8 stop was used.
+- Whether F8 emergency stop was used.
