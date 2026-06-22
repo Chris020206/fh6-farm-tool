@@ -370,8 +370,8 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
 
     return PrototypeShellSpec(
         window_title=DESKTOP_PRODUCT_NAME,
-        window_width=640,
-        window_height=760,
+        window_width=670,
+        window_height=870,
         is_fixed_size=True,
         sidebar_destinations=sidebar_destinations,
         screens=tuple(
@@ -2056,6 +2056,11 @@ def _build_automation_environment_widget(
         shell_spec=shell_spec,
         treatment="primary action",
     )
+    baseline = _build_preparation_text_card(
+        eyebrow="BASELINE PREPARATION",
+        shell_spec=shell_spec,
+        treatment="primary confidence check",
+    )
     runtime = _build_preparation_text_card(
         eyebrow="QUICK SETTINGS",
         shell_spec=shell_spec,
@@ -2169,6 +2174,7 @@ def _build_automation_environment_widget(
     )
 
     layout.addWidget(overview["card"])
+    layout.addWidget(baseline["card"])
     layout.addWidget(runtime["card"])
 
     prepare_button = QPushButton("Prepare Run")
@@ -2182,6 +2188,7 @@ def _build_automation_environment_widget(
 
     preparation_cards = {
         "overview": overview,
+        "baseline": baseline,
         "runtime": runtime,
         "run": run,
     }
@@ -2250,8 +2257,16 @@ def _build_automation_environment_widget(
             summary=_compact_text(definition.short_purpose, 96),
             details=(
                 f"Validated scope: {_compact_text(definition.validated_scope, 72)}",
-                _compact_text(definition.expected_baseline, 112),
             ),
+        )
+        baseline_title, baseline_summary, baseline_details = (
+            _baseline_preparation_content(automation_id)
+        )
+        _set_preparation_card_text(
+            preparation_cards["baseline"],
+            title=baseline_title,
+            summary=baseline_summary,
+            details=baseline_details,
         )
         if automation_id == "auto1":
             _set_preparation_card_text(
@@ -2326,18 +2341,10 @@ def _build_automation_environment_widget(
                     f"Selected: {definition.display_name}. "
                     f"Requested cycles: {_desktop_requested_count(automation_id, auto1_loop_count_input.value(), auto2_purchase_count_input.value(), auto3_cars_input.value())}."
                 ),
-                (
-                    (
-                        "Prepared state only. Supervision is available after commitment."
-                        if desktop_preparation_available
-                        else " ".join(_desktop_execution_refusal_details(automation_id))
-                    )
-                    if prepared
-                    else (
-                        "No operation begins until focus handoff and commitment."
-                        if desktop_preparation_available
-                        else " ".join(_desktop_execution_refusal_details(automation_id))
-                    )
+                *(
+                    ()
+                    if desktop_preparation_available
+                    else (" ".join(_desktop_execution_refusal_details(automation_id)),)
                 ),
             ),
         )
@@ -2494,11 +2501,6 @@ def _build_commitment_layer_widget(
         shell_spec=shell_spec,
         treatment="primary confidence check",
     )
-    profile_card = _build_preparation_text_card(
-        eyebrow="PROFILE",
-        shell_spec=shell_spec,
-        treatment="secondary contextual support",
-    )
     countdown_card = _build_preparation_text_card(
         eyebrow="COMMITMENT COUNTDOWN",
         shell_spec=shell_spec,
@@ -2507,12 +2509,7 @@ def _build_commitment_layer_widget(
 
     layout.addWidget(readiness_card["card"])
     layout.addWidget(commitment_summary_card["card"])
-    layout.addLayout(
-        _build_card_row(
-            cards=(focus_card["card"], profile_card["card"]),
-            shell_spec=shell_spec,
-        )
-    )
+    layout.addWidget(focus_card["card"])
     layout.addWidget(countdown_card["card"])
 
     action_row = QHBoxLayout()
@@ -2582,19 +2579,6 @@ def _build_commitment_layer_widget(
                     "Manual Focus starts the same countdown so you can switch to FH6 before zero."
                     if real_execution_supported
                     else "Return to preparation and choose Auto1, Auto2, or Auto3."
-                ),
-            ),
-        )
-        _set_preparation_card_text(
-            profile_card,
-            title=companion_state.get("profile_name", "Selected profile"),
-            summary=shell_spec.commitment_layer.profile_label,
-            details=(
-                shell_spec.commitment_layer.stop_label,
-                (
-                    "Keep the validated FH6 baseline visible before continuing."
-                    if real_execution_supported
-                    else "This desktop path is unavailable for the selected automation."
                 ),
             ),
         )
@@ -2744,7 +2728,6 @@ def _build_commitment_layer_widget(
     set_waiting_state(
         {
             "automation_name": "Prepared operation",
-            "profile_name": "Selected profile",
         }
     )
 
@@ -3257,6 +3240,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
         QVBoxLayout,
         QWidget,
     )
+    from desktop.support_actions import open_official_discord
 
     screen = build_help_screen(
         automation_definitions=tuple(get_all_automation_definitions()),
@@ -3428,6 +3412,37 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(7)
+        content_layout.addWidget(
+            build_text_label("Validated Farm Race", role="heading")
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Auto1 is designed to operate with validated EventLab farm races."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "Because EventLab share codes may change or become unavailable over "
+                "time, FAA does not include a fixed recommendation within the "
+                "application."
+            )
+        )
+        content_layout.addWidget(
+            build_text_label(
+                "The latest validated recommendation is maintained on the official "
+                "FAA Discord."
+            )
+        )
+        open_discord_button = QPushButton("Open Discord")
+        open_discord_button.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
+        _style_secondary_button(open_discord_button, shell_spec=shell_spec)
+        open_discord_button.clicked.connect(
+            lambda _checked=False: open_official_discord()
+        )
+        content_layout.addWidget(open_discord_button)
         content_layout.addWidget(build_text_label(f"Purpose: {auto1_guide.purpose}"))
         content_layout.addWidget(
             build_text_label(
@@ -4648,6 +4663,46 @@ def _desktop_baseline_summary(automation_id: str) -> str:
         "auto3": "Garage -> Cars -> My Cars -> Recently Added.",
     }
     return summaries.get(automation_id, "Use the documented starting position for this automation.")
+
+
+def _baseline_preparation_content(
+    automation_id: str,
+) -> tuple[str, str, tuple[str, ...]]:
+    if automation_id == "auto1":
+        return (
+            "Prepare the Auto1 baseline",
+            (
+                "Prepare FH6 using a validated EventLab farm race and position the "
+                "game at the expected restart baseline."
+            ),
+            (
+                "See Help -> Auto1 Guide for complete setup instructions.",
+                (
+                    "For the latest validated EventLab recommendation, visit the "
+                    "official FAA Discord."
+                ),
+            ),
+        )
+
+    if automation_id == "auto2":
+        return (
+            "Prepare the Auto2 baseline",
+            "Prepare FH6 at the validated Autoshow baseline before continuing.",
+            ("See Help -> Auto2 Guide for complete setup instructions.",),
+        )
+
+    if automation_id == "auto3":
+        return (
+            "Prepare the Auto3 baseline",
+            "Prepare FH6 at the validated Garage baseline before continuing.",
+            ("See Help -> Auto3 Guide for complete setup instructions.",),
+        )
+
+    return (
+        "Select an automation",
+        "Choose Auto1, Auto2, or Auto3 to review its baseline preparation.",
+        (),
+    )
 
 
 def _commitment_readiness_content(

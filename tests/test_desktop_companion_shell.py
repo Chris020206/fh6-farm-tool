@@ -20,6 +20,7 @@ from desktop.companion_shell import (
     DESKTOP_TRAY_ACTION_LABELS,
     DESKTOP_TRAY_TOOLTIP,
     NAVIGATION_ICON_SLOT_WIDTH,
+    _baseline_preparation_content,
     _desktop_about_text,
     _desktop_app_icon_path,
     _desktop_baseline_details,
@@ -31,6 +32,7 @@ from desktop.companion_shell import (
     _build_automation_environment_widget,
     _build_home_screen_content,
     _build_history_screen_content,
+    _build_help_screen_content,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
     _commitment_readiness_content,
@@ -410,8 +412,8 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertEqual("v0.2.0-beta", _desktop_visible_version_text())
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
-        self.assertEqual(640, self.shell_spec.window_width)
-        self.assertEqual(760, self.shell_spec.window_height)
+        self.assertEqual(670, self.shell_spec.window_width)
+        self.assertEqual(870, self.shell_spec.window_height)
         self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
 
@@ -463,6 +465,14 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertIn("action_row.addWidget(automatic_focus_button, 1)", source)
         self.assertIn("action_row.addWidget(manual_focus_button, 1)", source)
         self.assertIn("action_row.addWidget(return_button, 1)", source)
+
+    def test_commitment_layer_has_no_user_facing_profile_content(self) -> None:
+        source = inspect.getsource(_build_commitment_layer_widget).lower()
+
+        self.assertNotIn('eyebrow="profile"', source)
+        self.assertNotIn("profile_card", source)
+        self.assertNotIn("profile_name", source)
+        self.assertNotIn("profile_label", source)
 
     def test_execution_wiring_supports_mvp_automations_and_fails_closed_for_auto4(self) -> None:
         execution_wiring = self.shell_spec.execution_wiring
@@ -888,6 +898,65 @@ class DesktopCompanionShellTest(unittest.TestCase):
 
         self.assertNotIn('eyebrow="ACTIVE PROFILE"', source)
         self.assertNotIn('eyebrow="CONTEXTUAL WARNINGS"', source)
+
+    def test_automation_environment_uses_dynamic_baseline_preparation_card(self) -> None:
+        source = inspect.getsource(_build_automation_environment_widget)
+
+        self.assertIn('eyebrow="BASELINE PREPARATION"', source)
+        self.assertIn("_baseline_preparation_content(automation_id)", source)
+        self.assertNotIn("definition.expected_baseline", source)
+        self.assertNotIn(
+            "Prepared state only. Supervision is available after commitment.",
+            source,
+        )
+        self.assertNotIn(
+            "No operation begins until focus handoff and commitment.",
+            source,
+        )
+
+    def test_baseline_preparation_content_matches_each_automation(self) -> None:
+        auto1 = " ".join(
+            (
+                _baseline_preparation_content("auto1")[0],
+                _baseline_preparation_content("auto1")[1],
+                *_baseline_preparation_content("auto1")[2],
+            )
+        )
+        auto2 = " ".join(
+            (
+                _baseline_preparation_content("auto2")[0],
+                _baseline_preparation_content("auto2")[1],
+                *_baseline_preparation_content("auto2")[2],
+            )
+        )
+        auto3 = " ".join(
+            (
+                _baseline_preparation_content("auto3")[0],
+                _baseline_preparation_content("auto3")[1],
+                *_baseline_preparation_content("auto3")[2],
+            )
+        )
+
+        self.assertIn("validated EventLab farm race", auto1)
+        self.assertIn("Help -> Auto1 Guide", auto1)
+        self.assertIn("official FAA Discord", auto1)
+        self.assertIn("validated Autoshow baseline", auto2)
+        self.assertIn("Help -> Auto2 Guide", auto2)
+        self.assertNotIn("Discord", auto2)
+        self.assertIn("validated Garage baseline", auto3)
+        self.assertIn("Help -> Auto3 Guide", auto3)
+        self.assertNotIn("Discord", auto3)
+
+    def test_auto1_guide_starts_with_validated_farm_race_guidance(self) -> None:
+        source = inspect.getsource(_build_help_screen_content)
+        auto1_start = source.index("def build_auto1_content")
+        purpose_position = source.index("Purpose:", auto1_start)
+        validated_position = source.index("Validated Farm Race", auto1_start)
+
+        self.assertLess(validated_position, purpose_position)
+        self.assertIn("EventLab share codes may change", source)
+        self.assertIn('QPushButton("Open Discord")', source)
+        self.assertIn("open_official_discord()", source)
 
     def test_automation_environment_renders_preparation_only_structure(self) -> None:
         section_ids = tuple(

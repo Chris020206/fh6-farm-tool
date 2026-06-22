@@ -23,8 +23,8 @@ class DesktopAppTest(unittest.TestCase):
 
         self.assertEqual("Forza Automation Assist", shell_spec.window_title)
         self.assertNotIn("Prototype", shell_spec.window_title)
-        self.assertEqual(640, shell_spec.window_width)
-        self.assertEqual(760, shell_spec.window_height)
+        self.assertEqual(670, shell_spec.window_width)
+        self.assertEqual(870, shell_spec.window_height)
         self.assertTrue(shell_spec.is_fixed_size)
 
     def test_desktop_app_represents_visible_workflow_states(self) -> None:
