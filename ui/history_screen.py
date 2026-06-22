@@ -57,11 +57,20 @@ class OlderSessionsSection:
 
 
 @dataclass(frozen=True)
+class HistoryEmptyState:
+    title: str
+    summary: str
+    details: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class HistoryScreen:
     primary_intention: str
     recent_sessions: RecentSessionsSection
-    older_sessions: OlderSessionsSection
+    older_sessions: OlderSessionsSection | None
     filters: HistoryFilterState
+    has_sessions: bool
+    empty_state: HistoryEmptyState | None
 
 
 def build_history_screen(
@@ -80,19 +89,40 @@ def build_history_screen(
     recent_entries = sorted_entries[:recent_limit]
     older_entries = sorted_entries[recent_limit:]
 
+    has_sessions = bool(sorted_entries)
+    empty_state = None
+    if not has_sessions:
+        empty_state = HistoryEmptyState(
+            title="No operational sessions recorded yet",
+            summary=(
+                "Completed, stopped, refused, interrupted, or failed sessions will "
+                "appear here once session history is connected."
+            ),
+            details=(
+                "Current desktop operation is still supervised live state, not stored history.",
+                "Use the completion screen immediately after a run for the current result.",
+            ),
+        )
+
     return HistoryScreen(
-        primary_intention="Show what happened in recent automation sessions.",
+        primary_intention="Recent FAA operation will appear here when recorded.",
         recent_sessions=RecentSessionsSection(
             section_id=HistorySectionId.RECENT,
             purpose="Most recent session-oriented operational memory.",
             sessions=tuple(_build_session_summary(entry) for entry in recent_entries),
         ),
-        older_sessions=OlderSessionsSection(
-            section_id=HistorySectionId.OLDER,
-            purpose="Secondary session history for earlier operational context.",
-            sessions=tuple(_build_session_summary(entry) for entry in older_entries),
+        older_sessions=(
+            OlderSessionsSection(
+                section_id=HistorySectionId.OLDER,
+                purpose="Secondary session history for earlier operational context.",
+                sessions=tuple(_build_session_summary(entry) for entry in older_entries),
+            )
+            if older_entries
+            else None
         ),
         filters=active_filters,
+        has_sessions=has_sessions,
+        empty_state=empty_state,
     )
 
 

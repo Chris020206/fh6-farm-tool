@@ -10,8 +10,8 @@ class DesktopShellTest(unittest.TestCase):
         spec = shell.build_desktop_app_spec()
 
         self.assertEqual("Forza Automation Assist", spec.window_title)
-        self.assertEqual(640, spec.window_width)
-        self.assertEqual(960, spec.window_height)
+        self.assertEqual(670, spec.window_width)
+        self.assertEqual(870, spec.window_height)
         self.assertTrue(spec.is_fixed_size)
 
     def test_desktop_app_uses_production_shell_facade(self) -> None:

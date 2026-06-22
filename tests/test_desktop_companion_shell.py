@@ -27,16 +27,22 @@ from desktop.companion_shell import (
     DESKTOP_TRAY_ACTION_LABELS,
     DESKTOP_TRAY_TOOLTIP,
     NAVIGATION_ICON_SLOT_WIDTH,
+    _baseline_preparation_content,
     _desktop_about_text,
     _desktop_app_icon_path,
     _desktop_baseline_details,
     _desktop_baseline_summary,
     _desktop_visible_version_text,
     _build_commitment_readiness_details,
+    _build_commitment_layer_widget,
+    _build_community_support_card,
     _build_automation_environment_widget,
+    _build_home_screen_content,
+    _build_history_screen_content,
     _build_help_screen_content,
     _build_auto1_ui_execution_profile,
     _completion_state_id_for_auto1_status,
+    _commitment_readiness_content,
     _auto1_execution_race_duration,
     _desktop_execution_confirmation_summary,
     _desktop_execution_refusal_details,
@@ -51,17 +57,26 @@ from desktop.companion_shell import (
     _parse_auto1_loop_count,
     _parse_auto2_purchase_count,
     _request_auto1_ui_stop,
+    _request_supervision_transition,
+    _resource_spending_confirmation_for,
+    _record_operational_history_entry,
+    _session_status_for_completion_state,
     _should_show_auto1_runtime_adjustment,
+    _should_show_community_feature_dialog,
     _summarize_auto1_ui_execution_error,
+    _wrap_in_page_scroll_area,
     build_desktop_app_spec,
+    launch_pyside6_shell_prototype,
 )
 from core.stop import StopManager
+from licensing.models import EntitlementDecision
+from sessions.session_status import SessionStatus
+from settings.execution_preferences import ExecutionPreferences
 from integrations.windows_focus_handoff import (
     FocusHandoffResult,
     FocusHandoffStatus,
     WindowCandidate,
 )
-from licensing.models import EntitlementDecision
 from ui.automation_environment import AutomationEnvironmentSectionId
 from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 
@@ -69,6 +84,169 @@ from ui.shell import ScreenId, SidebarDestinationId, ZoneRole
 class DesktopCompanionShellTest(unittest.TestCase):
     def setUp(self) -> None:
         self.shell_spec = build_desktop_app_spec()
+
+    def test_desktop_history_does_not_construct_fake_session_data(self) -> None:
+        source = inspect.getsource(_build_history_screen_content)
+
+        self.assertNotIn("Desktop UI session is active", source)
+        self.assertNotIn("No persisted run profile", source)
+        self.assertNotIn("current-desktop-session", source)
+        self.assertIn("history_entries_provider", source)
+
+    def test_completed_run_appends_session_local_history_entry(self) -> None:
+        entries = []
+
+        entry = _record_operational_history_entry(
+            entries,
+            state_id="completed",
+            companion_state={
+                "automation_id": "auto1",
+                "automation_name": "Auto1 - Race Automation",
+                "profile_id": "auto1_race_default",
+                "profile_name": "Auto1 Race Default",
+                "requested_cycles": "3",
+            },
+            execution_message="Auto1 completed normally.",
+            session_id="desktop-test-session",
+        )
+
+        self.assertEqual([entry], entries)
+        self.assertEqual(SessionStatus.COMPLETED, entry.outcome)
+        self.assertEqual((3, 3), (entry.requested_count, entry.completed_count))
+        self.assertEqual(("Auto1 completed normally.",), entry.expandable_details)
+
+    def test_stopped_and_refused_completion_states_map_honestly(self) -> None:
+        self.assertEqual(
+            SessionStatus.STOPPED,
+            _session_status_for_completion_state("stopped"),
+        )
+        self.assertEqual(
+            SessionStatus.REFUSED,
+            _session_status_for_completion_state("refused"),
+        )
+        self.assertEqual(
+            SessionStatus.INTERRUPTED,
+            _session_status_for_completion_state("interrupted"),
+        )
+        self.assertEqual(
+            SessionStatus.FAILURE,
+            _session_status_for_completion_state("failure"),
+        )
+
+    def test_only_denied_community_decisions_show_edition_guidance(self) -> None:
+        denied = EntitlementDecision(False, "Denied", "community", "test.feature")
+        allowed = EntitlementDecision(True, "Allowed", "community", "test.feature")
+        licensed_denied = EntitlementDecision(False, "Denied", "basic", "test.feature")
+
+        self.assertTrue(_should_show_community_feature_dialog(denied))
+        self.assertFalse(_should_show_community_feature_dialog(allowed))
+        self.assertFalse(_should_show_community_feature_dialog(licensed_denied))
+
+    def test_auto2_purchase_requires_resource_spending_confirmation(self) -> None:
+        confirmation = _resource_spending_confirmation_for(
+            {"automation_id": "auto2", "auto2_mode": "purchase"}
+        )
+
+        self.assertIsNotNone(confirmation)
+        self.assertEqual("Auto2 Purchase Mode", confirmation.title)
+        self.assertIn("spend in-game credits", confirmation.body)
+        self.assertIn("Autoshow starting position", confirmation.body)
+
+    def test_auto3_unlock_requires_resource_spending_confirmation(self) -> None:
+        confirmation = _resource_spending_confirmation_for(
+            {"automation_id": "auto3", "auto3_mode": "unlock"}
+        )
+
+        self.assertIsNotNone(confirmation)
+        self.assertEqual("Auto3 Unlock Mode", confirmation.title)
+        self.assertIn("spend in-game Skill Points", confirmation.body)
+        self.assertIn("Subaru Impreza 22B-STI", confirmation.body)
+
+    def test_auto2_confirmation_can_be_disabled(self) -> None:
+        companion_state = {"automation_id": "auto2", "auto2_mode": "purchase"}
+        confirmations = []
+        opened_states = []
+
+        transitioned = _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda confirmation: (
+                confirmations.append(confirmation) or False
+            ),
+            open_commitment_layer=opened_states.append,
+            preferences=ExecutionPreferences(
+                show_auto2_purchase_confirmation=False
+            ),
+        )
+
+        self.assertTrue(transitioned)
+        self.assertEqual([], confirmations)
+        self.assertEqual([companion_state], opened_states)
+
+    def test_auto3_confirmation_can_be_disabled(self) -> None:
+        companion_state = {"automation_id": "auto3", "auto3_mode": "unlock"}
+        confirmations = []
+        opened_states = []
+
+        transitioned = _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda confirmation: (
+                confirmations.append(confirmation) or False
+            ),
+            open_commitment_layer=opened_states.append,
+            preferences=ExecutionPreferences(
+                show_auto3_unlock_confirmation=False
+            ),
+        )
+
+        self.assertTrue(transitioned)
+        self.assertEqual([], confirmations)
+        self.assertEqual([companion_state], opened_states)
+
+    def test_auto2_navigation_test_does_not_require_confirmation(self) -> None:
+        self.assertIsNone(
+            _resource_spending_confirmation_for(
+                {"automation_id": "auto2", "auto2_mode": "test"}
+            )
+        )
+
+    def test_auto3_navigation_test_does_not_require_confirmation(self) -> None:
+        self.assertIsNone(
+            _resource_spending_confirmation_for(
+                {"automation_id": "auto3", "auto3_mode": "test"}
+            )
+        )
+
+    def test_auto1_does_not_require_resource_spending_confirmation(self) -> None:
+        self.assertIsNone(
+            _resource_spending_confirmation_for({"automation_id": "auto1"})
+        )
+
+    def test_resource_spending_cancel_keeps_preparation_state(self) -> None:
+        companion_state = {"automation_id": "auto2", "auto2_mode": "purchase"}
+        opened_states = []
+
+        transitioned = _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda _confirmation: False,
+            open_commitment_layer=opened_states.append,
+        )
+
+        self.assertFalse(transitioned)
+        self.assertEqual([], opened_states)
+        self.assertEqual("purchase", companion_state["auto2_mode"])
+
+    def test_resource_spending_continue_opens_commitment_checkpoint(self) -> None:
+        companion_state = {"automation_id": "auto3", "auto3_mode": "unlock"}
+        opened_states = []
+
+        transitioned = _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda _confirmation: True,
+            open_commitment_layer=opened_states.append,
+        )
+
+        self.assertTrue(transitioned)
+        self.assertEqual([companion_state], opened_states)
 
     def test_sidebar_maps_to_stable_destinations(self) -> None:
         destination_ids = tuple(
@@ -79,7 +257,7 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertEqual(
             (
                 SidebarDestinationId.HOME,
-                SidebarDestinationId.PROFILES,
+                SidebarDestinationId.AUTOMATION_ENVIRONMENT,
                 SidebarDestinationId.HISTORY,
                 SidebarDestinationId.HELP,
                 SidebarDestinationId.SETTINGS,
@@ -145,11 +323,21 @@ class DesktopCompanionShellTest(unittest.TestCase):
         )
 
         self.assertEqual(sidebar_screen_ids, prototype_screen_ids)
-        self.assertNotIn(ScreenId.AUTOMATION_ENVIRONMENT, prototype_screen_ids)
+        self.assertEqual(1, prototype_screen_ids.count(ScreenId.AUTOMATION_ENVIRONMENT))
+
+    def test_sidebar_reuses_existing_automation_environment_page(self) -> None:
+        source = inspect.getsource(launch_pyside6_shell_prototype)
+
+        self.assertIn("stack_index_by_screen_id", source)
+        self.assertIn(
+            "if screen.screen_id == ScreenId.AUTOMATION_ENVIRONMENT:",
+            source,
+        )
+        self.assertEqual(1, source.count("_build_automation_environment_widget("))
 
     def test_sidebar_support_screens_have_real_desktop_content_paths(self) -> None:
         self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HOME))
-        self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.PROFILES))
+        self.assertFalse(_has_specialized_desktop_screen_content(ScreenId.PROFILES))
         self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HISTORY))
         self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.HELP))
         self.assertTrue(_has_specialized_desktop_screen_content(ScreenId.SETTINGS))
@@ -224,17 +412,24 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertIn("supervised desktop automation utility", about_text)
         self.assertIn("Controlled/manual beta. Not unattended automation.", about_text)
         self.assertIn("Keep F8 available during automation.", about_text)
-        self.assertIn("Support: project Discord", about_text)
+        self.assertIn("Support: https://discord.gg/SgARD8YenU", about_text)
 
     def test_visible_desktop_version_uses_about_metadata(self) -> None:
         self.assertEqual(DESKTOP_APP_VERSION, _desktop_visible_version_text())
         self.assertEqual("v0.2.0-beta", _desktop_visible_version_text())
 
     def test_prototype_window_is_vertical_companion_and_fixed(self) -> None:
-        self.assertEqual(640, self.shell_spec.window_width)
-        self.assertEqual(960, self.shell_spec.window_height)
+        self.assertEqual(670, self.shell_spec.window_width)
+        self.assertEqual(870, self.shell_spec.window_height)
         self.assertLess(self.shell_spec.window_width, self.shell_spec.window_height)
         self.assertTrue(self.shell_spec.is_fixed_size)
+
+    def test_tall_desktop_pages_use_shared_scroll_wrapper(self) -> None:
+        source = inspect.getsource(_wrap_in_page_scroll_area)
+
+        self.assertIn("setWidgetResizable(True)", source)
+        self.assertIn("ScrollBarAlwaysOff", source)
+        self.assertIn("ScrollBarAsNeeded", source)
 
     def test_companion_mode_represents_running_supervision_without_execution(self) -> None:
         companion_mode = self.shell_spec.companion_mode
@@ -261,6 +456,30 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertFalse(commitment.introduces_execution)
         self.assertIn("FH6 focus handoff", commitment.focus_label)
         self.assertIn("F8", commitment.stop_label)
+
+    def test_commitment_layer_uses_shared_page_spacing(self) -> None:
+        source = inspect.getsource(_build_commitment_layer_widget)
+
+        self.assertIn(
+            "layout.setSpacing(shell_spec.vertical_rhythm.card_spacing)",
+            source,
+        )
+        self.assertNotIn("layout.addSpacing(", source)
+        self.assertIn(
+            "action_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)",
+            source,
+        )
+        self.assertIn("action_row.addWidget(automatic_focus_button, 1)", source)
+        self.assertIn("action_row.addWidget(manual_focus_button, 1)", source)
+        self.assertIn("action_row.addWidget(return_button, 1)", source)
+
+    def test_commitment_layer_has_no_user_facing_profile_content(self) -> None:
+        source = inspect.getsource(_build_commitment_layer_widget).lower()
+
+        self.assertNotIn('eyebrow="profile"', source)
+        self.assertNotIn("profile_card", source)
+        self.assertNotIn("profile_name", source)
+        self.assertNotIn("profile_label", source)
 
     def test_execution_wiring_supports_mvp_automations_and_fails_closed_for_auto4(self) -> None:
         execution_wiring = self.shell_spec.execution_wiring
@@ -631,10 +850,11 @@ class DesktopCompanionShellTest(unittest.TestCase):
 
         self.assertEqual(18, rhythm.content_margin)
         self.assertEqual(8, rhythm.header_spacing)
+        self.assertEqual(8, rhythm.card_spacing)
         self.assertEqual(14, rhythm.section_spacing)
         self.assertEqual(10, rhythm.group_spacing)
-        self.assertEqual(10, rhythm.group_inner_margin)
-        self.assertEqual(16, rhythm.important_element_spacing)
+        self.assertEqual(12, rhythm.card_horizontal_padding)
+        self.assertEqual(10, rhythm.card_vertical_padding)
         self.assertTrue(rhythm.is_single_frame)
         self.assertFalse(rhythm.introduces_scrolling)
         self.assertEqual("restrained but not empty", rhythm.density_principle)
@@ -706,23 +926,114 @@ class DesktopCompanionShellTest(unittest.TestCase):
         self.assertEqual(
             (
                 "RECOMMENDED NEXT STEP",
-                "REVIEW & PLAN",
-                "RECENT CONTEXT",
-                "QUIET STATUS",
+                "COMMUNITY & SUPPORT",
             ),
             signal_titles,
         )
         self.assertEqual(
             (
                 ZoneRole.PRIMARY,
-                ZoneRole.PRIMARY,
                 ZoneRole.SECONDARY,
-                ZoneRole.TERTIARY,
             ),
             signal_roles,
         )
 
-    def test_automation_environment_renders_six_section_structure(self) -> None:
+    def test_home_uses_single_community_support_footer_card(self) -> None:
+        source = inspect.getsource(_build_home_screen_content)
+        card_source = inspect.getsource(_build_community_support_card)
+
+        self.assertIn("_build_community_support_card", source)
+        self.assertNotIn("RECENT CONTEXT", source)
+        self.assertNotIn("QUIET STATUS", source)
+        for label in ("Community & Support", "Discord", "YouTube"):
+            self.assertIn(label, card_source)
+        self.assertNotIn("Documentation", card_source)
+        self.assertIn("button_row.addWidget(button, 1)", card_source)
+        self.assertIn("layout.addStretch(1)", source)
+
+    def test_home_has_no_review_and_plan_card(self) -> None:
+        source = inspect.getsource(_build_home_screen_content)
+
+        self.assertNotIn("Review & Plan", source)
+        self.assertNotIn("Review Profiles", source)
+        self.assertNotIn("open_profiles", source)
+
+    def test_home_identity_card_uses_final_product_copy(self) -> None:
+        source = inspect.getsource(_build_home_screen_content)
+
+        self.assertIn('title="Forza Automation Assist"', source)
+        self.assertIn("farming Super", source)
+        self.assertIn("purchasing the Subaru Impreza", source)
+        self.assertIn("validated behavior, supervised", source)
+        self.assertIn('"System ready."', source)
+        self.assertNotIn('title="Ready when the baseline is clear"', source)
+
+    def test_desktop_automation_environment_hides_profile_and_warnings_cards(self) -> None:
+        source = inspect.getsource(_build_automation_environment_widget)
+
+        self.assertNotIn('eyebrow="ACTIVE PROFILE"', source)
+        self.assertNotIn('eyebrow="CONTEXTUAL WARNINGS"', source)
+
+    def test_automation_environment_uses_dynamic_baseline_preparation_card(self) -> None:
+        source = inspect.getsource(_build_automation_environment_widget)
+
+        self.assertIn('eyebrow="BASELINE PREPARATION"', source)
+        self.assertIn("_baseline_preparation_content(automation_id)", source)
+        self.assertNotIn("definition.expected_baseline", source)
+        self.assertNotIn(
+            "Prepared state only. Supervision is available after commitment.",
+            source,
+        )
+        self.assertNotIn(
+            "No operation begins until focus handoff and commitment.",
+            source,
+        )
+
+    def test_baseline_preparation_content_matches_each_automation(self) -> None:
+        auto1 = " ".join(
+            (
+                _baseline_preparation_content("auto1")[0],
+                _baseline_preparation_content("auto1")[1],
+                *_baseline_preparation_content("auto1")[2],
+            )
+        )
+        auto2 = " ".join(
+            (
+                _baseline_preparation_content("auto2")[0],
+                _baseline_preparation_content("auto2")[1],
+                *_baseline_preparation_content("auto2")[2],
+            )
+        )
+        auto3 = " ".join(
+            (
+                _baseline_preparation_content("auto3")[0],
+                _baseline_preparation_content("auto3")[1],
+                *_baseline_preparation_content("auto3")[2],
+            )
+        )
+
+        self.assertIn("validated EventLab farm race", auto1)
+        self.assertIn("Help -> Auto1 Guide", auto1)
+        self.assertIn("official FAA Discord", auto1)
+        self.assertIn("validated Autoshow baseline", auto2)
+        self.assertIn("Help -> Auto2 Guide", auto2)
+        self.assertNotIn("Discord", auto2)
+        self.assertIn("validated Garage baseline", auto3)
+        self.assertIn("Help -> Auto3 Guide", auto3)
+        self.assertNotIn("Discord", auto3)
+
+    def test_auto1_guide_starts_with_validated_farm_race_guidance(self) -> None:
+        source = inspect.getsource(_build_help_screen_content)
+        auto1_start = source.index("def build_auto1_content")
+        purpose_position = source.index("Purpose:", auto1_start)
+        validated_position = source.index("Validated Farm Race", auto1_start)
+
+        self.assertLess(validated_position, purpose_position)
+        self.assertIn("EventLab share codes may change", source)
+        self.assertIn('QPushButton("Open Discord")', source)
+        self.assertIn("open_official_discord()", source)
+
+    def test_automation_environment_renders_preparation_only_structure(self) -> None:
         section_ids = tuple(
             section.section_id
             for section in self.shell_spec.automation_environment.sections
@@ -732,7 +1043,6 @@ class DesktopCompanionShellTest(unittest.TestCase):
             (
                 AutomationEnvironmentSectionId.OVERVIEW,
                 AutomationEnvironmentSectionId.PROFILE,
-                AutomationEnvironmentSectionId.READINESS,
                 AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS,
                 AutomationEnvironmentSectionId.ADVANCED,
                 AutomationEnvironmentSectionId.RUN,
@@ -788,18 +1098,6 @@ class DesktopCompanionShellTest(unittest.TestCase):
             ].readability_treatment,
         )
         self.assertEqual(
-            "primary confidence check",
-            sections_by_id[
-                AutomationEnvironmentSectionId.READINESS
-            ].readability_treatment,
-        )
-        self.assertEqual(
-            "Baseline requirements before operation.",
-            sections_by_id[
-                AutomationEnvironmentSectionId.READINESS
-            ].summary,
-        )
-        self.assertEqual(
             "secondary contextual support",
             sections_by_id[
                 AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS
@@ -827,13 +1125,38 @@ class DesktopCompanionShellTest(unittest.TestCase):
             2,
         )
         self.assertLessEqual(
-            len(sections_by_id[AutomationEnvironmentSectionId.READINESS].details),
-            3,
-        )
-        self.assertLessEqual(
             len(sections_by_id[AutomationEnvironmentSectionId.RUN].details),
             2,
         )
+
+    def test_readiness_is_rendered_only_in_commitment_stage(self) -> None:
+        automation_source = inspect.getsource(_build_automation_environment_widget)
+        commitment_source = inspect.getsource(_build_commitment_layer_widget)
+
+        self.assertNotIn('eyebrow="READINESS"', automation_source)
+        self.assertEqual(1, commitment_source.count('eyebrow="READINESS"'))
+        self.assertIn("_commitment_readiness_content", commitment_source)
+
+    def test_commitment_readiness_handles_neutral_startup_state(self) -> None:
+        title, summary, details = _commitment_readiness_content("")
+
+        self.assertEqual("No automation prepared", title)
+        self.assertEqual(
+            "Prepare a supervised operation before reviewing readiness.",
+            summary,
+        )
+        self.assertTrue(details)
+
+    def test_commitment_readiness_resolves_all_supported_automations(self) -> None:
+        for automation_id in ("auto1", "auto2", "auto3"):
+            with self.subTest(automation_id=automation_id):
+                title, summary, details = _commitment_readiness_content(
+                    automation_id
+                )
+
+                self.assertEqual("Required Starting Position", title)
+                self.assertNotEqual("No automation prepared", summary)
+                self.assertTrue(details)
 
 
 if __name__ == "__main__":

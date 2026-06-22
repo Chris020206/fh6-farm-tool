@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+from uuid import uuid4
 
 from frontend.automation_controller import (
     AutomationRunRequest,
@@ -53,8 +54,14 @@ from product.profile_metadata_registry import get_all_profile_metadata
 from product.profile_metadata_registry import get_profile_metadata
 from product.readiness_registry import get_all_readiness_models
 from product.readiness_registry import get_readiness_model
+from product.support import OFFICIAL_DISCORD_URL
 from sessions.operational_history import OperationalHistoryEntry
 from sessions.session_status import SessionStatus
+from settings.execution_preferences import (
+    ExecutionPreferences,
+    ExecutionPreferencesError,
+    ExecutionPreferencesStore,
+)
 from ui.automation_environment import (
     AdvancedSection,
     AutomationEnvironmentScreen,
@@ -62,14 +69,13 @@ from ui.automation_environment import (
     ContextualWarningsSection,
     OverviewSection,
     ProfileSection,
-    ReadinessSection,
     RunSection,
     build_automation_environment_screen,
 )
 from ui.help_screen import build_help_screen
 from ui.history_screen import build_history_screen
 from ui.profiles_screen import build_profiles_screen
-from ui.settings_screen import build_settings_screen
+from ui.settings_screen import build_settings_screen, version_information_text
 from ui.shell import (
     ScreenDescriptor,
     ScreenId,
@@ -119,7 +125,7 @@ DESKTOP_ABOUT_LINES = (
     "Controlled/manual beta. Not unattended automation.",
     "Keep F8 available during automation.",
     "",
-    "Support: project Discord",
+    f"Support: {OFFICIAL_DISCORD_URL}",
     f"© 2026 {DESKTOP_PRODUCT_NAME}",
 )
 DESKTOP_TRAY_TOOLTIP = DESKTOP_PRODUCT_NAME
@@ -138,6 +144,19 @@ AUTO1_REQUIRED_GAME_SETTINGS = (
 )
 AUTO1_VALIDATED_EVENTLAB_SHARE_CODE = "890 169 683"
 NAVIGATION_ICON_SLOT_WIDTH = 42
+
+
+@dataclass(frozen=True)
+class ResourceSpendingConfirmation:
+    title: str
+    body: str
+    checkbox_label: str = "Don't show this again"
+
+
+@dataclass(frozen=True)
+class ResourceSpendingConfirmationResult:
+    accepted: bool
+    dont_show_again: bool
 
 
 @dataclass(frozen=True)
@@ -222,10 +241,11 @@ class PrototypeNavigationRail:
 class PrototypeVerticalRhythm:
     content_margin: int
     header_spacing: int
+    card_spacing: int
     section_spacing: int
     group_spacing: int
-    group_inner_margin: int
-    important_element_spacing: int
+    card_horizontal_padding: int
+    card_vertical_padding: int
     is_single_frame: bool
     introduces_scrolling: bool
     density_principle: str
@@ -359,8 +379,8 @@ def build_prototype_shell_spec() -> PrototypeShellSpec:
 
     return PrototypeShellSpec(
         window_title=DESKTOP_PRODUCT_NAME,
-        window_width=640,
-        window_height=960,
+        window_width=670,
+        window_height=870,
         is_fixed_size=True,
         sidebar_destinations=sidebar_destinations,
         screens=tuple(
@@ -504,6 +524,7 @@ def launch_pyside6_shell_prototype() -> int:
     import sys
 
     shell_spec = build_prototype_shell_spec()
+    execution_preferences_store = ExecutionPreferencesStore()
     _set_windows_app_user_model_id()
     app = QApplication(sys.argv)
     app.setStyleSheet(_global_stylesheet())
@@ -566,11 +587,31 @@ def launch_pyside6_shell_prototype() -> int:
 
     stacked_screens = QStackedWidget()
     main_area_layout.addWidget(stacked_screens)
-    automation_environment_index = len(shell_spec.screens)
+    directly_built_screens = tuple(
+        screen
+        for screen in shell_spec.screens
+        if screen.screen_id != ScreenId.AUTOMATION_ENVIRONMENT
+    )
+    stack_index_by_screen_id = {
+        screen.screen_id: index
+        for index, screen in enumerate(directly_built_screens)
+    }
+    automation_environment_index = len(directly_built_screens)
+    stack_index_by_screen_id[ScreenId.AUTOMATION_ENVIRONMENT] = (
+        automation_environment_index
+    )
     commitment_layer_index = automation_environment_index + 1
     companion_mode_index = commitment_layer_index + 1
     completion_state_index = companion_mode_index + 1
+    automation_environment_navigation_index = next(
+        index
+        for index, screen in enumerate(shell_spec.screens)
+        if screen.screen_id == ScreenId.AUTOMATION_ENVIRONMENT
+    )
     reset_preparation_state = {"callback": lambda: None}
+    history_refresh = {"callback": lambda: None}
+    settings_refresh = {"callback": lambda: None}
+    operational_history_entries: list[OperationalHistoryEntry] = []
     execution_control = {
         "stop_manager": None,
         "companion_state": None,
@@ -578,7 +619,7 @@ def launch_pyside6_shell_prototype() -> int:
 
     def return_home_cleanly() -> None:
         reset_preparation_state["callback"]()
-        stacked_screens.setCurrentIndex(0)
+        set_navigation_index(0)
 
     for index, screen in enumerate(shell_spec.screens):
         collapsed_button = _build_navigation_button(
@@ -589,33 +630,42 @@ def launch_pyside6_shell_prototype() -> int:
         collapsed_button.mousePressEvent = lambda _event, row=index: set_navigation_index(row)
         collapsed_nav_buttons.append(collapsed_button)
         collapsed_nav_layout.addWidget(collapsed_button)
-        stacked_screens.addWidget(
-            _build_screen_widget(
-                screen,
-                shell_spec=shell_spec,
-                home_concept=shell_spec.home_concept
-                if screen.screen_id == ScreenId.HOME
-                else None,
-                open_automation_environment=(
-                    lambda: stacked_screens.setCurrentIndex(automation_environment_index)
+        if screen.screen_id == ScreenId.AUTOMATION_ENVIRONMENT:
+            continue
+        screen_widget = _build_screen_widget(
+            screen,
+            shell_spec=shell_spec,
+            home_concept=shell_spec.home_concept
+            if screen.screen_id == ScreenId.HOME
+            else None,
+            open_automation_environment=(
+                lambda: set_navigation_index(
+                    automation_environment_navigation_index
                 )
-                if screen.screen_id == ScreenId.HOME
-                else None,
-                open_profiles=(
-                    lambda: stacked_screens.setCurrentIndex(1)
-                )
-                if screen.screen_id == ScreenId.HOME
-                else None,
-                on_license_changed=(
-                    lambda: reset_preparation_state["callback"]()
-                ),
             )
+            if screen.screen_id == ScreenId.HOME
+            else None,
+            history_entries_provider=lambda: tuple(operational_history_entries),
+            register_history_refresh=(
+                lambda callback: history_refresh.__setitem__("callback", callback)
+            ),
+            execution_preferences_store=execution_preferences_store,
+            register_settings_refresh=(
+                lambda callback: settings_refresh.__setitem__("callback", callback)
+            ),
         )
+        if screen.screen_id in {
+            ScreenId.HOME,
+            ScreenId.HISTORY,
+            ScreenId.SETTINGS,
+        }:
+            screen_widget = _wrap_in_page_scroll_area(screen_widget)
+        stacked_screens.addWidget(screen_widget)
 
     completion_state_widget, update_completion_state = _build_completion_state_widget(
         shell_spec=shell_spec,
-        return_to_preparation=lambda: stacked_screens.setCurrentIndex(
-            automation_environment_index
+        return_to_preparation=lambda: set_navigation_index(
+            automation_environment_navigation_index
         ),
         return_home=return_home_cleanly,
     )
@@ -630,6 +680,13 @@ def launch_pyside6_shell_prototype() -> int:
         completion_state = dict(companion_state)
         completion_state["execution_active"] = "false"
         completion_state["execution_message"] = execution_message
+        _record_operational_history_entry(
+            operational_history_entries,
+            state_id=state_id,
+            companion_state=completion_state,
+            execution_message=execution_message,
+        )
+        history_refresh["callback"]()
         update_completion_state(state_id, completion_state)
         stacked_screens.setCurrentIndex(completion_state_index)
 
@@ -705,16 +762,16 @@ def launch_pyside6_shell_prototype() -> int:
 
     companion_mode_widget, update_companion_mode = _build_companion_mode_widget(
         shell_spec=shell_spec,
-        return_to_preparation=lambda: stacked_screens.setCurrentIndex(
-            automation_environment_index
+        return_to_preparation=lambda: set_navigation_index(
+            automation_environment_navigation_index
         ),
         request_stop=request_stop_from_ui,
     )
     commitment_layer_widget, update_commitment_layer = _build_commitment_layer_widget(
         shell_spec=shell_spec,
         timer_type=QTimer,
-        return_to_preparation=lambda: stacked_screens.setCurrentIndex(
-            automation_environment_index
+        return_to_preparation=lambda: set_navigation_index(
+            automation_environment_navigation_index
         ),
         open_refusal_state=(
             lambda companion_state, message: open_completion_from_execution(
@@ -735,13 +792,14 @@ def launch_pyside6_shell_prototype() -> int:
                     stacked_screens.setCurrentIndex(commitment_layer_index),
                 )
             ),
+            execution_preferences_store=execution_preferences_store,
         )
     )
     reset_preparation_state["callback"] = reset_automation_environment
-    stacked_screens.addWidget(automation_environment_widget)
-    stacked_screens.addWidget(commitment_layer_widget)
-    stacked_screens.addWidget(companion_mode_widget)
-    stacked_screens.addWidget(completion_state_widget)
+    stacked_screens.addWidget(_wrap_in_page_scroll_area(automation_environment_widget))
+    stacked_screens.addWidget(_wrap_in_page_scroll_area(commitment_layer_widget))
+    stacked_screens.addWidget(_wrap_in_page_scroll_area(companion_mode_widget))
+    stacked_screens.addWidget(_wrap_in_page_scroll_area(completion_state_widget))
 
     overlay_navigation = QWidget(body)
     overlay_navigation.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
@@ -786,9 +844,14 @@ def launch_pyside6_shell_prototype() -> int:
     navigation_animation.setDuration(shell_spec.navigation_rail.animation_duration_ms)
 
     def set_navigation_index(index: int) -> None:
-        if index < 0:
+        if index < 0 or index >= len(shell_spec.screens):
             return
-        stacked_screens.setCurrentIndex(index)
+        screen_id = shell_spec.screens[index].screen_id
+        if screen_id == ScreenId.HISTORY:
+            history_refresh["callback"]()
+        if screen_id == ScreenId.SETTINGS:
+            settings_refresh["callback"]()
+        stacked_screens.setCurrentIndex(stack_index_by_screen_id[screen_id])
         for row, button in enumerate(collapsed_nav_buttons):
             _style_navigation_button(
                 button,
@@ -907,7 +970,6 @@ def _build_automation_section(
     section: (
         OverviewSection
         | ProfileSection
-        | ReadinessSection
         | ContextualWarningsSection
         | AdvancedSection
         | RunSection
@@ -931,16 +993,6 @@ def _build_automation_section(
             details=(section.behavior_summary, section.reliability_posture),
             zone_role=ZoneRole.PRIMARY,
             readability_treatment="primary behavior summary",
-        )
-
-    if isinstance(section, ReadinessSection):
-        return PrototypeAutomationEnvironmentSection(
-            section_id=section.section_id,
-            title="Readiness",
-            summary="Baseline requirements before operation.",
-            details=(section.expected_baseline, section.manual_positioning_assumption),
-            zone_role=ZoneRole.PRIMARY,
-            readability_treatment="primary confidence check",
         )
 
     if isinstance(section, ContextualWarningsSection):
@@ -993,19 +1045,9 @@ def _build_prototype_home_concept() -> PrototypeHomeConcept:
                 zone_role=ZoneRole.PRIMARY,
             ),
             PrototypeHomeSignal(
-                title="REVIEW & PLAN",
-                summary="Review profile and readiness",
-                zone_role=ZoneRole.PRIMARY,
-            ),
-            PrototypeHomeSignal(
-                title="RECENT CONTEXT",
-                summary="Last prepared: Auto1 / supervised baseline",
+                title="COMMUNITY & SUPPORT",
+                summary="Community support, tutorials and official updates",
                 zone_role=ZoneRole.SECONDARY,
-            ),
-            PrototypeHomeSignal(
-                title="QUIET STATUS",
-                summary="Ready for supervised operation",
-                zone_role=ZoneRole.TERTIARY,
             ),
         ),
     )
@@ -1044,10 +1086,11 @@ def _build_prototype_vertical_rhythm() -> PrototypeVerticalRhythm:
     return PrototypeVerticalRhythm(
         content_margin=18,
         header_spacing=8,
+        card_spacing=8,
         section_spacing=14,
         group_spacing=10,
-        group_inner_margin=10,
-        important_element_spacing=16,
+        card_horizontal_padding=12,
+        card_vertical_padding=10,
         is_single_frame=True,
         introduces_scrolling=False,
         density_principle="restrained but not empty",
@@ -1279,6 +1322,134 @@ def _should_show_auto1_runtime_adjustment(automation_id: str) -> bool:
     return automation_id == "auto1"
 
 
+def _should_show_community_feature_dialog(decision) -> bool:
+    return not decision.allowed and decision.edition == "community"
+
+
+def _resource_spending_confirmation_for(
+    companion_state: dict[str, str],
+    preferences: ExecutionPreferences | None = None,
+) -> ResourceSpendingConfirmation | None:
+    preferences = preferences or ExecutionPreferences()
+    automation_id = companion_state.get("automation_id")
+    if (
+        automation_id == "auto2"
+        and companion_state.get("auto2_mode") == "purchase"
+        and preferences.show_auto2_purchase_confirmation
+    ):
+        return ResourceSpendingConfirmation(
+            title="Auto2 Purchase Mode",
+            body=(
+                "This mode will spend in-game credits by purchasing vehicles.\n\n"
+                "Make sure the Autoshow starting position is correct before continuing."
+            ),
+        )
+
+    if (
+        automation_id == "auto3"
+        and companion_state.get("auto3_mode") == "unlock"
+        and preferences.show_auto3_unlock_confirmation
+    ):
+        return ResourceSpendingConfirmation(
+            title="Auto3 Unlock Mode",
+            body=(
+                "This mode will spend in-game Skill Points by unlocking vehicle "
+                "Skill Trees.\n\n"
+                "Make sure the selected Subaru Impreza 22B-STI and following cars "
+                "are correctly prepared before continuing."
+            ),
+        )
+
+    return None
+
+
+def _request_supervision_transition(
+    companion_state: dict[str, str] | None,
+    confirm_resource_spending: Callable[[ResourceSpendingConfirmation], bool],
+    open_commitment_layer: Callable[[dict[str, str]], Any],
+    preferences: ExecutionPreferences | None = None,
+) -> bool:
+    if companion_state is None:
+        return False
+
+    confirmation = _resource_spending_confirmation_for(companion_state, preferences)
+    if confirmation is not None and not confirm_resource_spending(confirmation):
+        return False
+
+    open_commitment_layer(companion_state)
+    return True
+
+
+def _show_resource_spending_confirmation(
+    parent,
+    confirmation: ResourceSpendingConfirmation,
+) -> ResourceSpendingConfirmationResult:
+    from PySide6.QtWidgets import QCheckBox, QMessageBox
+
+    dialog = QMessageBox(parent)
+    dialog.setWindowTitle(confirmation.title)
+    dialog.setIcon(QMessageBox.Icon.Information)
+    dialog.setText(confirmation.body)
+    dont_show_again_checkbox = QCheckBox(confirmation.checkbox_label)
+    dialog.setCheckBox(dont_show_again_checkbox)
+    cancel_button = dialog.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+    continue_button = dialog.addButton(
+        "Continue",
+        QMessageBox.ButtonRole.AcceptRole,
+    )
+    dialog.setDefaultButton(cancel_button)
+    dialog.setEscapeButton(cancel_button)
+    dialog.exec()
+    return ResourceSpendingConfirmationResult(
+        accepted=dialog.clickedButton() is continue_button,
+        dont_show_again=dont_show_again_checkbox.isChecked(),
+    )
+
+
+def _preferences_after_dont_show_again(
+    preferences: ExecutionPreferences,
+    companion_state: dict[str, str],
+) -> ExecutionPreferences:
+    automation_id = companion_state.get("automation_id")
+    if automation_id == "auto2" and companion_state.get("auto2_mode") == "purchase":
+        return ExecutionPreferences(
+            show_auto2_purchase_confirmation=False,
+            show_auto3_unlock_confirmation=(
+                preferences.show_auto3_unlock_confirmation
+            ),
+        )
+    if automation_id == "auto3" and companion_state.get("auto3_mode") == "unlock":
+        return ExecutionPreferences(
+            show_auto2_purchase_confirmation=(
+                preferences.show_auto2_purchase_confirmation
+            ),
+            show_auto3_unlock_confirmation=False,
+        )
+    return preferences
+
+
+def _handle_resource_spending_confirmation(
+    companion_state: dict[str, str],
+    confirmation: ResourceSpendingConfirmation,
+    preferences_store: ExecutionPreferencesStore,
+    show_confirmation: Callable[
+        [ResourceSpendingConfirmation],
+        ResourceSpendingConfirmationResult,
+    ],
+) -> bool:
+    result = show_confirmation(confirmation)
+    if not result.accepted:
+        return False
+    if result.dont_show_again:
+        preferences_store.save(
+            _preferences_after_dont_show_again(
+                preferences_store.load(),
+                companion_state,
+            )
+        )
+    return True
+
+
 def _is_desktop_execution_supported(automation_id: str) -> bool:
     return is_desktop_execution_supported(automation_id)
 
@@ -1353,6 +1524,164 @@ def _completion_state_id_for_status(status: str) -> str:
 
 def _completion_state_id_for_auto1_status(status: str) -> str:
     return completion_state_id_for_auto1_status(status)
+
+
+def _session_status_for_completion_state(state_id: str) -> SessionStatus:
+    return {
+        "completed": SessionStatus.COMPLETED,
+        "stopped": SessionStatus.STOPPED,
+        "refused": SessionStatus.REFUSED,
+        "interrupted": SessionStatus.INTERRUPTED,
+        "failure": SessionStatus.FAILURE,
+        "failed": SessionStatus.FAILURE,
+    }.get(state_id, SessionStatus.FAILURE)
+
+
+def _record_operational_history_entry(
+    entries: list[OperationalHistoryEntry],
+    *,
+    state_id: str,
+    companion_state: dict[str, Any],
+    execution_message: str,
+    session_id: str | None = None,
+    timestamp: datetime | None = None,
+) -> OperationalHistoryEntry:
+    status = _session_status_for_completion_state(state_id)
+    requested_count = _history_requested_count(companion_state)
+    completed_count = _history_completed_count(
+        companion_state,
+        status=status,
+        requested_count=requested_count,
+    )
+    automation_name = str(
+        companion_state.get("automation_name", "Prepared operation")
+    )
+    warnings = _history_warnings(companion_state.get("warnings"))
+    recovery_note = None
+    if status in {
+        SessionStatus.STOPPED,
+        SessionStatus.REFUSED,
+        SessionStatus.INTERRUPTED,
+        SessionStatus.FAILURE,
+    }:
+        recovery_note = "Review FH6 baseline and readiness before another attempt."
+
+    entry = OperationalHistoryEntry(
+        session_id=session_id or f"desktop-{uuid4().hex}",
+        automation_id=str(companion_state.get("automation_id", "unknown")),
+        automation_name=automation_name,
+        profile_id=str(companion_state.get("profile_id", "unknown")),
+        profile_name=str(companion_state.get("profile_name", "Selected profile")),
+        outcome=status,
+        summary=_history_summary(
+            automation_name,
+            status=status,
+            requested_count=requested_count,
+            completed_count=completed_count,
+        ),
+        timestamp=timestamp or datetime.now(timezone.utc),
+        requested_count=requested_count,
+        completed_count=completed_count,
+        confidence_note=_history_confidence_note(status),
+        warnings=warnings,
+        recovery_note=recovery_note,
+        suggested_next_step=_history_suggested_next_step(status),
+        expandable_details=(execution_message,) if execution_message.strip() else (),
+    )
+    entries.append(entry)
+    return entry
+
+
+def _history_requested_count(companion_state: dict[str, Any]) -> int:
+    explicit_count = _positive_int(companion_state.get("requested_count"))
+    if explicit_count is not None:
+        return explicit_count
+
+    automation_id = companion_state.get("automation_id")
+    if automation_id == "auto1":
+        candidate = companion_state.get("requested_cycles")
+    elif automation_id == "auto2":
+        candidate = (
+            companion_state.get("auto2_purchase_count")
+            if companion_state.get("auto2_mode") == "purchase"
+            else 1
+        )
+    elif automation_id == "auto3":
+        candidate = companion_state.get("auto3_cars")
+    else:
+        candidate = 1
+    return _positive_int(candidate) or 1
+
+
+def _history_completed_count(
+    companion_state: dict[str, Any],
+    *,
+    status: SessionStatus,
+    requested_count: int,
+) -> int:
+    explicit_count = _non_negative_int(companion_state.get("completed_count"))
+    if explicit_count is not None:
+        return min(explicit_count, requested_count)
+    return requested_count if status == SessionStatus.COMPLETED else 0
+
+
+def _history_warnings(raw_warnings: Any) -> tuple[str, ...]:
+    if isinstance(raw_warnings, str):
+        return (raw_warnings,) if raw_warnings.strip() else ()
+    if isinstance(raw_warnings, (tuple, list)):
+        return tuple(str(warning) for warning in raw_warnings if str(warning).strip())
+    return ()
+
+
+def _history_summary(
+    automation_name: str,
+    *,
+    status: SessionStatus,
+    requested_count: int,
+    completed_count: int,
+) -> str:
+    if status == SessionStatus.COMPLETED:
+        return f"{automation_name} completed {completed_count} of {requested_count} requested operation(s)."
+    if status == SessionStatus.STOPPED:
+        return f"{automation_name} stopped after {completed_count} of {requested_count} requested operation(s)."
+    if status == SessionStatus.REFUSED:
+        return f"{automation_name} was refused before guarded execution could continue."
+    if status == SessionStatus.INTERRUPTED:
+        return f"{automation_name} was interrupted before completing the requested operation."
+    return f"{automation_name} ended with a failure before completing the requested operation."
+
+
+def _history_confidence_note(status: SessionStatus) -> str:
+    if status == SessionStatus.COMPLETED:
+        return "The supervised operation reached its recorded completion state."
+    if status == SessionStatus.STOPPED:
+        return "The operator stopped the supervised operation intentionally."
+    if status == SessionStatus.REFUSED:
+        return "The operation remained fail-closed and did not continue."
+    return "Review the recorded result before preparing another operation."
+
+
+def _history_suggested_next_step(status: SessionStatus) -> str:
+    if status == SessionStatus.COMPLETED:
+        return "Prepare another supervised operation when ready."
+    if status == SessionStatus.STOPPED:
+        return "Return to preparation and confirm the FH6 baseline."
+    return "Review readiness in Automation Environment before continuing."
+
+
+def _positive_int(value: Any) -> int | None:
+    parsed = _non_negative_int(value)
+    return parsed if parsed is not None and parsed > 0 else None
+
+
+def _non_negative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
 
 
 def _summarize_auto1_ui_execution_error(error: Exception) -> str:
@@ -1470,7 +1799,7 @@ def _visible_image_bounds(image):
 def _navigation_icon_for_screen(screen_id: ScreenId) -> str:
     icons = {
         ScreenId.HOME: "⌂",
-        ScreenId.PROFILES: "◎",
+        ScreenId.AUTOMATION_ENVIRONMENT: "▷",
         ScreenId.HISTORY: "◷",
         ScreenId.HELP: "?",
         ScreenId.SETTINGS: "⚙",
@@ -1565,13 +1894,38 @@ def _style_navigation_button(
     )
 
 
+def _wrap_in_page_scroll_area(content):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QFrame, QScrollArea
+
+    scroll_area = QScrollArea()
+    scroll_area.setObjectName("DesktopPageScrollArea")
+    scroll_area.setWidgetResizable(True)
+    scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+    scroll_area.setHorizontalScrollBarPolicy(
+        Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    )
+    scroll_area.setVerticalScrollBarPolicy(
+        Qt.ScrollBarPolicy.ScrollBarAsNeeded
+    )
+    scroll_area.setStyleSheet(
+        "QScrollArea#DesktopPageScrollArea { background: transparent; border: none; }"
+        "QScrollArea#DesktopPageScrollArea > QWidget > QWidget {"
+        " background: transparent; border: none; }"
+    )
+    scroll_area.setWidget(content)
+    return scroll_area
+
+
 def _build_screen_widget(
     screen: PrototypeScreen,
     shell_spec: PrototypeShellSpec,
     home_concept: PrototypeHomeConcept | None = None,
     open_automation_environment=None,
-    open_profiles=None,
-    on_license_changed=None,
+    history_entries_provider=None,
+    register_history_refresh=None,
+    execution_preferences_store: ExecutionPreferencesStore | None = None,
+    register_settings_refresh=None,
 ):
     from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
@@ -1580,16 +1934,16 @@ def _build_screen_widget(
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(shell_spec.vertical_rhythm.header_spacing)
     title_label = QLabel(screen.title)
-    primary_intention_text = (
-        "Overview and next steps for your farming operations."
-        if home_concept is not None
-        else screen.primary_intention
-    )
+    if home_concept is not None:
+        primary_intention_text = "Overview and next steps for your farming operations."
+    else:
+        primary_intention_text = screen.primary_intention
     primary_intention_label = QLabel(primary_intention_text)
     _style_screen_title(title_label, shell_spec=shell_spec)
     _style_summary_label(primary_intention_label, shell_spec=shell_spec)
     layout.addWidget(title_label)
-    layout.addWidget(primary_intention_label)
+    if primary_intention_text:
+        layout.addWidget(primary_intention_label)
 
     if home_concept is not None:
         _build_home_screen_content(
@@ -1597,19 +1951,17 @@ def _build_screen_widget(
             home_concept=home_concept,
             shell_spec=shell_spec,
             open_automation_environment=open_automation_environment,
-            open_profiles=open_profiles,
         )
-        layout.addStretch()
-        return container
-
-    if screen.screen_id == ScreenId.PROFILES:
-        _build_profiles_screen_content(layout, shell_spec=shell_spec)
-        layout.addStretch()
         return container
 
     if screen.screen_id == ScreenId.HISTORY:
-        _build_history_screen_content(layout, shell_spec=shell_spec)
-        layout.addStretch()
+        refresh_history = _build_history_screen_content(
+            layout,
+            shell_spec=shell_spec,
+            history_entries_provider=history_entries_provider,
+        )
+        if register_history_refresh is not None:
+            register_history_refresh(refresh_history)
         return container
 
     if screen.screen_id == ScreenId.HELP:
@@ -1618,11 +1970,13 @@ def _build_screen_widget(
         return container
 
     if screen.screen_id == ScreenId.SETTINGS:
-        _build_settings_screen_content(
+        refresh_settings = _build_settings_screen_content(
             layout,
             shell_spec=shell_spec,
-            on_license_changed=on_license_changed,
+            execution_preferences_store=execution_preferences_store,
         )
+        if register_settings_refresh is not None:
+            register_settings_refresh(refresh_settings)
         layout.addStretch()
         return container
 
@@ -1645,7 +1999,6 @@ def _build_screen_widget(
 def _has_specialized_desktop_screen_content(screen_id: ScreenId) -> bool:
     return screen_id in {
         ScreenId.HOME,
-        ScreenId.PROFILES,
         ScreenId.HISTORY,
         ScreenId.HELP,
         ScreenId.SETTINGS,
@@ -1656,6 +2009,7 @@ def _build_automation_environment_widget(
     automation_environment: PrototypeAutomationEnvironment,
     shell_spec: PrototypeShellSpec,
     open_commitment_layer,
+    execution_preferences_store: ExecutionPreferencesStore | None = None,
 ):
     from PySide6.QtWidgets import (
         QComboBox,
@@ -1676,10 +2030,15 @@ def _build_automation_environment_widget(
     title_label = QLabel(automation_environment.title)
     _style_screen_title(title_label, shell_spec=shell_spec)
     layout.addWidget(title_label)
-    layout.addSpacing(2)
 
     controller = FrontendAutomationController(
         session_id_provider=lambda: "desktop-prepared-session",
+    )
+    from licensing.service import LicenseService
+
+    license_service = LicenseService()
+    execution_preferences_store = (
+        execution_preferences_store or ExecutionPreferencesStore()
     )
     active_automations = tuple(get_active_automation_definitions())
     selected_automation_id = {"value": active_automations[0].automation_id}
@@ -1703,34 +2062,28 @@ def _build_automation_environment_widget(
         selector_buttons[definition.automation_id] = button
         selector_row.addWidget(button)
     layout.addLayout(selector_row)
-    layout.addSpacing(6)
 
     overview = _build_preparation_text_card(
         eyebrow="SELECTED AUTOMATION",
         shell_spec=shell_spec,
         treatment="primary action",
     )
-    profile = _build_preparation_text_card(
-        eyebrow="ACTIVE PROFILE",
-        shell_spec=shell_spec,
-        treatment="primary behavior summary",
-    )
-    readiness = _build_preparation_text_card(
-        eyebrow="READINESS",
+    baseline = _build_preparation_text_card(
+        eyebrow="BASELINE PREPARATION",
         shell_spec=shell_spec,
         treatment="primary confidence check",
-    )
-    warnings = _build_preparation_text_card(
-        eyebrow="CONTEXTUAL WARNINGS",
-        shell_spec=shell_spec,
-        treatment="secondary contextual support",
     )
     runtime = _build_preparation_text_card(
         eyebrow="QUICK SETTINGS",
         shell_spec=shell_spec,
         treatment="secondary contextual support",
     )
-    runtime["layout"].setContentsMargins(12, 7, 12, 7)
+    runtime["layout"].setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
     runtime["layout"].setSpacing(3)
     auto1_settings_widget = QWidget()
     auto1_settings_widget.setStyleSheet("background: transparent; border: none;")
@@ -1833,18 +2186,8 @@ def _build_automation_environment_widget(
     )
 
     layout.addWidget(overview["card"])
-    layout.addSpacing(3)
-    layout.addLayout(
-        _build_card_row(
-            cards=(profile["card"], warnings["card"]),
-            shell_spec=shell_spec,
-        )
-    )
-    layout.addSpacing(3)
-    layout.addWidget(readiness["card"])
-    layout.addSpacing(3)
+    layout.addWidget(baseline["card"])
     layout.addWidget(runtime["card"])
-    layout.addSpacing(3)
 
     prepare_button = QPushButton("Prepare Run")
     _style_primary_button(prepare_button, shell_spec=shell_spec)
@@ -1857,9 +2200,7 @@ def _build_automation_environment_widget(
 
     preparation_cards = {
         "overview": overview,
-        "profile": profile,
-        "readiness": readiness,
-        "warnings": warnings,
+        "baseline": baseline,
         "runtime": runtime,
         "run": run,
     }
@@ -1911,7 +2252,6 @@ def _build_automation_environment_widget(
             return
 
         profile_metadata = plan.profile_metadata
-        readiness_model = plan.readiness_model
         desktop_execution_supported = _is_desktop_execution_supported(automation_id)
         desktop_preparation_available = _is_desktop_preparation_available(automation_id)
         runtime["card"].setVisible(automation_id in {"auto1", "auto2", "auto3"})
@@ -1938,35 +2278,16 @@ def _build_automation_environment_widget(
             summary=_compact_text(definition.short_purpose, 96),
             details=(
                 f"Validated scope: {_compact_text(definition.validated_scope, 72)}",
-                _compact_text(definition.expected_baseline, 112),
             ),
         )
-        _set_preparation_card_text(
-            preparation_cards["profile"],
-            title=profile_metadata.profile_name,
-            summary=_compact_text(profile_metadata.behavior_summary, 94),
-            details=(
-                _compact_text(profile_metadata.reliability_posture, 78),
-                f"Confidence: {profile_metadata.validation_confidence.value}",
-            ),
+        baseline_title, baseline_summary, baseline_details = (
+            _baseline_preparation_content(automation_id)
         )
         _set_preparation_card_text(
-            preparation_cards["readiness"],
-            title="Required Starting Position",
-            summary=_desktop_baseline_summary(automation_id),
-            details=_desktop_baseline_details(automation_id, readiness_model),
-        )
-        _set_preparation_card_text(
-            preparation_cards["warnings"],
-            title="Contextual warnings",
-            summary=_format_warning_summary(plan.warnings),
-            details=(
-                (
-                    plan.warnings[1]
-                    if len(plan.warnings) > 1
-                    else "Warnings are informational until preparation is confirmed."
-                ),
-            ),
+            preparation_cards["baseline"],
+            title=baseline_title,
+            summary=baseline_summary,
+            details=baseline_details,
         )
         if automation_id == "auto1":
             _set_preparation_card_text(
@@ -2042,18 +2363,10 @@ def _build_automation_environment_widget(
                     f"Selected: {definition.display_name}. "
                     f"Requested cycles: {_desktop_requested_count(automation_id, auto1_loop_count_input.value(), auto2_purchase_count_input.value(), auto3_cars_input.value())}."
                 ),
-                (
-                    (
-                        "Prepared state only. Supervision is available after commitment."
-                        if desktop_preparation_available
-                        else " ".join(_desktop_execution_refusal_details(automation_id))
-                    )
-                    if prepared
-                    else (
-                        "No operation begins until focus handoff and commitment."
-                        if desktop_preparation_available
-                        else " ".join(_desktop_execution_refusal_details(automation_id))
-                    )
+                *(
+                    ()
+                    if desktop_preparation_available
+                    else (" ".join(_desktop_execution_refusal_details(automation_id)),)
                 ),
             ),
         )
@@ -2126,14 +2439,42 @@ def _build_automation_environment_widget(
     auto3_cars_input.valueChanged.connect(
         lambda _value: rerender_if_selected("auto3")
     )
-    prepare_button.clicked.connect(
-        lambda: render_preparation_state(selected_automation_id["value"], prepared=True)
-    )
-    companion_button.clicked.connect(
-        lambda: open_commitment_layer(selected_companion_state["value"])
-        if selected_companion_state["value"] is not None
-        else None
-    )
+    def prepare_selected_automation() -> None:
+        automation_id = selected_automation_id["value"]
+        mode = None
+        if automation_id == "auto2":
+            mode = str(auto2_mode_input.currentData())
+        elif automation_id == "auto3":
+            mode = str(auto3_mode_input.currentData())
+        decision = license_service.evaluate_execution(automation_id, mode)
+        if _should_show_community_feature_dialog(decision):
+            from desktop.license_dialog import show_community_feature_dialog
+
+            show_community_feature_dialog(container)
+            return
+        render_preparation_state(automation_id, prepared=True)
+
+    prepare_button.clicked.connect(prepare_selected_automation)
+
+    def move_to_supervision() -> None:
+        companion_state = selected_companion_state["value"]
+        _request_supervision_transition(
+            companion_state,
+            confirm_resource_spending=lambda confirmation: (
+                _handle_resource_spending_confirmation(
+                    companion_state=companion_state,
+                    confirmation=confirmation,
+                    preferences_store=execution_preferences_store,
+                    show_confirmation=lambda item: (
+                        _show_resource_spending_confirmation(container, item)
+                    ),
+                )
+            ),
+            open_commitment_layer=open_commitment_layer,
+            preferences=execution_preferences_store.load(),
+        )
+
+    companion_button.clicked.connect(move_to_supervision)
     render_preparation_state(selected_automation_id["value"], prepared=False)
 
     layout.addStretch()
@@ -2158,7 +2499,7 @@ def _build_commitment_layer_widget(
     container = QWidget()
     layout = QVBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(10)
+    layout.setSpacing(shell_spec.vertical_rhythm.card_spacing)
 
     title_label = QLabel(shell_spec.commitment_layer.title)
     subtitle_label = QLabel(shell_spec.commitment_layer.primary_intention)
@@ -2166,9 +2507,13 @@ def _build_commitment_layer_widget(
     _style_summary_label(subtitle_label, shell_spec=shell_spec)
     layout.addWidget(title_label)
     layout.addWidget(subtitle_label)
-    layout.addSpacing(8)
 
     readiness_card = _build_preparation_text_card(
+        eyebrow="READINESS",
+        shell_spec=shell_spec,
+        treatment="primary confidence check",
+    )
+    commitment_summary_card = _build_preparation_text_card(
         eyebrow="LAST SAFE CHECKPOINT",
         shell_spec=shell_spec,
         treatment="primary action",
@@ -2178,11 +2523,6 @@ def _build_commitment_layer_widget(
         shell_spec=shell_spec,
         treatment="primary confidence check",
     )
-    profile_card = _build_preparation_text_card(
-        eyebrow="PROFILE",
-        shell_spec=shell_spec,
-        treatment="secondary contextual support",
-    )
     countdown_card = _build_preparation_text_card(
         eyebrow="COMMITMENT COUNTDOWN",
         shell_spec=shell_spec,
@@ -2190,16 +2530,9 @@ def _build_commitment_layer_widget(
     )
 
     layout.addWidget(readiness_card["card"])
-    layout.addSpacing(6)
-    layout.addLayout(
-        _build_card_row(
-            cards=(focus_card["card"], profile_card["card"]),
-            shell_spec=shell_spec,
-        )
-    )
-    layout.addSpacing(6)
+    layout.addWidget(commitment_summary_card["card"])
+    layout.addWidget(focus_card["card"])
     layout.addWidget(countdown_card["card"])
-    layout.addSpacing(8)
 
     action_row = QHBoxLayout()
     action_row.setContentsMargins(0, 0, 0, 0)
@@ -2210,9 +2543,9 @@ def _build_commitment_layer_widget(
     _style_primary_button(automatic_focus_button, shell_spec=shell_spec)
     _style_secondary_button(manual_focus_button, shell_spec=shell_spec)
     _style_secondary_button(return_button, shell_spec=shell_spec)
-    action_row.addWidget(automatic_focus_button)
-    action_row.addWidget(manual_focus_button)
-    action_row.addWidget(return_button)
+    action_row.addWidget(automatic_focus_button, 1)
+    action_row.addWidget(manual_focus_button, 1)
+    action_row.addWidget(return_button, 1)
     layout.addLayout(action_row)
     layout.addStretch()
 
@@ -2230,8 +2563,18 @@ def _build_commitment_layer_widget(
         countdown_position["value"] = 0
         automatic_focus_button.setEnabled(True)
         manual_focus_button.setEnabled(True)
+        automation_id = companion_state.get("automation_id", "")
+        readiness_title, readiness_summary, readiness_details = (
+            _commitment_readiness_content(automation_id)
+        )
         _set_preparation_card_text(
             readiness_card,
+            title=readiness_title,
+            summary=readiness_summary,
+            details=readiness_details,
+        )
+        _set_preparation_card_text(
+            commitment_summary_card,
             title=shell_spec.commitment_layer.readiness_label,
             summary=companion_state.get("automation_name", "Prepared operation"),
             details=_build_commitment_readiness_details(companion_state),
@@ -2258,19 +2601,6 @@ def _build_commitment_layer_widget(
                     "Manual Focus starts the same countdown so you can switch to FH6 before zero."
                     if real_execution_supported
                     else "Return to preparation and choose Auto1, Auto2, or Auto3."
-                ),
-            ),
-        )
-        _set_preparation_card_text(
-            profile_card,
-            title=companion_state.get("profile_name", "Selected profile"),
-            summary=shell_spec.commitment_layer.profile_label,
-            details=(
-                shell_spec.commitment_layer.stop_label,
-                (
-                    "Keep the validated FH6 baseline visible before continuing."
-                    if real_execution_supported
-                    else "This desktop path is unavailable for the selected automation."
                 ),
             ),
         )
@@ -2420,7 +2750,6 @@ def _build_commitment_layer_widget(
     set_waiting_state(
         {
             "automation_name": "Prepared operation",
-            "profile_name": "Selected profile",
         }
     )
 
@@ -2432,19 +2761,27 @@ def _build_home_screen_content(
     home_concept: PrototypeHomeConcept,
     shell_spec: PrototypeShellSpec,
     open_automation_environment,
-    open_profiles,
 ) -> None:
     layout.addWidget(
         _build_visual_card(
-            title="Ready when the baseline is clear",
-            summary="Controlled preparation before supervised operation.",
-            details=("System ready",),
+            title="Forza Automation Assist",
+            summary=(
+                "Automate one of the most effective methods for farming Super "
+                "Wheelspins in FH6 through guided, supervised desktop automation. "
+                "FAA automates earning Skill Points, purchasing the Subaru Impreza "
+                "22B-STI, and unlocking its Skill Tree to obtain its Super Wheelspin "
+                "reward perk through a structured workflow that guides you through "
+                "each step."
+            ),
+            details=(
+                "Every automation is designed around validated behavior, supervised "
+                "execution, and predictable operation.",
+                "System ready.",
+            ),
             shell_spec=shell_spec,
             treatment="hero",
         )
     )
-    layout.addSpacing(shell_spec.vertical_rhythm.important_element_spacing)
-
     layout.addWidget(
         _build_action_card(
             eyebrow=home_concept.signals[0].title,
@@ -2457,43 +2794,70 @@ def _build_home_screen_content(
             action_callback=open_automation_environment,
         )
     )
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
+    layout.addStretch(1)
     layout.addWidget(
-        _build_action_card(
-            eyebrow=home_concept.signals[1].title,
-            title=home_concept.signals[1].summary,
-            summary="Check profile, readiness, warnings and commitment before proceeding.",
-            button_text="Review Profiles",
+        _build_community_support_card(
             shell_spec=shell_spec,
-            treatment="secondary action",
-            primary=False,
-            action_callback=open_profiles,
         )
     )
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
 
-    layout.addLayout(
-        _build_card_row(
-            cards=(
-                _build_visual_card(
-                    title=home_concept.signals[2].title,
-                    summary=home_concept.signals[2].summary,
-                    details=(),
-                    shell_spec=shell_spec,
-                    treatment="secondary",
-                ),
-                _build_visual_card(
-                    title=home_concept.signals[3].title,
-                    summary=home_concept.signals[3].summary,
-                    details=(),
-                    shell_spec=shell_spec,
-                    treatment="tertiary",
-                ),
-            ),
-            shell_spec=shell_spec,
-        )
+
+def _build_community_support_card(shell_spec: PrototypeShellSpec):
+    from PySide6.QtWidgets import (
+        QFrame,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QSizePolicy,
+        QVBoxLayout,
     )
+
+    from desktop.support_actions import open_official_discord, open_official_youtube
+
+    card = QFrame()
+    card.setObjectName("DesktopCard")
+    card.setFrameShape(QFrame.Shape.NoFrame)
+    card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(card, treatment="secondary")
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
+    card_layout.setSpacing(shell_spec.vertical_rhythm.card_spacing)
+
+    title = QLabel("Community & Support")
+    summary = QLabel(
+        "Connect with the FAA community for support, tutorials, release announcements "
+        "and development updates."
+    )
+    _style_card_title(title, shell_spec=shell_spec, treatment="secondary")
+    _style_summary_label(summary, shell_spec=shell_spec)
+    card_layout.addWidget(title)
+    card_layout.addWidget(summary)
+
+    button_row = QHBoxLayout()
+    button_row.setContentsMargins(0, 2, 0, 0)
+    button_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    discord_button = QPushButton("Discord")
+    youtube_button = QPushButton("YouTube")
+    for button in (discord_button, youtube_button):
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        _style_secondary_button(button, shell_spec=shell_spec)
+        button_row.addWidget(button, 1)
+    card_layout.addLayout(button_row)
+
+    discord_button.clicked.connect(
+        lambda _checked=False: open_official_discord()
+    )
+    youtube_button.clicked.connect(
+        lambda _checked=False: open_official_youtube()
+    )
+    return card
 
 
 def _is_real_desktop_execution_state(companion_state: dict[str, str]) -> bool:
@@ -2745,64 +3109,143 @@ def _build_profiles_screen_content(layout, shell_spec: PrototypeShellSpec) -> No
         render_selected_profile(first_profile)
 
 
-def _build_history_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
-    screen = build_history_screen(
-        (
-            OperationalHistoryEntry(
-                session_id="current-desktop-session",
-                automation_id="desktop",
-                automation_name="Desktop UI",
-                profile_id="none",
-                profile_name="No persisted run profile",
-                outcome=SessionStatus.PREPARED,
-                summary="Desktop UI session is active. Run persistence is not connected yet.",
-                timestamp=datetime.now(timezone.utc),
-                requested_count=0,
-                completed_count=0,
-                confidence_note="History is session-oriented and will show completed supervised runs once persistence is added.",
-                warnings=(),
-                recovery_note=None,
-                suggested_next_step="Prepare a supervised operation from Automation Environment.",
-                expandable_details=(),
-            ),
+def _build_history_screen_content(
+    layout,
+    shell_spec: PrototypeShellSpec,
+    history_entries: tuple = (),
+    history_entries_provider=None,
+):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QFrame, QScrollArea, QVBoxLayout, QWidget
+
+    provider = history_entries_provider or (lambda: history_entries)
+    content = QWidget()
+    content.setStyleSheet("background: transparent; border: none;")
+    content_layout = QVBoxLayout(content)
+    content_layout.setContentsMargins(0, 0, 0, 0)
+    content_layout.setSpacing(0)
+    scroll_area = QScrollArea()
+    scroll_area.setWidgetResizable(True)
+    scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+    scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+    scroll_area.setWidget(content)
+    layout.addWidget(scroll_area, 1)
+
+    def refresh() -> None:
+        _clear_layout(content_layout)
+        _render_history_screen_content(
+            content_layout,
+            shell_spec=shell_spec,
+            history_entries=tuple(provider()),
         )
-    )
-    recent = screen.recent_sessions.sessions[0]
+
+    refresh()
+    return refresh
+
+
+def _render_history_screen_content(
+    layout,
+    *,
+    shell_spec: PrototypeShellSpec,
+    history_entries: tuple[OperationalHistoryEntry, ...],
+) -> None:
+    screen = build_history_screen(history_entries)
 
     layout.addWidget(
         _build_visual_card(
             title="Operational memory",
             summary=screen.primary_intention,
             details=(
-                "History summarizes sessions, not raw logs.",
-                "Persistence is intentionally not connected in this pass.",
+                "History summarizes completed, stopped, refused, interrupted, and failed sessions.",
+                "It is not a raw log file.",
             ),
             shell_spec=shell_spec,
             treatment="hero",
+            content_spacing=2,
         )
     )
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addWidget(
-        _build_visual_card(
-            title=recent.outcome_message,
-            summary=recent.summary,
-            details=(
-                recent.confidence_note,
-                recent.suggested_next_step or "Review the current preparation state.",
-            ),
-            shell_spec=shell_spec,
-            treatment="primary action",
+    layout.addSpacing(shell_spec.vertical_rhythm.card_spacing)
+
+    if not screen.has_sessions:
+        empty_state = screen.empty_state
+        layout.addWidget(
+            _build_visual_card(
+                title=empty_state.title,
+                summary=empty_state.summary,
+                details=empty_state.details,
+                shell_spec=shell_spec,
+                treatment="primary action",
+                content_spacing=2,
+            )
         )
-    )
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addWidget(
-        _build_visual_card(
-            title="Older sessions",
-            summary="No stored older sessions yet",
-            details=("When persistence is added, this remains recency-first and session-oriented.",),
-            shell_spec=shell_spec,
-            treatment="tertiary",
+        layout.addSpacing(shell_spec.vertical_rhythm.card_spacing)
+        layout.addWidget(
+            _build_visual_card(
+                title="What will appear here",
+                summary="Each recorded session will provide operational context.",
+                details=(
+                    "Automation name and profile used",
+                    "Outcome and requested/completed count",
+                    "Warnings and recovery guidance",
+                    "Suggested safest next step",
+                ),
+                shell_spec=shell_spec,
+                treatment="tertiary",
+                content_spacing=2,
+            )
         )
+        layout.addStretch(1)
+        return
+
+    for session in screen.recent_sessions.sessions:
+        layout.addWidget(
+            _build_history_session_card(
+                session,
+                shell_spec=shell_spec,
+                treatment="primary action",
+            )
+        )
+        layout.addSpacing(shell_spec.vertical_rhythm.card_spacing)
+
+    if screen.older_sessions is not None:
+        for session in screen.older_sessions.sessions:
+            layout.addWidget(
+                _build_history_session_card(
+                    session,
+                    shell_spec=shell_spec,
+                    treatment="tertiary",
+                )
+            )
+            layout.addSpacing(shell_spec.vertical_rhythm.card_spacing)
+
+    layout.addStretch(1)
+
+
+def _build_history_session_card(session, shell_spec: PrototypeShellSpec, treatment: str):
+    details = [
+        f"Automation: {session.automation_name}",
+        f"Profile: {session.profile_name}",
+        f"Requested/completed: {session.requested_count}/{session.completed_count}",
+        f"Recorded: {session.timestamp_label}",
+        session.confidence_note,
+    ]
+    details.extend(f"Warning: {warning}" for warning in session.warnings)
+    if session.recovery_note:
+        details.append(f"Recovery: {session.recovery_note}")
+    if session.suggested_next_step:
+        details.append(f"Next step: {session.suggested_next_step}")
+    if session.detail_layer.is_available:
+        details.extend(
+            " ".join(detail.split()) for detail in session.detail_layer.details
+        )
+    return _build_visual_card(
+        title=f"{session.automation_name} - {session.outcome_message}",
+        summary=session.summary,
+        details=tuple(details),
+        shell_spec=shell_spec,
+        treatment=treatment,
+        content_spacing=2,
     )
 
 
@@ -2819,6 +3262,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
         QVBoxLayout,
         QWidget,
     )
+    from desktop.support_actions import open_official_discord
 
     screen = build_help_screen(
         automation_definitions=tuple(get_all_automation_definitions()),
@@ -2921,8 +3365,13 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
             """
         )
         image_layout = QVBoxLayout(image_card)
-        image_layout.setContentsMargins(10, 10, 10, 10)
-        image_layout.setSpacing(7)
+        image_layout.setContentsMargins(
+            shell_spec.vertical_rhythm.card_horizontal_padding,
+            shell_spec.vertical_rhythm.card_vertical_padding,
+            shell_spec.vertical_rhythm.card_horizontal_padding,
+            shell_spec.vertical_rhythm.card_vertical_padding,
+        )
+        image_layout.setSpacing(shell_spec.vertical_rhythm.card_spacing)
 
         image_path = resolve_guide_image_path(filename)
         pixmap = QPixmap(str(image_path)) if image_path is not None else QPixmap()
@@ -3004,6 +3453,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
                 "or fail to complete the race consistently."
             )
         )
+        add_section_heading(content_layout, "Validated Farm Race")
         add_section_heading(
             content_layout,
             "Current Validated EventLab Farm Race",
@@ -3033,6 +3483,16 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
                 "the latest validated recommendation."
             )
         )
+        open_discord_button = QPushButton("Open Discord")
+        open_discord_button.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
+        _style_secondary_button(open_discord_button, shell_spec=shell_spec)
+        open_discord_button.clicked.connect(
+            lambda _checked=False: open_official_discord()
+        )
+        content_layout.addWidget(open_discord_button)
         content_layout.addWidget(build_text_label(f"Purpose: {auto1_guide.purpose}"))
         content_layout.addWidget(
             build_text_label(
@@ -3337,8 +3797,6 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
             role="summary",
         )
     )
-    layout.addSpacing(8)
-
     scroll_area = QScrollArea()
     scroll_area.setWidgetResizable(True)
     scroll_area.setFrameShape(QFrame.Shape.NoFrame)
@@ -3369,7 +3827,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
     scroll_content = QWidget()
     scroll_content.setStyleSheet("background: transparent; border: none;")
     scroll_outer_layout = QHBoxLayout(scroll_content)
-    scroll_outer_layout.setContentsMargins(10, 0, 10, 0)
+    scroll_outer_layout.setContentsMargins(0, 0, 0, 0)
     scroll_outer_layout.setSpacing(0)
 
     scroll_column = QWidget()
@@ -3381,7 +3839,7 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
     )
     scroll_layout = QVBoxLayout(scroll_column)
     scroll_layout.setContentsMargins(0, 0, 0, 0)
-    scroll_layout.setSpacing(7)
+    scroll_layout.setSpacing(shell_spec.vertical_rhythm.card_spacing)
     scroll_outer_layout.addStretch(1)
     scroll_outer_layout.addWidget(scroll_column)
     scroll_outer_layout.addStretch(1)
@@ -3469,110 +3927,367 @@ def _build_help_screen_content(layout, shell_spec: PrototypeShellSpec) -> None:
 def _build_settings_screen_content(
     layout,
     shell_spec: PrototypeShellSpec,
-    on_license_changed=None,
+    execution_preferences_store: ExecutionPreferencesStore | None = None,
 ) -> None:
     from PySide6.QtWidgets import (
+        QCheckBox,
         QFrame,
+        QGridLayout,
         QHBoxLayout,
         QLabel,
+        QMessageBox,
         QPushButton,
         QSizePolicy,
         QVBoxLayout,
         QWidget,
     )
+    from licensing.service import LicenseService
+    from desktop.license_dialog import (
+        license_import_feedback,
+        select_and_import_license_file,
+    )
+    from desktop.support_actions import open_official_discord
 
-    screen = build_settings_screen()
+    service = LicenseService()
+    execution_preferences_store = (
+        execution_preferences_store or ExecutionPreferencesStore()
+    )
 
-    expected = screen.expected_application_behavior.settings
-    safety = screen.safety_and_operational_preferences.settings
-    advanced = screen.advanced_system_preferences.settings
+    edition_card = QFrame()
+    edition_card.setObjectName("DesktopCard")
+    edition_card.setFrameShape(QFrame.Shape.NoFrame)
+    edition_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    _style_visual_card(edition_card, treatment="hero")
+    edition_layout = QVBoxLayout(edition_card)
+    edition_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
+    edition_layout.setSpacing(5)
+    edition_eyebrow = QLabel("LICENSE & EDITION")
+    _style_eyebrow_label(edition_eyebrow, primary=True)
+    edition_name_label = QLabel()
+    edition_name_label.setObjectName("SettingsCurrentEdition")
+    _style_action_title(edition_name_label, primary=True)
+    edition_description_label = QLabel()
+    _style_detail_label(edition_description_label, shell_spec=shell_spec)
+    edition_layout.addWidget(edition_eyebrow)
+    edition_layout.addWidget(edition_name_label)
+    edition_layout.addWidget(edition_description_label)
+    layout.addWidget(edition_card)
 
-    layout.addWidget(
-        _build_visual_card(
-            title="Quiet system control",
-            summary=screen.primary_intention,
-            details=(
-                "Settings control the app shell, not automation timing or profile behavior.",
-            ),
-            shell_spec=shell_spec,
-            treatment="hero",
+    information_row = QHBoxLayout()
+    information_row.setContentsMargins(0, 0, 0, 0)
+    information_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+
+    features_card = QFrame()
+    features_card.setObjectName("DesktopCard")
+    _style_visual_card(features_card, treatment="primary")
+    features_layout = QVBoxLayout(features_card)
+    features_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
+    features_layout.setSpacing(6)
+    features_title = QLabel("INCLUDED FEATURES")
+    _style_eyebrow_label(features_title, primary=True)
+    features_label = QLabel()
+    features_label.setObjectName("SettingsIncludedFeatures")
+    _style_summary_label(features_label, shell_spec=shell_spec)
+    features_layout.addWidget(features_title)
+    features_layout.addWidget(features_label)
+    features_layout.addStretch(1)
+    information_row.addWidget(features_card, 1)
+
+    status_card = QFrame()
+    status_card.setObjectName("DesktopCard")
+    _style_visual_card(status_card, treatment="secondary")
+    status_layout = QVBoxLayout(status_card)
+    status_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
+    status_layout.setSpacing(6)
+    status_title = QLabel("STATUS")
+    _style_eyebrow_label(status_title, primary=False)
+    status_layout.addWidget(status_title)
+    status_grid = QGridLayout()
+    status_grid.setContentsMargins(0, 0, 0, 0)
+    status_grid.setHorizontalSpacing(9)
+    status_grid.setVerticalSpacing(4)
+    status_value_labels = []
+    for row in range(4):
+        name_label = QLabel()
+        value_label = QLabel()
+        _style_detail_label(name_label, shell_spec=shell_spec)
+        _style_summary_label(value_label, shell_spec=shell_spec)
+        status_grid.addWidget(name_label, row, 0)
+        status_grid.addWidget(value_label, row, 1)
+        status_value_labels.append((name_label, value_label))
+    status_layout.addLayout(status_grid)
+    status_layout.addStretch(1)
+    information_row.addWidget(status_card, 1)
+    layout.addLayout(information_row)
+
+    actions_card = QFrame()
+    actions_card.setObjectName("DesktopCard")
+    _style_visual_card(actions_card, treatment="secondary")
+    actions_layout = QVBoxLayout(actions_card)
+    actions_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
+    actions_layout.setSpacing(7)
+    actions_title = QLabel("LICENSE ACTIONS")
+    _style_eyebrow_label(actions_title, primary=False)
+    actions_layout.addWidget(actions_title)
+    action_buttons = QHBoxLayout()
+    action_buttons.setContentsMargins(0, 0, 0, 0)
+    action_buttons.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    import_button = QPushButton("Import")
+    replace_button = QPushButton("Replace")
+    remove_button = QPushButton("Remove")
+    _style_primary_button(import_button, shell_spec=shell_spec)
+    _style_secondary_button(replace_button, shell_spec=shell_spec)
+    _style_secondary_button(remove_button, shell_spec=shell_spec)
+    action_buttons.addWidget(import_button)
+    action_buttons.addWidget(replace_button)
+    action_buttons.addWidget(remove_button)
+    action_buttons.addStretch(1)
+    actions_layout.addLayout(action_buttons)
+    action_result_label = QLabel()
+    _style_detail_label(action_result_label, shell_spec=shell_spec)
+    actions_layout.addWidget(action_result_label)
+    support_label = QLabel("Need help? Visit the official FAA Discord.")
+    _style_detail_label(support_label, shell_spec=shell_spec)
+    support_row = QHBoxLayout()
+    support_row.setContentsMargins(0, 0, 0, 0)
+    support_row.setSpacing(shell_spec.vertical_rhythm.group_spacing)
+    support_row.addWidget(support_label)
+    open_support_button = QPushButton("Open Discord")
+    _style_secondary_button(open_support_button, shell_spec=shell_spec)
+    support_row.addWidget(open_support_button)
+    support_row.addStretch(1)
+    actions_layout.addLayout(support_row)
+    layout.addWidget(actions_card)
+
+    execution_card = QFrame()
+    execution_card.setObjectName("DesktopCard")
+    _style_visual_card(execution_card, treatment="secondary")
+    execution_layout = QVBoxLayout(execution_card)
+    execution_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
+    execution_layout.setSpacing(6)
+    execution_eyebrow = QLabel("EXECUTION")
+    _style_eyebrow_label(execution_eyebrow, primary=False)
+    execution_title = QLabel("Execution Safety")
+    _style_card_title(
+        execution_title,
+        shell_spec=shell_spec,
+        treatment="secondary",
+    )
+    execution_description = QLabel(
+        "Configure confirmation dialogs shown before resource-spending automation modes."
+    )
+    _style_detail_label(execution_description, shell_spec=shell_spec)
+    execution_layout.addWidget(execution_eyebrow)
+    execution_layout.addWidget(execution_title)
+    execution_layout.addWidget(execution_description)
+
+    auto2_confirmation_checkbox = QCheckBox("Show Auto2 Purchase confirmation")
+    auto3_confirmation_checkbox = QCheckBox("Show Auto3 Unlock confirmation")
+    for checkbox, description in (
+        (
+            auto2_confirmation_checkbox,
+            "Warn before Auto2 Purchase Mode spends in-game credits.",
+        ),
+        (
+            auto3_confirmation_checkbox,
+            "Warn before Auto3 Unlock Mode spends Skill Points.",
+        ),
+    ):
+        checkbox.setStyleSheet(
+            f"font-size: {shell_spec.typography.summary_size}px; "
+            f"font-weight: 600; color: {COLOR_TEXT_PRIMARY}; "
+            "background: transparent; border: none; spacing: 8px;"
         )
+        description_label = QLabel(description)
+        _style_detail_label(description_label, shell_spec=shell_spec)
+        execution_layout.addWidget(checkbox)
+        execution_layout.addWidget(description_label)
+
+    execution_result_label = QLabel()
+    _style_detail_label(execution_result_label, shell_spec=shell_spec)
+    execution_layout.addWidget(execution_result_label)
+    layout.addWidget(execution_card)
+
+    about_card = QFrame()
+    about_card.setObjectName("DesktopCard")
+    _style_visual_card(about_card, treatment="tertiary")
+    about_layout = QVBoxLayout(about_card)
+    about_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
     )
-    layout.addSpacing(6)
+    about_layout.setSpacing(7)
+    about_title = QLabel("ABOUT")
+    _style_eyebrow_label(about_title, primary=False)
+    about_layout.addWidget(about_title)
+    about_grid = QGridLayout()
+    about_grid.setContentsMargins(0, 0, 0, 0)
+    about_grid.setHorizontalSpacing(12)
+    about_grid.setVerticalSpacing(3)
+    about_value_labels = []
+    for row in range(4):
+        name_label = QLabel()
+        value_label = QLabel()
+        _style_detail_label(name_label, shell_spec=shell_spec)
+        _style_summary_label(value_label, shell_spec=shell_spec)
+        about_grid.addWidget(name_label, row, 0)
+        about_grid.addWidget(value_label, row, 1)
+        about_value_labels.append((name_label, value_label))
+    about_layout.addLayout(about_grid)
+    about_buttons = QHBoxLayout()
+    about_discord_button = QPushButton("Discord")
+    copy_button = QPushButton("Copy Version Information")
+    _style_secondary_button(about_discord_button, shell_spec=shell_spec)
+    _style_secondary_button(copy_button, shell_spec=shell_spec)
+    about_buttons.addWidget(about_discord_button)
+    about_buttons.addWidget(copy_button)
+    about_buttons.addStretch(1)
+    about_layout.addLayout(about_buttons)
+    copy_result_label = QLabel()
+    _style_detail_label(copy_result_label, shell_spec=shell_spec)
+    about_layout.addWidget(copy_result_label)
+    layout.addWidget(about_card)
 
-    settings_stage = QFrame()
-    settings_stage.setObjectName("DesktopCard")
-    settings_stage.setFrameShape(QFrame.Shape.NoFrame)
-    settings_stage.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-    _style_visual_card(settings_stage, treatment="primary")
+    current_screen = {"value": None}
+    refreshing_execution_preferences = {"value": False}
 
-    settings_stage_layout = QVBoxLayout(settings_stage)
-    settings_stage_layout.setContentsMargins(12, 10, 12, 10)
-    settings_stage_layout.setSpacing(7)
-
-    expected_label = QLabel("Expected application behavior")
-    _style_eyebrow_label(expected_label, primary=True)
-    settings_stage_layout.addWidget(expected_label)
-
-    expected_grid = QHBoxLayout()
-    expected_grid.setContentsMargins(0, 0, 0, 0)
-    expected_grid.setSpacing(7)
-    for setting in expected:
-        expected_grid.addWidget(
-            _build_setting_item_card(
-                setting,
-                shell_spec=shell_spec,
-                status_text=_setting_status_label(setting),
-                treatment="primary",
-            )
+    def refresh() -> None:
+        state = service.current_state()
+        execution_preferences = execution_preferences_store.load()
+        screen = build_settings_screen(
+            state,
+            version=DESKTOP_APP_VERSION,
+            execution_preferences=execution_preferences,
         )
-    settings_stage_layout.addLayout(expected_grid)
-
-    boundary_note = QLabel(
-        "Execution behavior stays in Profiles. Settings only controls the app shell."
-    )
-    _style_detail_label(boundary_note, shell_spec=shell_spec)
-    settings_stage_layout.addWidget(boundary_note)
-
-    license_button = QPushButton("Manage offline license")
-    license_button.setToolTip(
-        "View Community or licensed entitlements and import a signed FAA license."
-    )
-    def manage_license() -> None:
-        _show_license_management_dialog(settings_stage)
-        if on_license_changed is not None:
-            on_license_changed()
-
-    license_button.clicked.connect(manage_license)
-    settings_stage_layout.addWidget(license_button)
-
-    layout.addWidget(settings_stage)
-    layout.addSpacing(6)
-    layout.addLayout(
-        _build_card_row(
-            cards=(
-                _build_settings_section_card(
-                    title="Safety preferences",
-                    settings=safety,
-                    shell_spec=shell_spec,
-                    treatment="secondary",
-                ),
-                _build_settings_section_card(
-                    title="Advanced system",
-                    settings=advanced,
-                    shell_spec=shell_spec,
-                    treatment="tertiary",
-                ),
-            ),
-            shell_spec=shell_spec,
+        current_screen["value"] = screen
+        section = screen.license_and_edition
+        edition_name_label.setText(section.edition_name)
+        edition_description_label.setText(section.description)
+        features_label.setText(
+            "\n".join(f"✓  {feature.label}" for feature in section.included_features)
         )
+        for labels, item in zip(status_value_labels, section.status_items):
+            labels[0].setText(item.label)
+            labels[1].setText(item.value)
+        about_items = (
+            ("Product", screen.about.product),
+            ("Version", screen.about.version),
+            ("Edition", screen.about.edition_name),
+            ("Platform", screen.about.platform),
+        )
+        for labels, item in zip(about_value_labels, about_items):
+            labels[0].setText(item[0])
+            labels[1].setText(item[1])
+        execution_settings = {
+            setting.setting_id: setting
+            for setting in screen.execution.settings
+        }
+        refreshing_execution_preferences["value"] = True
+        auto2_confirmation_checkbox.setChecked(
+            execution_settings["show_auto2_purchase_confirmation"].enabled
+        )
+        auto3_confirmation_checkbox.setChecked(
+            execution_settings["show_auto3_unlock_confirmation"].enabled
+        )
+        refreshing_execution_preferences["value"] = False
+        replace_button.setVisible(state.is_licensed)
+        remove_button.setVisible(state.license is not None or state.status == "invalid")
+
+    def save_execution_preferences() -> None:
+        if refreshing_execution_preferences["value"]:
+            return
+
+        preferences = ExecutionPreferences(
+            show_auto2_purchase_confirmation=auto2_confirmation_checkbox.isChecked(),
+            show_auto3_unlock_confirmation=auto3_confirmation_checkbox.isChecked(),
+        )
+        try:
+            execution_preferences_store.save(preferences)
+        except ExecutionPreferencesError as error:
+            execution_result_label.setText(str(error))
+            refresh()
+            return
+
+        execution_result_label.setText("Execution safety preferences saved.")
+
+    def import_license(*, replacing: bool) -> None:
+        result = select_and_import_license_file(
+            actions_card,
+            service,
+            replacing=replacing,
+        )
+        if result is None:
+            return
+        action_result_label.setText(
+            license_import_feedback(result.accepted, result.message)
+        )
+        refresh()
+
+    def remove_license() -> None:
+        answer = QMessageBox.question(
+            actions_card,
+            "Remove local license",
+            "Remove the installed offline license and return to Community Edition?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        result = service.remove_license()
+        action_result_label.setText(result.message)
+        refresh()
+
+    def copy_version_information() -> None:
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.clipboard().setText(version_information_text(current_screen["value"].about))
+        copy_result_label.setText("Version information copied.")
+
+    import_button.clicked.connect(lambda: import_license(replacing=False))
+    replace_button.clicked.connect(lambda: import_license(replacing=True))
+    remove_button.clicked.connect(remove_license)
+    open_support_button.clicked.connect(
+        lambda _checked=False: open_official_discord()
     )
-
-
-def _show_license_management_dialog(parent) -> None:
-    from desktop.license_dialog import show_license_dialog
-
-    show_license_dialog(parent)
+    about_discord_button.clicked.connect(
+        lambda _checked=False: open_official_discord()
+    )
+    copy_button.clicked.connect(copy_version_information)
+    auto2_confirmation_checkbox.toggled.connect(
+        lambda _checked: save_execution_preferences()
+    )
+    auto3_confirmation_checkbox.toggled.connect(
+        lambda _checked: save_execution_preferences()
+    )
+    refresh()
+    return refresh
 
 
 def _build_companion_mode_widget(
@@ -3867,7 +4582,6 @@ def _build_automation_environment_content(
 
     overview = sections_by_id[AutomationEnvironmentSectionId.OVERVIEW]
     profile = sections_by_id[AutomationEnvironmentSectionId.PROFILE]
-    readiness = sections_by_id[AutomationEnvironmentSectionId.READINESS]
     warnings = sections_by_id[AutomationEnvironmentSectionId.CONTEXTUAL_WARNINGS]
     advanced = sections_by_id[AutomationEnvironmentSectionId.ADVANCED]
     run = sections_by_id[AutomationEnvironmentSectionId.RUN]
@@ -3883,8 +4597,6 @@ def _build_automation_environment_content(
     )
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
     layout.addWidget(_build_section_card(overview, shell_spec=shell_spec))
-    layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
-    layout.addWidget(_build_section_card(readiness, shell_spec=shell_spec))
     layout.addSpacing(shell_spec.vertical_rhythm.section_spacing)
     layout.addLayout(
         _build_card_row(
@@ -3946,7 +4658,12 @@ def _build_preparation_text_card(
     _style_visual_card(card, treatment=treatment)
 
     card_layout = QVBoxLayout(card)
-    card_layout.setContentsMargins(14, 10, 14, 10)
+    card_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
     card_layout.setSpacing(4)
 
     eyebrow_label = QLabel(eyebrow)
@@ -3996,6 +4713,64 @@ def _desktop_baseline_summary(automation_id: str) -> str:
         "auto3": "Garage -> Cars -> My Cars -> Recently Added.",
     }
     return summaries.get(automation_id, "Use the documented starting position for this automation.")
+
+
+def _baseline_preparation_content(
+    automation_id: str,
+) -> tuple[str, str, tuple[str, ...]]:
+    if automation_id == "auto1":
+        return (
+            "Prepare the Auto1 baseline",
+            (
+                "Prepare FH6 using a validated EventLab farm race and position the "
+                "game at the expected restart baseline."
+            ),
+            (
+                "See Help -> Auto1 Guide for complete setup instructions.",
+                (
+                    "For the latest validated EventLab recommendation, visit the "
+                    "official FAA Discord."
+                ),
+            ),
+        )
+
+    if automation_id == "auto2":
+        return (
+            "Prepare the Auto2 baseline",
+            "Prepare FH6 at the validated Autoshow baseline before continuing.",
+            ("See Help -> Auto2 Guide for complete setup instructions.",),
+        )
+
+    if automation_id == "auto3":
+        return (
+            "Prepare the Auto3 baseline",
+            "Prepare FH6 at the validated Garage baseline before continuing.",
+            ("See Help -> Auto3 Guide for complete setup instructions.",),
+        )
+
+    return (
+        "Select an automation",
+        "Choose Auto1, Auto2, or Auto3 to review its baseline preparation.",
+        (),
+    )
+
+
+def _commitment_readiness_content(
+    automation_id: str,
+) -> tuple[str, str, tuple[str, ...]]:
+    if not _is_desktop_preparation_available(automation_id):
+        return (
+            "No automation prepared",
+            "Prepare a supervised operation before reviewing readiness.",
+            ("Return to Automation Environment and prepare Auto1, Auto2, or Auto3.",),
+        )
+
+    readiness_model = get_readiness_model(automation_id)
+    return (
+        "Required Starting Position",
+        _desktop_baseline_summary(automation_id),
+        _desktop_baseline_details(automation_id, readiness_model),
+    )
 
 
 def _desktop_baseline_details(automation_id: str, readiness_model) -> tuple[str, ...]:
@@ -4193,7 +4968,12 @@ def _build_action_card(
     _style_visual_card(card, treatment=treatment)
 
     card_layout = QHBoxLayout(card)
-    card_layout.setContentsMargins(14, 12, 14, 12)
+    card_layout.setContentsMargins(
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+    )
     card_layout.setSpacing(10)
 
     if _uses_accent_strip(treatment):
@@ -4334,6 +5114,7 @@ def _build_visual_card(
     details: tuple[str, ...],
     shell_spec: PrototypeShellSpec,
     treatment: str,
+    content_spacing: int = 6,
 ):
     from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
@@ -4345,10 +5126,10 @@ def _build_visual_card(
 
     card_layout = QHBoxLayout(card)
     card_layout.setContentsMargins(
-        shell_spec.vertical_rhythm.group_inner_margin + 2,
-        shell_spec.vertical_rhythm.group_inner_margin,
-        shell_spec.vertical_rhythm.group_inner_margin + 2,
-        shell_spec.vertical_rhythm.group_inner_margin,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
+        shell_spec.vertical_rhythm.card_horizontal_padding,
+        shell_spec.vertical_rhythm.card_vertical_padding,
     )
     card_layout.setSpacing(10)
 
@@ -4359,7 +5140,7 @@ def _build_visual_card(
     content.setStyleSheet("background: transparent; border: none;")
     content_layout = QVBoxLayout(content)
     content_layout.setContentsMargins(0, 0, 0, 0)
-    content_layout.setSpacing(6)
+    content_layout.setSpacing(content_spacing)
 
     title_label = QLabel(title)
     summary_label = QLabel(summary)

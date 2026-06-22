@@ -4,6 +4,10 @@ from dataclasses import dataclass
 
 from licensing.models import LicenseState
 from licensing.service import LicenseService
+from product.support import (
+    community_feature_unavailable_message,
+    license_activation_failure_message,
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,49 @@ def license_dialog_status(state: LicenseState) -> LicenseDialogStatus:
         enabled_features=tuple(sorted(state.entitlements.features)),
         message=state.message,
     )
+
+
+def select_and_import_license_file(
+    parent,
+    license_service: LicenseService,
+    *,
+    replacing: bool = False,
+):
+    """Select and validate a signed license through the existing service boundary."""
+    from PySide6.QtWidgets import QFileDialog
+
+    selected_path, _ = QFileDialog.getOpenFileName(
+        parent,
+        "Replace FAA license" if replacing else "Import FAA license",
+        "",
+        "FAA License (*.lic);;JSON Files (*.json);;All Files (*)",
+    )
+    if not selected_path:
+        return None
+    return license_service.import_file(selected_path)
+
+
+def license_import_feedback(accepted: bool, success_message: str) -> str:
+    return success_message if accepted else license_activation_failure_message()
+
+
+def show_community_feature_dialog(parent) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    from desktop.support_actions import open_official_discord
+
+    dialog = QMessageBox(parent)
+    dialog.setWindowTitle("Edition required - Forza Automation Assist")
+    dialog.setIcon(QMessageBox.Icon.Information)
+    dialog.setText(community_feature_unavailable_message())
+    open_discord_button = dialog.addButton(
+        "Open Discord",
+        QMessageBox.ButtonRole.ActionRole,
+    )
+    dialog.addButton(QMessageBox.StandardButton.Close)
+    dialog.exec()
+    if dialog.clickedButton() is open_discord_button:
+        open_official_discord()
 
 
 def show_license_dialog(parent, license_service: LicenseService | None = None) -> None:
@@ -79,9 +126,11 @@ def show_license_dialog(parent, license_service: LicenseService | None = None) -
     import_file_button = QPushButton("Import license file")
     import_key_button = QPushButton("Import pasted key")
     close_button = QPushButton("Close")
+    open_discord_button = QPushButton("Open Discord")
     button_row.addWidget(import_file_button)
     button_row.addWidget(import_key_button)
     button_row.addStretch(1)
+    button_row.addWidget(open_discord_button)
     button_row.addWidget(close_button)
     layout.addLayout(button_row)
 
@@ -107,18 +156,24 @@ def show_license_dialog(parent, license_service: LicenseService | None = None) -
         if not selected_path:
             return
         result = service.import_file(selected_path)
-        result_label.setText(result.message)
+        result_label.setText(license_import_feedback(result.accepted, result.message))
         refresh_status()
 
     def import_key() -> None:
         result = service.import_key(key_input.toPlainText())
-        result_label.setText(result.message)
+        result_label.setText(license_import_feedback(result.accepted, result.message))
         if result.accepted:
             key_input.clear()
         refresh_status()
 
+    def open_discord() -> None:
+        from desktop.support_actions import open_official_discord
+
+        open_official_discord()
+
     import_file_button.clicked.connect(import_file)
     import_key_button.clicked.connect(import_key)
+    open_discord_button.clicked.connect(open_discord)
     close_button.clicked.connect(dialog.accept)
     refresh_status()
     dialog.exec()

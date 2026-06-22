@@ -186,6 +186,51 @@ class LicenseFoundationTest(unittest.TestCase):
             self.assertTrue(result.state.is_licensed)
             self.assertEqual("FAA-2026-000001", result.state.license.payload.license_id)
 
+    def test_invalid_import_from_community_remains_community(self) -> None:
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+
+            result = service.import_json("not a license")
+
+            self.assertFalse(result.accepted)
+            self.assertEqual("community", result.state.entitlements.edition)
+            self.assertFalse(result.state.is_licensed)
+
+    def test_rejected_replacement_preserves_existing_edition(self) -> None:
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+            self.assertTrue(service.import_json(self._signed_json()).accepted)
+
+            result = service.import_json("malformed replacement")
+
+            self.assertFalse(result.accepted)
+            current = service.current_state()
+            self.assertTrue(current.is_licensed)
+            self.assertEqual("plus", current.entitlements.edition)
+            self.assertEqual("FAA-2026-000001", current.license.payload.license_id)
+
+    def test_installed_license_can_be_removed_to_restore_community(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            service = self._service(root)
+            self.assertTrue(service.import_json(self._signed_json()).accepted)
+
+            result = service.remove_license()
+
+            self.assertTrue(result.accepted)
+            self.assertEqual("community", result.state.status)
+            self.assertFalse((root / "license.lic").exists())
+            self.assertFalse(service.current_state().is_licensed)
+
+    def test_removing_missing_license_is_a_clear_no_op(self) -> None:
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+
+            result = service.remove_license()
+
+            self.assertFalse(result.accepted)
+            self.assertEqual("No local license is installed.", result.message)
+
     def test_newer_same_owner_upgrade_replaces_license(self) -> None:
         with TemporaryDirectory() as directory:
             service = self._service(Path(directory))

@@ -35,6 +35,15 @@ class LicenseStorage:
     def write(self, serialized_license: str) -> None:
         _atomic_write_text(self.license_path, serialized_license)
 
+    def remove(self) -> bool:
+        if not self.license_path.exists():
+            return False
+        try:
+            self.license_path.unlink()
+        except OSError as error:
+            raise LicenseStorageError("Stored license could not be removed.") from error
+        return True
+
 
 def _atomic_write_text(path: Path, content: str) -> None:
     try:

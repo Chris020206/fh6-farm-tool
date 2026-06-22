@@ -4,6 +4,7 @@ from enum import Enum
 
 class SidebarDestinationId(str, Enum):
     HOME = "home"
+    AUTOMATION_ENVIRONMENT = "automation_environment"
     PROFILES = "profiles"
     HISTORY = "history"
     HELP = "help"
@@ -81,10 +82,10 @@ SIDEBAR_DESTINATIONS: tuple[SidebarDestination, ...] = (
         purpose="Focused launch environment for automation intent.",
     ),
     SidebarDestination(
-        destination_id=SidebarDestinationId.PROFILES,
-        label="Profile Settings",
-        screen_id=ScreenId.PROFILES,
-        purpose="Trusted execution timing behavior.",
+        destination_id=SidebarDestinationId.AUTOMATION_ENVIRONMENT,
+        label="Automation Environment",
+        screen_id=ScreenId.AUTOMATION_ENVIRONMENT,
+        purpose="Prepare and review a supervised operation.",
     ),
     SidebarDestination(
         destination_id=SidebarDestinationId.HISTORY,
@@ -136,11 +137,11 @@ SCREEN_DESCRIPTORS: tuple[ScreenDescriptor, ...] = (
         zones=WeightedContentZones(
             primary=ContentZone(
                 role=ZoneRole.PRIMARY,
-                purpose="Automation overview, selected profile, readiness, and run commitment.",
+                purpose="Automation overview, quick settings, readiness, and run commitment.",
             ),
             secondary=ContentZone(
                 role=ZoneRole.SECONDARY,
-                purpose="Contextual warnings and confidence notes.",
+                purpose="Supporting confidence notes.",
             ),
             tertiary=ContentZone(
                 role=ZoneRole.TERTIARY,
@@ -152,7 +153,7 @@ SCREEN_DESCRIPTORS: tuple[ScreenDescriptor, ...] = (
         screen_id=ScreenId.HISTORY,
         title="Operational History",
         screen_type=ScreenType.OPERATIONAL_MEMORY,
-        primary_intention="Show meaningful run sessions for trust recovery.",
+        primary_intention="Recent operational history and session outcomes.",
         zones=WeightedContentZones(
             primary=ContentZone(
                 role=ZoneRole.PRIMARY,
@@ -165,26 +166,6 @@ SCREEN_DESCRIPTORS: tuple[ScreenDescriptor, ...] = (
             tertiary=ContentZone(
                 role=ZoneRole.TERTIARY,
                 purpose="Expandable session details without raw log dominance.",
-            ),
-        ),
-    ),
-    ScreenDescriptor(
-        screen_id=ScreenId.PROFILES,
-        title="Profile Settings",
-        screen_type=ScreenType.TRUST_SELECTION,
-        primary_intention="Help the operator adjust trusted profile timing behavior.",
-        zones=WeightedContentZones(
-            primary=ContentZone(
-                role=ZoneRole.PRIMARY,
-                purpose="Selected profile timing controls.",
-            ),
-            secondary=ContentZone(
-                role=ZoneRole.SECONDARY,
-                purpose="Official and custom profile boundaries.",
-            ),
-            tertiary=ContentZone(
-                role=ZoneRole.TERTIARY,
-                purpose="Future advanced profile settings.",
             ),
         ),
     ),
@@ -212,7 +193,9 @@ SCREEN_DESCRIPTORS: tuple[ScreenDescriptor, ...] = (
         screen_id=ScreenId.SETTINGS,
         title="Settings",
         screen_type=ScreenType.SYSTEM_CONTROL,
-        primary_intention="Control application-level behavior without editing automation execution.",
+        primary_intention=(
+            "Review your edition, execution safety preferences, and product information."
+        ),
         zones=WeightedContentZones(
             primary=ContentZone(
                 role=ZoneRole.PRIMARY,

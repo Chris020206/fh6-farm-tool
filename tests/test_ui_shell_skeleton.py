@@ -21,7 +21,7 @@ class UiShellSkeletonTest(unittest.TestCase):
         self.assertEqual(
             [
                 SidebarDestinationId.HOME,
-                SidebarDestinationId.PROFILES,
+                SidebarDestinationId.AUTOMATION_ENVIRONMENT,
                 SidebarDestinationId.HISTORY,
                 SidebarDestinationId.HELP,
                 SidebarDestinationId.SETTINGS,
@@ -55,7 +55,6 @@ class UiShellSkeletonTest(unittest.TestCase):
                 ScreenId.HOME,
                 ScreenId.AUTOMATION_ENVIRONMENT,
                 ScreenId.HISTORY,
-                ScreenId.PROFILES,
                 ScreenId.HELP,
                 ScreenId.SETTINGS,
             },
@@ -92,7 +91,10 @@ class UiShellSkeletonTest(unittest.TestCase):
         history_descriptor = get_screen_descriptor(ScreenId.HISTORY)
 
         self.assertEqual("Operational History", history_descriptor.title)
-        self.assertIn("trust recovery", history_descriptor.primary_intention)
+        self.assertEqual(
+            "Recent operational history and session outcomes.",
+            history_descriptor.primary_intention,
+        )
 
 
 if __name__ == "__main__":
